@@ -83,6 +83,7 @@ test('operator execution reads deny missing, expired, and ordinary account sessi
         trace_final: {},
         workflow: {
             runId: 'run-1',
+            sessionCorrelationId: 'realtime-session-private',
             workflowId: 'workflow-1',
             workflowName: 'chat_orchestration',
             runStatus: 'completed',
@@ -174,6 +175,7 @@ test('operator execution reads deny missing, expired, and ordinary account sessi
     assert.ok(displayTrace);
     const displayWorkflow = displayTrace?.workflow;
     assert.ok(displayWorkflow);
+    assert.equal(displayWorkflow.sessionCorrelationId, undefined);
     assert.deepEqual(displayWorkflow.results, trace.workflow?.results);
     assert.equal(displayWorkflow.steps[0]?.attempts?.length, 1);
     assert.deepEqual(displayWorkflow.steps[0]?.inputRefs, [

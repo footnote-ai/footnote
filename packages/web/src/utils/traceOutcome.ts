@@ -44,6 +44,11 @@ const STOP_REASON_EXPLANATIONS: Record<WorkflowTerminationReason, string> = {
         'Workflow stopped after reaching the configured deliberation-call limit.',
     executor_error_fail_open:
         'Workflow recorded an executor error and terminated in fail-open mode.',
+    provider_cancelled:
+        'Realtime provider cancelled this response before completion.',
+    provider_incomplete: 'Realtime provider returned an incomplete response.',
+    provider_failed: 'Realtime provider reported a failed response.',
+    session_closed: 'Realtime session closed before the response completed.',
 };
 
 const FALLBACK_REASON_EXPLANATIONS: Record<string, string> = {

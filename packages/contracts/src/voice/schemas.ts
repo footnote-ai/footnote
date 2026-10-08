@@ -238,6 +238,12 @@ export const InternalVoiceRealtimeServerEventSchema = z.discriminatedUnion(
             .strict(),
         z
             .object({
+                type: z.literal('response.started'),
+                responseId: z.string().min(1).max(128),
+            })
+            .strict(),
+        z
+            .object({
                 type: z.literal('session.closed'),
                 reason: z.string().min(1).optional(),
                 code: z.string().min(1).optional(),
@@ -259,6 +265,10 @@ export const InternalVoiceRealtimeServerEventSchema = z.discriminatedUnion(
             .object({
                 type: z.literal('response.done'),
                 responseId: z.string().min(1).optional(),
+                status: z
+                    .enum(['completed', 'cancelled', 'failed', 'incomplete'])
+                    .optional(),
+                terminationReason: z.string().min(1).max(128).optional(),
                 usage: InternalVoiceRealtimeUsageSchema.optional(),
             })
             .strict(),

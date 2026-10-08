@@ -98,6 +98,44 @@ test('realtime voice runtime emits session.ready only once', async () => {
     assert.deepEqual(seenEvents, ['session.ready']);
 });
 
+test('realtime voice runtime preserves response lifecycle metadata without provider event bodies', async () => {
+    const { runtime, socket } = createRuntimeWithSocket();
+    const session = await runtime.createSession({
+        instructions: 'Be concise.',
+    });
+    const seenEvents: Array<{
+        type: string;
+        responseId?: string;
+        status?: string;
+        terminationReason?: string;
+    }> = [];
+    session.onEvent((event) => seenEvents.push(event));
+
+    socket.emitJsonMessage({
+        type: 'response.created',
+        response: { id: 'resp_1', status: 'in_progress' },
+    });
+    socket.emitJsonMessage({
+        type: 'response.done',
+        response: {
+            id: 'resp_1',
+            status: 'cancelled',
+            status_details: { reason: 'client_cancelled' },
+        },
+    });
+
+    assert.deepEqual(seenEvents.slice(-2), [
+        { type: 'response.started', responseId: 'resp_1' },
+        {
+            type: 'response.done',
+            responseId: 'resp_1',
+            status: 'cancelled',
+            terminationReason: 'client_cancelled',
+            usage: undefined,
+        },
+    ]);
+});
+
 test('realtime voice runtime appends buffered audio without a synthetic conversation item', async () => {
     const { runtime, socket } = createRuntimeWithSocket();
     const session = await runtime.createSession({

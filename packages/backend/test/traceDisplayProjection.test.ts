@@ -101,6 +101,7 @@ test('public trace display allowlists workflow receipts while omitting operator 
             workflow: {
                 workflowId: 'workflow-1',
                 workflowName: 'chat_orchestration',
+                sessionCorrelationId: 'private-session-correlation',
                 status: 'completed',
                 terminationReason: 'goal_satisfied',
                 startedAt: '2026-10-04T00:00:00.000Z',
@@ -210,6 +211,7 @@ test('public trace display allowlists workflow receipts while omitting operator 
     );
 
     assert.ok(projected?.workflow);
+    assert.equal(projected.workflow.sessionCorrelationId, undefined);
     assert.equal(projected.workflow.startedAt, '2026-10-04T00:00:00.000Z');
     assert.equal(projected.workflow.finishedAt, '2026-10-04T00:00:00.025Z');
     assert.equal(projected.workflow.durationMs, 25);

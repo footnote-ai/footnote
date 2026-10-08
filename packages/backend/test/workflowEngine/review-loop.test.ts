@@ -172,7 +172,10 @@ test('runBoundedReviewWorkflow normalizes invalid config bounds and keeps lineag
     );
     assert.ok((result.workflowLineage.durationMs ?? -1) >= 0);
     assert.equal(result.workflowLineage.maxSteps, 1);
-    assert.ok(result.workflowLineage.maxDurationMs > 0);
+    assert.ok(
+        result.workflowLineage.maxDurationMs !== undefined &&
+            result.workflowLineage.maxDurationMs > 0
+    );
     assert.equal(result.workflowLineage.stepCount, 1);
     assert.deepEqual(result.workflowLineage.limitStop, {
         stoppedByLimit: false,

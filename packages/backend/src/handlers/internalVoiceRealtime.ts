@@ -7,13 +7,17 @@
  */
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
+import { randomUUID } from 'node:crypto';
 import WebSocket, { WebSocketServer } from 'ws';
 import type {
     InternalVoiceRealtimeClientEvent,
     InternalVoiceRealtimeServerEvent,
     InternalVoiceSessionContext,
     SpeechSelectionMetadata,
+    InternalVoiceRealtimeUsage,
 } from '@footnote/contracts/voice';
+import type { WorkflowRecord } from '@footnote/contracts/policy';
+import { resolveOpenAIRealtimePricingModel } from '@footnote/contracts/pricing';
 import {
     InternalVoiceRealtimeClientEventSchema,
     InternalVoiceRealtimeServerEventSchema,
@@ -54,7 +58,14 @@ type CreateInternalVoiceRealtimeHandlerOptions = {
     profile: BotProfileConfig;
     fallbackOptions: { model: string; voice: string };
     recordUsage?: (record: BackendLLMCostRecord) => void;
+    recordExecution?: (
+        responseId: string,
+        workflow: WorkflowRecord
+    ) => Promise<void> | void;
 };
+
+type RealtimeResponseStatus =
+    'completed' | 'cancelled' | 'failed' | 'incomplete';
 
 const STATUS_MESSAGES: Record<number, string> = {
     400: 'Bad Request',
@@ -118,6 +129,7 @@ export const createInternalVoiceRealtimeHandler = ({
     profile,
     fallbackOptions,
     recordUsage = recordBackendLLMUsage,
+    recordExecution,
 }: CreateInternalVoiceRealtimeHandlerOptions) => {
     const wss = new WebSocketServer({ noServer: true });
 
@@ -134,6 +146,206 @@ export const createInternalVoiceRealtimeHandler = ({
         let closed = false;
         let socketClosed = false;
         let speechSelection: SpeechSelectionMetadata | undefined;
+        const sessionCorrelationId = randomUUID();
+        const activeResponses = new Map<
+            string,
+            { startedAt: string; runId: string }
+        >();
+
+        const recordResponseRun = (
+            response: { startedAt: string; runId: string },
+            status: RealtimeResponseStatus,
+            usage: InternalVoiceRealtimeUsage | undefined,
+            terminationReason?: string
+        ): void => {
+            if (!recordExecution || !speechSelection) return;
+            const finishedAt = new Date().toISOString();
+            const durationMs = Math.max(
+                0,
+                Date.parse(finishedAt) - Date.parse(response.startedAt)
+            );
+            const successful = status === 'completed';
+            const model = usage?.model ?? speechSelection.model;
+            const hasCompleteUsage =
+                usage?.tokensPrompt !== undefined &&
+                usage.tokensCompletion !== undefined;
+            const pricingKnown =
+                resolveOpenAIRealtimePricingModel(model).matchedModel !== null;
+            const estimatedCost = hasCompleteUsage
+                ? estimateBackendVoiceRealtimeCost(
+                      model,
+                      usage?.tokensPrompt ?? 0,
+                      usage?.tokensCompletion ?? 0
+                  )
+                : {
+                      inputCostUsd: 0,
+                      outputCostUsd: 0,
+                      totalCostUsd: 0,
+                      costCompleteness: 'unknown' as const,
+                      costIncompleteReasons: [
+                          'provider_usage_unavailable' as const,
+                      ],
+                  };
+            const costEvidence = {
+                ...estimatedCost,
+                ...(hasCompleteUsage && pricingKnown
+                    ? { costCompleteness: 'complete' as const }
+                    : hasCompleteUsage
+                      ? {
+                            costCompleteness: 'unknown' as const,
+                            costIncompleteReasons: ['unpriced_model' as const],
+                        }
+                      : {}),
+            };
+            const attemptUsage = {
+                ...(usage?.tokensPrompt !== undefined && {
+                    promptTokens: usage.tokensPrompt,
+                }),
+                ...(usage?.tokensCompletion !== undefined && {
+                    completionTokens: usage.tokensCompletion,
+                }),
+                ...(usage?.tokensPrompt !== undefined &&
+                    usage.tokensCompletion !== undefined && {
+                        totalTokens:
+                            usage.tokensPrompt + usage.tokensCompletion,
+                    }),
+            };
+            const appliedSettings = {
+                effectiveVoice: speechSelection.voice,
+                modality: 'realtime',
+                modelSelectionSource: speechSelection.selectionSource.model,
+                voiceSelectionSource: speechSelection.selectionSource.voice,
+                deliverySelectionSource:
+                    speechSelection.selectionSource.delivery,
+                ...(speechSelection.fallbackReason && {
+                    fallbackReason: speechSelection.fallbackReason,
+                }),
+            };
+            const stepId = `${response.runId}:realtime`;
+            const workflow: WorkflowRecord = {
+                runId: response.runId,
+                sessionCorrelationId,
+                runStatus: successful ? 'completed' : 'failed',
+                startedAt: response.startedAt,
+                finishedAt,
+                durationMs,
+                workflowId: 'realtime_response',
+                workflowName: 'Realtime response',
+                status: successful ? 'completed' : 'degraded',
+                terminationReason: successful
+                    ? 'goal_satisfied'
+                    : terminationReason === 'session_closed'
+                      ? 'session_closed'
+                      : status === 'cancelled'
+                        ? 'provider_cancelled'
+                        : status === 'incomplete'
+                          ? 'provider_incomplete'
+                          : 'provider_failed',
+                stepCount: 1,
+                maxSteps: 1,
+                results: [
+                    {
+                        resultId: `${response.runId}:result`,
+                        name: 'Realtime response',
+                        status: successful ? 'produced' : 'unavailable',
+                        producedByStepId: stepId,
+                        producedByAttempt: 1,
+                    },
+                ],
+                steps: [
+                    {
+                        stepId,
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: response.startedAt,
+                        finishedAt,
+                        durationMs,
+                        model,
+                        usage:
+                            Object.keys(attemptUsage).length > 0
+                                ? attemptUsage
+                                : undefined,
+                        cost: costEvidence,
+                        resultRefs: [
+                            {
+                                resultId: `${response.runId}:result`,
+                                name: 'Realtime response',
+                            },
+                        ],
+                        attempts: [
+                            {
+                                attempt: 1,
+                                status: successful ? 'succeeded' : 'failed',
+                                startedAt: response.startedAt,
+                                finishedAt,
+                                durationMs,
+                                profileId: speechSelection.profileId,
+                                actualProvider: speechSelection.provider,
+                                actualModel: model,
+                                settings: { applied: appliedSettings },
+                                ...(Object.keys(attemptUsage).length > 0 && {
+                                    usage: attemptUsage,
+                                }),
+                                cost: costEvidence,
+                                ...(terminationReason && {
+                                    reasonCode: terminationReason,
+                                    terminationReason,
+                                }),
+                            },
+                        ],
+                        outcome: {
+                            status: successful ? 'executed' : 'failed',
+                            summary: successful
+                                ? 'Realtime response completed.'
+                                : 'Realtime response did not complete.',
+                            ...(terminationReason && {
+                                signals: { terminationReason },
+                            }),
+                        },
+                    },
+                ],
+            };
+            try {
+                void Promise.resolve(
+                    recordExecution(response.runId, workflow)
+                ).catch((error: unknown) => {
+                    realtimeLogger.warn(
+                        'Internal voice realtime execution recording failed.',
+                        {
+                            responseId: response.runId,
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        }
+                    );
+                });
+            } catch (error) {
+                realtimeLogger.warn(
+                    'Internal voice realtime execution recording failed.',
+                    {
+                        responseId: response.runId,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
+            }
+        };
+
+        const flushActiveResponses = (terminationReason: string): void => {
+            const responses = [...activeResponses.values()];
+            activeResponses.clear();
+            for (const response of responses) {
+                recordResponseRun(
+                    response,
+                    'failed',
+                    undefined,
+                    terminationReason
+                );
+            }
+        };
 
         const isSocketOpen = () =>
             !socketClosed && ws.readyState === WebSocket.OPEN;
@@ -149,6 +361,12 @@ export const createInternalVoiceRealtimeHandler = ({
         const forwardRuntimeEvent = (
             event: InternalVoiceRealtimeServerEvent
         ) => {
+            if (event.type === 'response.started') {
+                activeResponses.set(event.responseId, {
+                    startedAt: new Date().toISOString(),
+                    runId: randomUUID(),
+                });
+            }
             if (event.type === 'response.done') {
                 const usage = event.usage;
                 if (
@@ -184,15 +402,33 @@ export const createInternalVoiceRealtimeHandler = ({
                         );
                     }
                 }
+                const providerResponseId = event.responseId;
+                const activeResponse = providerResponseId
+                    ? activeResponses.get(providerResponseId)
+                    : undefined;
+                if (providerResponseId && activeResponse) {
+                    activeResponses.delete(providerResponseId);
+                    recordResponseRun(
+                        activeResponse,
+                        event.status ?? 'completed',
+                        usage,
+                        event.terminationReason
+                    );
+                }
+            }
+            if (event.type === 'session.closed') {
+                flushActiveResponses('session_closed');
             }
 
             try {
-                sendServerEvent(
-                    ws,
-                    event.type === 'session.ready' && speechSelection
-                        ? { ...event, speechSelection }
-                        : event
-                );
+                if (event.type !== 'response.started') {
+                    sendServerEvent(
+                        ws,
+                        event.type === 'session.ready' && speechSelection
+                            ? { ...event, speechSelection }
+                            : event
+                    );
+                }
             } catch (error) {
                 realtimeLogger.warn(
                     `Failed to send internal voice realtime event: ${
@@ -459,6 +695,7 @@ export const createInternalVoiceRealtimeHandler = ({
         ws.on('close', () => {
             socketClosed = true;
             closed = true;
+            flushActiveResponses('client_close');
             session?.close('client_close');
         });
 

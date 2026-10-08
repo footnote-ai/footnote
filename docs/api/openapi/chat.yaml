@@ -1568,6 +1568,11 @@ components:
                 runId:
                     type: string
                     minLength: 1
+                sessionCorrelationId:
+                    type: string
+                    minLength: 1
+                    maxLength: 64
+                    description: Private operator correlation for Runs from one live Realtime session; not cross-surface conversation identity.
                 runStatus:
                     type: string
                     enum:
@@ -1653,6 +1658,10 @@ components:
                                 - max_tool_calls_reached
                                 - max_deliberation_calls_reached
                                 - executor_error_fail_open
+                                - provider_cancelled
+                                - provider_incomplete
+                                - provider_failed
+                                - session_closed
                         exhaustedLimitKey:
                             type: string
                             enum:
@@ -1704,6 +1713,10 @@ components:
                         - max_tool_calls_reached
                         - max_deliberation_calls_reached
                         - executor_error_fail_open
+                        - provider_cancelled
+                        - provider_incomplete
+                        - provider_failed
+                        - session_closed
                 steps:
                     type: array
                     items:
@@ -1714,7 +1727,6 @@ components:
                 - status
                 - stepCount
                 - maxSteps
-                - maxDurationMs
                 - terminationReason
                 - steps
             additionalProperties: false

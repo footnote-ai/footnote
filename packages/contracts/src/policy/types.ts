@@ -694,6 +694,10 @@ export const WORKFLOW_TERMINATION_REASONS = [
     'max_tool_calls_reached',
     'max_deliberation_calls_reached',
     'executor_error_fail_open',
+    'provider_cancelled',
+    'provider_incomplete',
+    'provider_failed',
+    'session_closed',
 ] as const;
 
 export type WorkflowTerminationReason =
@@ -1160,6 +1164,8 @@ export type StepRecord = {
 
 export type WorkflowRecord = {
     runId?: string;
+    /** Opaque correlation for Runs produced within one live voice session; not cross-surface conversation identity. */
+    sessionCorrelationId?: string;
     runStatus?: 'completed' | 'degraded' | 'limited' | 'failed' | 'rejected';
     /**
      * Backend-observed Run wall-clock bounds. `durationMs` is derived as
@@ -1174,7 +1180,8 @@ export type WorkflowRecord = {
     terminationReason: WorkflowTerminationReason;
     stepCount: number;
     maxSteps: number;
-    maxDurationMs: number;
+    /** Omitted when the workflow does not have a configured wall-clock limit. */
+    maxDurationMs?: number;
     effectiveLimits?: WorkflowEffectiveLimit[];
     limitStop?: WorkflowLimitStop;
     results?: WorkflowResultRecord[];

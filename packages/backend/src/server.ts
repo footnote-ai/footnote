@@ -10,6 +10,7 @@ import './bootstrapEnv.js';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
     createOpenAiImageRuntime,
@@ -881,6 +882,30 @@ const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
                 window: runtimeConfig.rateLimits.chatService.windowMs,
             }),
         buildInstructions: buildRealtimeInstructions,
+        recordExecution: async (responseId, workflow) => {
+            const now = Date.now();
+            const metadata: ResponseMetadata = {
+                responseId,
+                provenance: 'Inferred',
+                safetyTier: 'Low',
+                tradeoffCount: 0,
+                chainHash: createHash('sha256')
+                    .update(responseId)
+                    .digest('hex')
+                    .slice(0, 16),
+                licenseContext: 'MIT + HL3',
+                modelVersion:
+                    workflow.steps[0]?.attempts?.[0]?.actualModel ?? 'unknown',
+                staleAfter: new Date(
+                    now + 90 * 24 * 60 * 60 * 1000
+                ).toISOString(),
+                citations: [],
+                workflow,
+                trace_target: {},
+                trace_final: {},
+            };
+            await storeTraceWithStore(metadata);
+        },
     });
 // Chat is the backend-standardized conversation interface (adapter-facing, Turnstile + rate-limited for public web calls).
 const executionContractTrustGraphRuntimeOptions =
