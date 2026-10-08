@@ -30,6 +30,23 @@
             ]
         },
         {
+            "id": "public-response-requires-answer-bound-publication-capability",
+            "status": "implemented",
+            "input": "A response publication is attempted with a changed answer, another response's metadata, a wrong capability, a replayed capability, or the backend-issued answer-bound capability.",
+            "expected": "Only the matching, current capability can publish the exact answer once or revoke its publication; mismatched, replayed, expired, or stale requests are rejected.",
+            "limits": "This is a narrow explicit publication capability, not a general model/action authorization system. Public output still uses the allowlisted projection.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/publicResponseStore.test.ts",
+                    "test": "publication requires the backend-issued answer-bound capability and supports revoke, expiry, and deletion"
+                },
+                {
+                    "file": "packages/backend/test/publicResponseHandler.test.ts",
+                    "test": "a user can explicitly publish, view, and revoke an allowlisted response"
+                }
+            ]
+        },
+        {
             "id": "retrieval-scope-and-workflow-budget",
             "status": "implemented",
             "input": "A caller omits explicit project scope, or a workflow attempt reaches its configured resource limit.",
