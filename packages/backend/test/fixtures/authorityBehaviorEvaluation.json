@@ -24,8 +24,8 @@
             "id": "planner-output-cannot-change-backend-authority-controls",
             "status": "implemented",
             "input": "A structured planner proposes profile, capability-profile, and execution-contract overrides outside its response contract.",
-            "expected": "The backend ignores those fields, preserves its configured controls, and records partial application rather than accepting planner authority.",
-            "limits": "This protects the existing planner-ingestion boundary; it is not general authorization for arbitrary external actions.",
+            "expected": "The resulting plan leaves profileId and selectedCapabilityProfile unset, and the backend records the planner output as partially_applied.",
+            "limits": "This checks the planner-ingestion result only; it does not verify effective execution-contract controls at a downstream consuming boundary or authorize arbitrary external actions.",
             "evidence": [
                 {
                     "file": "packages/backend/test/chatPlanner.test.ts",
