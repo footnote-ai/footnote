@@ -140,8 +140,8 @@ catalogs:
       specifier: ^0.0.2
       version: 0.0.2
     openai:
-      specifier: ^6.42.0
-      version: 6.42.0
+      specifier: ^7.28.0
+      version: 7.30.0
     openid-client:
       specifier: ^6.8.8
       version: 6.8.8
@@ -340,7 +340,7 @@ importers:
         version: 1.5.5(zod@4.4.3)
       openai:
         specifier: 'catalog:'
-        version: 6.42.0(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
+        version: 7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
       ws:
         specifier: 'catalog:'
         version: 8.22.0(bufferutil@4.1.0)
@@ -362,7 +362,7 @@ importers:
     dependencies:
       '@footnote/agent-runtime':
         specifier: workspace:*
-        version: file:packages/agent-runtime(bufferutil@4.1.0)(supports-color@10.2.2)
+        version: file:packages/agent-runtime(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)
       '@footnote/config-spec':
         specifier: workspace:*
         version: link:../config-spec
@@ -504,7 +504,7 @@ importers:
         version: 0.0.2
       openai:
         specifier: 'catalog:'
-        version: 6.42.0(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
+        version: 7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.2)
       opusscript:
         specifier: 'catalog:'
         version: 0.1.1
@@ -4513,6 +4513,30 @@ packages:
       zod:
         optional: true
 
+  openai@7.30.0:
+    resolution: {integrity: sha512-tvvcPdhS56B/79o0mJS5h4JndAov5Sz78T7CFl4gJ+C9S3GoSqHNLO6lG/8kdK+/c13zWEI97Srf66ar0V242g==}
+    engines: {node: '>=22.0.0'}
+    peerDependencies:
+      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
+      '@smithy/hash-node': '>=4.3.0 <5'
+      '@smithy/signature-v4': '>=5.4.0 <6'
+      undici: ^6.28.0
+      ws: ^8.21.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@aws-sdk/credential-provider-node':
+        optional: true
+      '@smithy/hash-node':
+        optional: true
+      '@smithy/signature-v4':
+        optional: true
+      undici:
+        optional: true
+      ws:
+        optional: true
+      zod:
+        optional: true
+
   openid-client@6.8.8:
     resolution: {integrity: sha512-ZsucJA5Ad04Uv7YN4ql+s4GXNmb9uAYQwyJTsJx7CH/MX3JZioLE2pVKi1SC+YrbSLA4Px3Gi30dMjgOZtb6pA==}
 
@@ -6451,7 +6475,7 @@ snapshots:
     dependencies:
       '@expressive-code/core': 0.44.2
 
-  '@footnote/agent-runtime@file:packages/agent-runtime(bufferutil@4.1.0)(supports-color@10.2.2)':
+  '@footnote/agent-runtime@file:packages/agent-runtime(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)':
     dependencies:
       '@ai-sdk/openai-compatible': 2.0.59(zod@4.4.3)
       '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
@@ -6459,18 +6483,22 @@ snapshots:
       '@voltagent/core': 2.9.2(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
       ai: 6.0.224(zod@4.4.3)
       ollama-ai-provider-v2: 1.5.5(zod@4.4.3)
-      openai: 6.42.0(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
+      openai: 7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.4.3
     transitivePeerDependencies:
       - '@ai-sdk/provider'
+      - '@aws-sdk/credential-provider-node'
       - '@cfworker/json-schema'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
       - '@voltagent/logger'
       - bufferutil
       - debug
       - encoding
       - graphql
       - supports-color
+      - undici
       - utf-8-validate
 
   '@footnote/contracts@file:packages/contracts':
@@ -10116,6 +10144,18 @@ snapshots:
     optionalDependencies:
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.4.3
+
+  openai@7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3):
+    optionalDependencies:
+      undici: 6.28.0
+      ws: 8.22.0(bufferutil@4.1.0)
+      zod: 4.4.3
+
+  openai@7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.2):
+    optionalDependencies:
+      undici: 6.28.0
+      ws: 8.22.0(bufferutil@4.1.0)
+      zod: 4.6.2
 
   openid-client@6.8.8:
     dependencies:
