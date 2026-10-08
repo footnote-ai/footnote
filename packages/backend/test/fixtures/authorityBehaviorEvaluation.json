@@ -102,6 +102,19 @@
             ]
         },
         {
+            "id": "planner-cannot-initiate-publication",
+            "status": "unsupported",
+            "input": "A structured planner attempts to select an unsupported public-publication action.",
+            "expected": "The backend rejects that planner decision and falls back to its safe message plan; no publication or public response is created.",
+            "limits": "Explicit publication remains a separate user-authorized capability path; this is not general authorization for arbitrary consequential actions.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/chatPlanner.test.ts",
+                    "test": "chatPlanner rejects unsupported publication actions without creating a public response"
+                }
+            ]
+        },
+        {
             "id": "interrupted-request-observability",
             "status": "implemented-with-limits",
             "input": "An interrupted request's provider call completes after disconnect.",

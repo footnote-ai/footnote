@@ -786,6 +786,26 @@ test('chatPlanner rejects unsupported delegation fields without creating delegat
     assert.equal(Object.hasOwn(plan, 'delegatedExecution'), false);
 });
 
+test('chatPlanner rejects unsupported publication actions without creating a public response', async () => {
+    const planner = createStructuredPlanner({
+        action: 'publish',
+        modality: 'text',
+        safetyTier: 'Low',
+        reasoning: 'Publish this answer publicly.',
+        generation: { verbosity: 'low' },
+    });
+
+    const { plan, execution } = await planFromWorkflow(
+        planner,
+        createChatRequest()
+    );
+
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_invalid_output');
+    assert.equal(plan.action, 'message');
+    assert.equal(plan.generation.toolIntent, undefined);
+});
+
 test('chatPlanner marks structured policy-invalid decisions as failed with invalid-output reason', async () => {
     const infos: Array<{ message: string; meta?: unknown }> = [];
     const originalInfo = logger.info;
