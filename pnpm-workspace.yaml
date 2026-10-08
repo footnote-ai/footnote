@@ -42,7 +42,7 @@ allowBuilds:
     esbuild: true
     protobufjs: true
 catalog:
-    '@ai-sdk/provider-utils': ^4.0.38
+    '@ai-sdk/provider-utils': ^5.0.53
     '@discordjs/opus': ^0.10.0
     '@discordjs/voice': ^0.19.2
     '@eslint/js': ^10.0.1
