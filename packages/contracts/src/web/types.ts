@@ -72,9 +72,27 @@ export type GetAuthSessionResponse =
  * @api.operationId: getOperatorExecution
  * @api.path: GET /api/admin/executions/{responseId}
  */
+export type ExecutionReportDebugCapture = {
+    runId: string;
+    stepId: string;
+    attempt: number;
+    invocation: number;
+    inputText: string;
+    inputTruncated: boolean;
+    inputRedacted: boolean;
+    outputText?: string;
+    outputCandidateId?: string;
+    outputTruncated?: boolean;
+    outputRedacted?: boolean;
+    outputUnavailable?: boolean;
+    captureLimitReached?: boolean;
+    omittedInvocationCount?: number;
+};
+
 export type ExecutionReportResponse = {
     responseId: string;
     workflow: WorkflowRecord;
+    modelDebugCaptures: ExecutionReportDebugCapture[];
 };
 
 /**

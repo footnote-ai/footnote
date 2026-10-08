@@ -132,19 +132,61 @@ test('operator execution reads deny missing, expired, and ordinary account sessi
             ],
         },
     };
-    await traceStore.upsert(trace);
+    await traceStore.upsert(trace, [
+        {
+            id: 'candidate-1',
+            workflowStepId: 'step-1',
+            sequence: 0,
+            stage: 'initial_generation',
+            state: 'selected',
+            text: 'candidate output body api_key=candidate-secret-value',
+        },
+    ]);
+    await traceStore.storeModelDebugCaptures(trace.responseId, [
+        {
+            runId: 'run-1',
+            stepId: 'step-1',
+            attempt: 1,
+            invocation: 0,
+            inputText: 'private model input',
+            inputTruncated: false,
+            inputRedacted: true,
+            outputCandidateId: 'candidate-1',
+            outputRedacted: false,
+        },
+        {
+            runId: 'run-1',
+            stepId: 'step-1',
+            attempt: 1,
+            invocation: 1,
+            inputText: 'long bounded input',
+            inputTruncated: true,
+            inputRedacted: false,
+            outputUnavailable: true,
+        },
+    ]);
     const canonicalTrace = await traceStore.retrieve(trace.responseId);
     assert.deepEqual(canonicalTrace?.workflow, trace.workflow);
     assert.equal(canonicalTrace?.workflow?.results?.length, 1);
     assert.equal(canonicalTrace?.workflow?.steps[0]?.attempts?.length, 1);
 
     const displayTrace = await traceStore.retrieveForDisplay(trace.responseId);
+    assert.ok(displayTrace);
     const displayWorkflow = displayTrace?.workflow;
     assert.ok(displayWorkflow);
-    assert.equal(displayWorkflow.results, undefined);
-    assert.equal(displayWorkflow.steps[0]?.attempts, undefined);
-    assert.equal(displayWorkflow.steps[0]?.inputRefs, undefined);
-    assert.equal(displayWorkflow.steps[0]?.resultRefs, undefined);
+    assert.deepEqual(displayWorkflow.results, trace.workflow?.results);
+    assert.equal(displayWorkflow.steps[0]?.attempts?.length, 1);
+    assert.deepEqual(displayWorkflow.steps[0]?.inputRefs, [
+        { name: 'private-input' },
+    ]);
+    assert.deepEqual(displayWorkflow.steps[0]?.resultRefs, [
+        { resultId: 'result-1', name: 'answer' },
+    ]);
+    assert.equal('modelDebugCaptures' in displayTrace, false);
+    assert.doesNotMatch(
+        JSON.stringify(displayTrace),
+        /private model input|candidate-secret-value|long bounded input/u
+    );
     assert.deepEqual(displayWorkflow.steps[0]?.outcome.artifacts, [
         '[redacted:21 chars]',
     ]);
@@ -212,6 +254,31 @@ test('operator execution reads deny missing, expired, and ordinary account sessi
     assert.deepEqual(operatorPayload, {
         responseId: trace.responseId,
         workflow: trace.workflow,
+        modelDebugCaptures: [
+            {
+                runId: 'run-1',
+                stepId: 'step-1',
+                attempt: 1,
+                invocation: 0,
+                inputText: 'private model input',
+                inputTruncated: false,
+                inputRedacted: true,
+                outputCandidateId: 'candidate-1',
+                outputRedacted: true,
+                outputTruncated: false,
+                outputText: 'candidate output body api_key=[REDACTED]',
+            },
+            {
+                runId: 'run-1',
+                stepId: 'step-1',
+                attempt: 1,
+                invocation: 1,
+                inputText: 'long bounded input',
+                inputTruncated: true,
+                inputRedacted: false,
+                outputUnavailable: true,
+            },
+        ],
     });
     assert.equal(
         (operatorPayload as { workflow: ResponseMetadata['workflow'] }).workflow
@@ -235,5 +302,9 @@ test('operator execution reads deny missing, expired, and ordinary account sessi
     assert.equal(
         logs.some((entry) => 'workflow' in entry),
         false
+    );
+    assert.doesNotMatch(
+        JSON.stringify(logs),
+        /private model input|candidate-secret-value|long bounded input/u
     );
 });

@@ -6,7 +6,9 @@
  * @footnote-ethics: high - Execution records can reveal sensitive operational context.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { ExecutionReportDebugCapture } from '@footnote/contracts/web';
 import { createAdminAuthorizationService } from '../services/adminAuthorization.js';
+import { boundAndRedactDebugText } from '../services/modelDebugCapture.js';
 import type { AccountAuthService } from '../services/accountAuth.js';
 import type { TraceStore } from '../storage/traces/traceStore.js';
 import { logger as defaultLogger } from '../utils/logger.js';
@@ -93,9 +95,73 @@ export const createOperatorExecutionHandler = ({
                 logRequest(req, res, 'operator execution not-found');
                 return;
             }
+            let modelDebugCaptures: ExecutionReportDebugCapture[] = [];
+            try {
+                const storedCaptures =
+                    await traceStore.retrieveModelDebugCaptures(responseId);
+                const candidateIds = new Set(
+                    storedCaptures.flatMap((capture) =>
+                        capture.outputCandidateId === undefined
+                            ? []
+                            : [capture.outputCandidateId]
+                    )
+                );
+                let candidateTextById = new Map<string, string>();
+                if (candidateIds.size > 0) {
+                    try {
+                        const candidates =
+                            await traceStore.retrieveResponseCandidates(
+                                responseId
+                            );
+                        candidateTextById = new Map(
+                            candidates
+                                .filter((candidate) =>
+                                    candidateIds.has(candidate.id)
+                                )
+                                .map((candidate) => [
+                                    candidate.id,
+                                    candidate.text,
+                                ])
+                        );
+                    } catch {
+                        // Missing candidate text is debug-only and must not hide the report.
+                    }
+                }
+                modelDebugCaptures = storedCaptures.map((capture) => {
+                    const candidateText = capture.outputCandidateId
+                        ? candidateTextById.get(capture.outputCandidateId)
+                        : undefined;
+                    const boundedCandidate =
+                        candidateText === undefined
+                            ? undefined
+                            : boundAndRedactDebugText(candidateText);
+                    return {
+                        ...capture,
+                        ...(boundedCandidate !== undefined && {
+                            outputText: boundedCandidate.text,
+                            outputRedacted:
+                                capture.outputRedacted ||
+                                boundedCandidate.redacted,
+                            outputTruncated:
+                                capture.outputTruncated ||
+                                boundedCandidate.truncated,
+                        }),
+                        ...(capture.outputCandidateId !== undefined &&
+                            candidateText === undefined && {
+                                outputUnavailable: true,
+                            }),
+                    };
+                });
+            } catch {
+                handlerLogger.warn('operator.execution.debug.read', {
+                    decision: 'unavailable',
+                    responseId,
+                });
+            }
             sendJson(res, 200, {
                 responseId: metadata.responseId,
                 workflow: metadata.workflow,
+                modelDebugCaptures,
             });
             logRequest(req, res, 'operator execution success');
         } catch {
