@@ -136,3 +136,21 @@ export const mountSizedEmbed = async (
     }, content);
     return page.frameLocator('#footnote-chat-frame');
 };
+
+export const mountUnmanagedEmbed = async (
+    page: Page,
+    height: number
+): Promise<FrameLocator> => {
+    await page.goto('/');
+    await page.evaluate((frameHeight) => {
+        const frame = document.createElement('iframe');
+        frame.id = 'footnote-chat-frame';
+        frame.title = 'Footnote chat';
+        frame.referrerPolicy = 'no-referrer';
+        frame.src = '/embed';
+        frame.style.cssText = `display: block; width: 100%; height: ${frameHeight}px; border: 0;`;
+        document.body.style.margin = '0';
+        document.body.replaceChildren(frame);
+    }, height);
+    return page.frameLocator('#footnote-chat-frame');
+};

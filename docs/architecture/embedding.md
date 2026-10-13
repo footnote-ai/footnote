@@ -29,6 +29,8 @@ Embed the deployed Footnote web origin. Let the iframe grow to the measured cont
 
 The min-height is only a pre-message fallback. The iframe reports its full content height as it loads and whenever the response, disclosure, viewport, or layout changes. Hosts should apply the reported height without adding an internal scroll area or a height cap; all response content and provenance disclosures should remain reachable.
 
+The embed keeps normal document scrolling available when the host does not process resize messages or the child cannot determine a safe parent origin from its referrer. In that case, visitors can scroll inside the iframe to reach the complete answer, provenance, live chat, and links. Do not hide iframe document overflow.
+
 For production, keep the iframe host origin allowlists aligned with backend CORS/CSP settings (ALLOWED_ORIGINS, FRAME_ANCESTORS).
 
 ## Height messaging contract
@@ -72,6 +74,6 @@ window.addEventListener('message', (event) => {
 ## Operational notes
 
 - Shared layered web styles are imported from packages/web/src/styles/index.css.
-- At narrow widths, the embed stacks vertically and remains content-sized. Keep the iframe at width: 100%; do not use transforms, fixed heights, or overflow rules that create a nested scroll area.
+- At narrow widths, the embed stacks vertically. When resize messages work, keep the iframe content-sized and avoid nested scrollbars. If the host cannot resize it, leave a usable fixed iframe height and allow the embedded document to scroll as a fallback.
 - /api/chat rate limiting, Cloudflare Turnstile configuration, and keyboard focus behavior still apply to the live chat.
 - packages/web/src/utils/embedHeight.ts owns the child-side measurement and message contract. Backend CORS and CSP behavior belongs in backend runtime configuration and server code.

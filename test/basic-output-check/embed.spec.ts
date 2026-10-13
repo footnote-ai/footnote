@@ -10,7 +10,9 @@ import {
     configureRuntime,
     latestEmbedHeight,
     mountSizedEmbed,
+    mountUnmanagedEmbed,
     readEmbedHeights,
+    response,
 } from './chat-test-helpers';
 
 const exampleQuestion =
@@ -123,7 +125,7 @@ test('standalone embed presents the recorded answer, full footer, and project li
     });
 });
 
-test('iframe embed honors dark theme and grows with its mobile disclosure content', async ({
+test('iframe resizes with disclosures and live answers on a narrow viewport', async ({
     page,
 }, testInfo) => {
     await page.addInitScript(() => {
@@ -131,6 +133,20 @@ test('iframe embed honors dark theme and grows with its mobile disclosure conten
     });
     await configureRuntime(page);
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.route('**/api/chat', async (route) => {
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify(
+                response(
+                    Array.from(
+                        { length: 8 },
+                        (_, index) =>
+                            `The embedded answer paragraph ${index + 1} stays available as the frame resizes.`
+                    ).join('\n\n')
+                )
+            ),
+        });
+    });
     const embed = await mountSizedEmbed(page);
 
     await expect(
@@ -154,6 +170,24 @@ test('iframe embed honors dark theme and grows with its mobile disclosure conten
     await expect
         .poll(async () => (await readEmbedHeights(page)).at(-1) ?? 0)
         .toBeLessThan(expandedHeight);
+    const collapsedHeight = await latestEmbedHeight(page);
+
+    const input = embed.getByLabel('Ask a question');
+    await input.fill('Can you explain that in more detail?');
+    await embed.getByRole('button', { name: 'Submit question' }).click();
+    await expect(
+        embed.getByText('The embedded answer paragraph 8 stays available')
+    ).toBeVisible();
+    await expect
+        .poll(() => latestEmbedHeight(page))
+        .toBeGreaterThan(collapsedHeight);
+    const answerHeight = await latestEmbedHeight(page);
+
+    await embed.getByRole('button', { name: 'New chat' }).click();
+    await expect(embed.locator('.interaction-turn')).toHaveCount(0);
+    await expect
+        .poll(async () => (await readEmbedHeights(page)).at(-1) ?? 0)
+        .toBeLessThan(answerHeight);
 
     const layout = await embed.locator('body').evaluate((body) => {
         const answer = document.querySelector<HTMLElement>(
@@ -189,5 +223,110 @@ test('iframe embed honors dark theme and grows with its mobile disclosure conten
     await page.locator('#footnote-chat-frame').screenshot({
         animations: 'disabled',
         path: testInfo.outputPath('embed-iframe-mobile-dark.png'),
+    });
+});
+
+test('narrow iframe remains scrollable when its parent cannot receive resize messages', async ({
+    page,
+}, testInfo) => {
+    await configureRuntime(page);
+    await page.setViewportSize({ width: 360, height: 760 });
+    const embed = await mountUnmanagedEmbed(page, 620);
+    const frame = page.locator('#footnote-chat-frame');
+
+    await expect(
+        embed.getByRole('heading', { name: 'AI that shows its work.' })
+    ).toBeVisible();
+    await expect(embed.getByLabel('Ask a question')).toBeVisible();
+
+    const initialLayout = await embed.locator('body').evaluate((body) => ({
+        referrer: document.referrer,
+        viewportHeight: window.innerHeight,
+        contentHeight: Math.max(
+            body.scrollHeight,
+            document.documentElement.scrollHeight
+        ),
+        overflow: getComputedStyle(document.documentElement).overflowY,
+    }));
+    expect(initialLayout.referrer).toBe('');
+    expect(initialLayout.contentHeight).toBeGreaterThan(
+        initialLayout.viewportHeight
+    );
+    expect(initialLayout.overflow).not.toBe('hidden');
+
+    await page.screenshot({
+        animations: 'disabled',
+        path: testInfo.outputPath('embed-mobile-fallback-top.png'),
+    });
+
+    const frameBox = await frame.boundingBox();
+    expect(frameBox).not.toBeNull();
+    if (!frameBox) throw new Error('Missing iframe bounds.');
+    await page.mouse.move(frameBox.x + frameBox.width / 2, frameBox.y + 80);
+    const scrollYBefore = await embed
+        .locator('body')
+        .evaluate(() => window.scrollY);
+    await page.mouse.wheel(0, 520);
+    await expect
+        .poll(() => embed.locator('body').evaluate(() => window.scrollY))
+        .toBeGreaterThan(scrollYBefore);
+
+    const footnote = embed.getByRole('region', {
+        name: 'Response provenance and controls',
+    });
+    const sourcesButton = footnote.getByRole('button', {
+        name: 'Sources',
+        exact: true,
+    });
+    await sourcesButton.scrollIntoViewIfNeeded();
+    await sourcesButton.click();
+    const sources = footnote.getByRole('region', { name: 'Sources' });
+    await expect(sources).toBeVisible();
+    const sourceLinks = sources.getByRole('link');
+    await expect(sourceLinks.first()).toBeVisible();
+    await sourceLinks.last().scrollIntoViewIfNeeded();
+    const lastSourceBox = await sourceLinks.last().boundingBox();
+    expect(lastSourceBox).not.toBeNull();
+    if (!lastSourceBox) throw new Error('Missing final source bounds.');
+    expect(lastSourceBox.y).toBeGreaterThanOrEqual(0);
+    expect(lastSourceBox.y + lastSourceBox.height).toBeLessThanOrEqual(
+        initialLayout.viewportHeight + 1
+    );
+
+    const liveChat = embed.locator('.public-embed__live');
+    await liveChat.scrollIntoViewIfNeeded();
+    const liveChatBox = await liveChat.boundingBox();
+    expect(liveChatBox).not.toBeNull();
+    if (!liveChatBox) throw new Error('Missing live chat bounds.');
+    expect(liveChatBox.y).toBeLessThan(initialLayout.viewportHeight);
+    await expect(embed.getByLabel('Ask a question')).toBeVisible();
+    const chatInputBox = await embed.getByLabel('Ask a question').boundingBox();
+    expect(chatInputBox).not.toBeNull();
+    if (!chatInputBox) throw new Error('Missing chat input bounds.');
+    expect(chatInputBox.y).toBeLessThan(initialLayout.viewportHeight);
+    expect(chatInputBox.y + chatInputBox.height).toBeGreaterThan(0);
+
+    const links = embed.getByRole('navigation', { name: 'Footnote links' });
+    await links.scrollIntoViewIfNeeded();
+    const githubLink = links.getByRole('link', { name: 'GitHub', exact: true });
+    await expect(githubLink).toBeVisible();
+    const githubBox = await githubLink.boundingBox();
+    expect(githubBox).not.toBeNull();
+    if (!githubBox) throw new Error('Missing bottom link bounds.');
+    expect(githubBox.y).toBeGreaterThanOrEqual(0);
+    expect(githubBox.y + githubBox.height).toBeLessThanOrEqual(
+        initialLayout.viewportHeight + 1
+    );
+    const endLayout = await embed.locator('body').evaluate((body) => ({
+        scrollY: window.scrollY,
+        viewportHeight: window.innerHeight,
+        bodyHeight: body.scrollHeight,
+    }));
+    expect(endLayout.scrollY).toBeGreaterThan(0);
+    expect(endLayout.bodyHeight).toBeGreaterThan(endLayout.viewportHeight);
+
+    await page.screenshot({
+        animations: 'disabled',
+        path: testInfo.outputPath('embed-mobile-fallback-bottom.png'),
     });
 });

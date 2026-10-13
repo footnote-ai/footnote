@@ -19,16 +19,8 @@ import {
 const EmbedPage = (): JSX.Element => {
     const containerRef = useRef<HTMLElement | null>(null);
 
-    // The parent resizes the iframe to this page; keep its own document from becoming a nested scroller.
+    // A parent that applies these measurements keeps the iframe content-sized without a nested scroller.
     useEffect(() => {
-        let injectedEmbedStyle = null;
-        if (window.parent !== window) {
-            injectedEmbedStyle = document.createElement('style');
-            injectedEmbedStyle.textContent =
-                'html, body { overflow: hidden !important; height: auto !important; min-height: 0 !important; }';
-            document.head.appendChild(injectedEmbedStyle);
-        }
-
         const messenger = createEmbedHeightMessenger({
             root: containerRef.current,
         });
@@ -74,7 +66,6 @@ const EmbedPage = (): JSX.Element => {
         ];
 
         return () => {
-            injectedEmbedStyle?.remove();
             resizeObserver.disconnect();
             window.removeEventListener('resize', scheduleHeightPost);
             window.removeEventListener('load', scheduleHeightPost);
