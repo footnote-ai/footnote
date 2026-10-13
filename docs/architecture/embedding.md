@@ -7,7 +7,7 @@ The `/embed` route lets other sites include a complete Footnote section without 
 - A separate, working chat.
 - Links to Footnote, its documentation, and GitHub.
 
-The recorded answer is an example, not part of a visitor's conversation. Trace and report artifacts aren't available for that capture, and the footer says so.
+The recorded answer is separate from a visitor's conversation. Its original response details remain available, including sources, workflow information, and TRACE values. The stored example cannot open its full Trace view or use the Report action.
 
 ## Add it to a site
 
@@ -31,12 +31,7 @@ In production, make sure the embedding site's origin is permitted by the backend
 
 ## Resize messages
 
-Footnote sends two message types for compatibility:
-
-- `footnote-embed-height` — current
-- `arete-embed-height` — legacy
-
-Both use the same payload:
+Footnote sends `footnote-embed-height` messages with this payload:
 
 ```json
 { "type": "footnote-embed-height", "height": 1234 }
