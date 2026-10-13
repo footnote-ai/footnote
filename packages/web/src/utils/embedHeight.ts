@@ -28,16 +28,12 @@ export function measureEmbedHeight(
     root?: HTMLElement | null,
     documentRef: Document = document
 ): number {
+    // The iframe viewport can exceed content after it grows, so trust the page root when supplied.
+    const measurementRoot =
+        root ?? documentRef.body ?? documentRef.documentElement;
     const candidates = [
-        documentRef.documentElement?.scrollHeight ?? 0,
-        documentRef.body?.scrollHeight ?? 0,
-        documentRef.documentElement?.offsetHeight ?? 0,
-        documentRef.body?.offsetHeight ?? 0,
-        documentRef.documentElement?.clientHeight ?? 0,
-        documentRef.body?.clientHeight ?? 0,
-        root?.scrollHeight ?? 0,
-        root?.offsetHeight ?? 0,
-        root?.clientHeight ?? 0,
+        measurementRoot?.scrollHeight ?? 0,
+        measurementRoot?.offsetHeight ?? 0,
     ].filter((value) => Number.isFinite(value) && value > 0);
 
     return Math.ceil(Math.max(...candidates, 0));

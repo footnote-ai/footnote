@@ -54,6 +54,27 @@ test('measureEmbedHeight uses the tallest available source', () => {
     assert.equal(measureEmbedHeight(root, documentRef), 880);
 });
 
+test('measureEmbedHeight ignores the iframe viewport so content can shrink', () => {
+    const documentRef = {
+        body: createMockElement({
+            clientHeight: 1800,
+            offsetHeight: 1800,
+            scrollHeight: 1800,
+        }),
+        documentElement: createMockElement({
+            clientHeight: 1800,
+            offsetHeight: 1800,
+            scrollHeight: 1800,
+        }),
+    } as Document;
+    const root = createMockElement({
+        clientHeight: 1800,
+        offsetHeight: 510,
+        scrollHeight: 500,
+    }) as HTMLElement;
+
+    assert.equal(measureEmbedHeight(root, documentRef), 510);
+});
 test('createEmbedHeightMessenger posts current and legacy message types once per frame', () => {
     const postedMessages: Array<{ height: number; type: string }> = [];
     const targetOrigins: string[] = [];

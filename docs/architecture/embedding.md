@@ -1,51 +1,42 @@
 # Embedding Footnote
 
-This page documents the `/embed` route used by external iframe hosts.
+/embed is a compact, portable Footnote section for external pages.
 
-## What the embed route is
+## What the embed contains
 
-`/embed` is a maintained product surface, not a temporary demo page.
+The route renders, in order:
 
-It renders:
+- Footnote branding and the line “AI that shows its work.”
+- One recorded question and response captured from the canonical chat endpoint, with the shared response-footnote component.
+- A separate, interactive chat.
+- Links to Footnote, its documentation, and GitHub.
 
-- shared site header
-- embed-specific landing content sections (`about`, `demo`, `get-started`)
-- interactive `AskMeAnything` form
-- shared site footer
+The recorded response retains the metadata from its real run. Trace and report artifacts that are unavailable on this public surface remain unavailable; the embed does not simulate them. The route does not include the main site navigation, footer, installation pitch, or hash-linked sections.
 
-The `get-started` section links users to GitHub Releases and README quickstart.
+## Host integration
 
-## Route and navigation behavior
-
-- Route: `/embed`
-- Header section links use hash anchors (`#about`, `#demo`, `#get-started`).
-- When the URL includes a hash, the route scrolls that section into view on load.
-- The embed keeps the same public chat interaction behavior as the main web flow.
-
-## Host integration contract
-
-Use an iframe that points to your deployed Footnote web origin:
+Embed the deployed Footnote web origin. Let the iframe grow to the measured content height rather than setting a fixed height or a maximum height:
 
 ```html
 <iframe
     id="footnote-embed"
     src="https://<your-footnote-web-origin>/embed"
-    style="width: 100%; border: 0; min-height: 800px;"
+    style="width: 100%; min-height: 42rem; border: 0;"
     allow="clipboard-read; clipboard-write"
-    title="Footnote embed"
+    title="Footnote"
 ></iframe>
 ```
 
-For production, keep the iframe host origin allowlists aligned with backend CORS/CSP settings (`ALLOWED_ORIGINS`, `FRAME_ANCESTORS`).
+The min-height is only a pre-message fallback. The iframe reports its full content height as it loads and whenever the response, disclosure, viewport, or layout changes. Hosts should apply the reported height without adding an internal scroll area or a height cap; all response content and provenance disclosures should remain reachable.
+
+For production, keep the iframe host origin allowlists aligned with backend CORS/CSP settings (ALLOWED_ORIGINS, FRAME_ANCESTORS).
 
 ## Height messaging contract
 
-The embed posts parent-window `postMessage` height updates.
+The embed sends parent-window postMessage updates with these types:
 
-Message types:
-
-- `footnote-embed-height` (primary)
-- `arete-embed-height` (legacy compatibility)
+- footnote-embed-height (primary)
+- arete-embed-height (legacy)
 
 Payload shape:
 
@@ -53,56 +44,34 @@ Payload shape:
 { "type": "footnote-embed-height", "height": 1234 }
 ```
 
-When messages are emitted:
+Updates are sent on initial load, browser resize, observed layout changes, and explicit layout-change events from interactive components. The embed sends only to the origin derived from document.referrer; an absent or opaque parent origin is not trusted.
 
-- initial load
-- browser resize
-- DOM/layout mutations
-- explicit layout change events from interactive components
+The host must validate both the sender origin and the iframe window before applying a height. For example:
 
-Parent pages should:
+```js
+const iframe = document.querySelector('#footnote-embed');
+const embedOrigin = new URL(iframe.src).origin;
 
-- listen for `message` events
-- validate `event.origin`
-- update iframe `style.height` when message type matches
+window.addEventListener('message', (event) => {
+    if (
+        event.origin !== embedOrigin ||
+        event.source !== iframe.contentWindow ||
+        !event.data ||
+        typeof event.data !== 'object' ||
+        event.data.type !== 'footnote-embed-height' ||
+        !Number.isFinite(event.data.height) ||
+        event.data.height <= 0
+    ) {
+        return;
+    }
 
-## Product behavior vs implementation detail
-
-Treat these as stable behavior contracts:
-
-- `/embed` route exists and is iframe-safe
-- height messages are emitted with the types above
-- the route contains a working ask flow plus start links
-
-Treat these as implementation details (do not depend on exact values):
-
-- exact hero/CTA copy
-- CSS class names and spacing
-- internal observer/timer strategy used to detect layout changes
+    iframe.style.height = Math.ceil(event.data.height) + 'px';
+});
+```
 
 ## Operational notes
 
-- Shared layered web styles are imported from
-  `packages/web/src/styles/index.css`.
-- At narrow widths, embed content stacks vertically. Keep the iframe container at
-  `width: 100%` and avoid CSS transforms that force zoom or horizontal scroll.
-- Prefer dynamic height from embed messages. If a host uses a fixed fallback
-  height, use at least `800px`.
-- If height updates do not work, confirm the iframe id, message listener,
-  `event.origin` validation, and iframe scrolling/overflow settings.
-- `/api/chat` rate limiting, Cloudflare Turnstile configuration, and focus
-  behavior still apply inside the embedded ask flow.
-- Header and CTA links may navigate inside the iframe unless the host or route
-  sets a parent/new-tab target.
-- The root `server.js` file is only a startup shim. Backend CORS and CSP
-  behavior belongs in backend runtime configuration and server code.
-
-## Maintenance notes
-
-When updating embed UI, keep this doc in sync with:
-
-- `packages/web/src/pages/EmbedPage.tsx`
-- `packages/web/src/utils/embedHeight.ts`
-- shared nav/footer behavior in `packages/web/src/components`
-
-If message types or payload shape change, update host integrations and this doc in the same branch.
+- Shared layered web styles are imported from packages/web/src/styles/index.css.
+- At narrow widths, the embed stacks vertically and remains content-sized. Keep the iframe at width: 100%; do not use transforms, fixed heights, or overflow rules that create a nested scroll area.
+- /api/chat rate limiting, Cloudflare Turnstile configuration, and keyboard focus behavior still apply to the live chat.
+- packages/web/src/utils/embedHeight.ts owns the child-side measurement and message contract. Backend CORS and CSP behavior belongs in backend runtime configuration and server code.

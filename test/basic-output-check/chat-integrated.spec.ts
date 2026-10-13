@@ -231,7 +231,9 @@ test('settles embed height after a successful turn, provenance, and failure', as
         .poll(async () => Math.max(...(await readEmbedHeights(page))))
         .toBeGreaterThan(pendingHeight);
 
-    const firstFootnote = embed.locator('.canonical-response-footnote');
+    const firstFootnote = embed.locator(
+        '.interaction .canonical-response-footnote'
+    );
     const answerHeight = await latestEmbedHeight(page);
     await firstFootnote
         .getByRole('button', { name: 'Sources', exact: true })
@@ -257,9 +259,9 @@ test('settles embed height after a successful turn, provenance, and failure', as
         'backend'
     );
     await expect(embed.locator('.interaction-turn')).toHaveCount(2);
-    await expect(embed.locator('.public-message--assistant')).toHaveText([
-        /Embedded paragraph 1/,
-    ]);
+    await expect(
+        embed.locator('.interaction .public-message--assistant')
+    ).toHaveText([/Embedded paragraph 1/]);
     await expect
         .poll(async () => Math.max(...(await readEmbedHeights(page))))
         .toBeGreaterThan(provenanceHeight);

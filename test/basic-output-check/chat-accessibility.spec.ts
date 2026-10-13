@@ -190,8 +190,13 @@ test('embed height follows long responses and provenance drawers without horizon
         .toBeGreaterThan(pendingHeight);
 
     const responseHeight = await latestEmbedHeight(page);
-    await embed.getByRole('button', { name: 'Sources', exact: true }).click();
-    await expect(embed.getByRole('region', { name: 'Sources' })).toBeVisible();
+    const liveInteraction = embed.locator('.interaction');
+    await liveInteraction
+        .getByRole('button', { name: 'Sources', exact: true })
+        .click();
+    await expect(
+        liveInteraction.getByRole('region', { name: 'Sources' })
+    ).toBeVisible();
     await expect
         .poll(() => latestEmbedHeight(page))
         .toBeGreaterThan(responseHeight);
