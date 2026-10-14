@@ -82,7 +82,7 @@ catalog:
     eslint: ^10.10.0
     eslint-config-prettier: ^10.1.8
     eslint-plugin-react-hooks: ^7.1.1
-    express: ^5.2.1
+    express: ^5.3.0
     express-rate-limit: ^8.6.2
     globby: ^16.2.4
     js-yaml: ^3.15.2
