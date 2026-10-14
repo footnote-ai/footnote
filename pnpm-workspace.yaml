@@ -90,7 +90,7 @@ catalog:
     mime-types: ^3.0.2
     neverthrow: ^8.2.0
     node-fetch: ^3.3.2
-    nodemailer: ^10.0.14
+    nodemailer: ^10.1.0
     only: ^0.0.2
     openai: ^7.28.0
     openid-client: ^6.8.8
