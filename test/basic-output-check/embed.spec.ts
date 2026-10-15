@@ -170,7 +170,7 @@ test('iframe resizes with disclosures and live answers on a narrow viewport', as
     await expect
         .poll(async () => (await readEmbedHeights(page)).at(-1) ?? 0)
         .toBeLessThan(expandedHeight);
-    const collapsedHeight = await latestEmbedHeight(page);
+    const collapsedHeight = (await readEmbedHeights(page)).at(-1) ?? 0;
 
     const input = embed.getByLabel('Ask a question');
     await input.fill('Can you explain that in more detail?');
@@ -179,7 +179,7 @@ test('iframe resizes with disclosures and live answers on a narrow viewport', as
         embed.getByText('The embedded answer paragraph 8 stays available')
     ).toBeVisible();
     await expect
-        .poll(() => latestEmbedHeight(page))
+        .poll(async () => (await readEmbedHeights(page)).at(-1) ?? 0)
         .toBeGreaterThan(collapsedHeight);
     const answerHeight = await latestEmbedHeight(page);
 

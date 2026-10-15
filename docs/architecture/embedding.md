@@ -27,7 +27,7 @@ The `min-height` is a starting size, not a limit. The embed sends its content he
 
 If the host doesn't handle resize messages, visitors can still scroll inside the iframe. Keep normal iframe scrolling available as a fallback rather than hiding overflow or clipping the footer.
 
-In production, make sure the embedding site's origin is permitted by the backend CORS and framing settings (`ALLOWED_ORIGINS` and `FRAME_ANCESTORS`).
+In production, add each embedding site's exact origin to the backend `FRAME_ANCESTORS` CSP setting. The apex (`https://jordanmakes.dev`) and `www` (`https://www.jordanmakes.dev`) hostnames are different origins and must be listed separately. `ALLOWED_ORIGINS` is for cross-origin API requests; the iframe itself does not need a CORS exception.
 
 ## Resize messages
 
