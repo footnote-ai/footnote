@@ -1103,3 +1103,110 @@
         transition: none;
     }
 }
+
+/* The compact embed is a complete section, not a nested copy of the marketing page. */
+.public-home--embed {
+    min-height: 0;
+    overflow: visible;
+}
+
+.public-home--embed::before {
+    display: none;
+}
+
+.public-home__main--embed {
+    width: min(calc(100% - 2rem), 46.25rem);
+    padding-block: 1.5rem 1rem;
+}
+
+.public-home__main--embed > section {
+    padding: 0;
+}
+
+.public-embed__intro {
+    padding-bottom: 1.25rem;
+}
+
+.public-embed__brand {
+    margin: 0 0 0.55rem;
+    font-family: var(--fn-font-display);
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+}
+
+.public-home--embed .public-embed__intro h1 {
+    max-width: 100%;
+    margin-bottom: 0.45rem;
+    font-size: clamp(2rem, 6vw, 3rem);
+    line-height: 1.05;
+}
+
+.public-embed__intro > p:last-child {
+    margin: 0;
+    color: var(--public-muted);
+    font-size: 1.05rem;
+}
+
+.public-embed__example,
+.public-embed__live,
+.public-embed__links {
+    border-top: 1px solid var(--public-rule);
+}
+
+.public-embed__example,
+.public-embed__live {
+    padding-top: 1.15rem !important;
+    padding-bottom: 1.35rem !important;
+}
+
+.public-embed__eyebrow {
+    margin: 0 0 0.65rem;
+    color: var(--public-muted);
+    font-family: var(--fn-font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+}
+
+.public-embed__example h2 {
+    margin: 0;
+    font-family: var(--fn-font-display);
+    font-size: clamp(1.2rem, 2.5vw, 1.55rem);
+    font-weight: 550;
+    line-height: 1.3;
+}
+
+.public-home--embed .public-embed__example .public-message--assistant {
+    width: 100%;
+    margin: 0.85rem 0 0;
+}
+
+.public-embed__live .public-home__chat-shell {
+    margin: 0;
+}
+
+.public-embed__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    padding-top: 0.9rem;
+    font-family: var(--fn-font-mono);
+    font-size: 0.82rem;
+}
+
+@media (max-width: 420px) {
+    .public-home__main--embed {
+        width: calc(100% - 1.5rem);
+    }
+
+    .public-home--embed .public-embed__intro h1 {
+        font-size: clamp(1.9rem, 8vw, 2.35rem);
+    }
+}
+
+.public-home--embed .public-embed__example .public-message--assistant a {
+    font-size: 0.78em;
+    vertical-align: super;
+}

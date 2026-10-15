@@ -12,7 +12,6 @@ import assert from 'node:assert/strict';
 import {
     createEmbedHeightMessenger,
     EMBED_HEIGHT_MESSAGE_TYPE,
-    LEGACY_EMBED_HEIGHT_MESSAGE_TYPE,
     measureEmbedHeight,
 } from './embedHeight';
 
@@ -54,7 +53,28 @@ test('measureEmbedHeight uses the tallest available source', () => {
     assert.equal(measureEmbedHeight(root, documentRef), 880);
 });
 
-test('createEmbedHeightMessenger posts current and legacy message types once per frame', () => {
+test('measureEmbedHeight ignores the iframe viewport so content can shrink', () => {
+    const documentRef = {
+        body: createMockElement({
+            clientHeight: 1800,
+            offsetHeight: 1800,
+            scrollHeight: 1800,
+        }),
+        documentElement: createMockElement({
+            clientHeight: 1800,
+            offsetHeight: 1800,
+            scrollHeight: 1800,
+        }),
+    } as Document;
+    const root = createMockElement({
+        clientHeight: 1800,
+        offsetHeight: 510,
+        scrollHeight: 500,
+    }) as HTMLElement;
+
+    assert.equal(measureEmbedHeight(root, documentRef), 510);
+});
+test('createEmbedHeightMessenger posts one height message per frame', () => {
     const postedMessages: Array<{ height: number; type: string }> = [];
     const targetOrigins: string[] = [];
     const parentWindow = {
@@ -107,12 +127,8 @@ test('createEmbedHeightMessenger posts current and legacy message types once per
 
         assert.deepEqual(postedMessages, [
             { type: EMBED_HEIGHT_MESSAGE_TYPE, height: 540 },
-            { type: LEGACY_EMBED_HEIGHT_MESSAGE_TYPE, height: 540 },
         ]);
-        assert.deepEqual(targetOrigins, [
-            'https://host.example',
-            'https://host.example',
-        ]);
+        assert.deepEqual(targetOrigins, ['https://host.example']);
     } finally {
         Object.defineProperty(globalThis, 'window', {
             configurable: true,
@@ -179,11 +195,9 @@ test('createEmbedHeightMessenger posts again when the height grows later', () =>
 
         assert.deepEqual(postedMessages, [
             { type: EMBED_HEIGHT_MESSAGE_TYPE, height: 320 },
-            { type: LEGACY_EMBED_HEIGHT_MESSAGE_TYPE, height: 320 },
             { type: EMBED_HEIGHT_MESSAGE_TYPE, height: 640 },
-            { type: LEGACY_EMBED_HEIGHT_MESSAGE_TYPE, height: 640 },
         ]);
-        assert.equal(targetOrigins.length, 4);
+        assert.equal(targetOrigins.length, 2);
         assert.ok(
             targetOrigins.every((origin) => origin === 'https://host.example')
         );

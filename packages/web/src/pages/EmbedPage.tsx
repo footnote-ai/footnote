@@ -1,5 +1,5 @@
 /**
- * @description: Hosts the embeddable Footnote page and coordinates iframe sizing behavior for external sites.
+ * @description: Hosts the portable Footnote section and coordinates iframe sizing behavior for external sites.
  * @footnote-scope: web
  * @footnote-module: EmbedPage
  * @footnote-risk: medium - Embed sizing or messaging bugs can break integrations and hide the interactive surface.
@@ -7,34 +7,20 @@
  */
 
 import { useEffect, useRef } from 'react';
-import PublicPageLayout from '@components/PublicPageLayout';
+import CanonicalResponseFootnote from '@components/CanonicalResponseFootnote';
 import Chat from '@components/Chat';
+import MarkdownResponse from '@components/MarkdownResponse';
+import { embedScenario } from '../data/embedScenario';
 import {
     createEmbedHeightMessenger,
     EMBED_LAYOUT_CHANGE_EVENT,
 } from '../utils/embedHeight';
 
-/**
- * EmbedPage component provides a compact embeddable Footnote experience that mirrors
- * the main sections used on the primary SPA route.
- */
 const EmbedPage = (): JSX.Element => {
     const containerRef = useRef<HTMLElement | null>(null);
 
-    // Disable scrolling on the embed page itself and keep the host iframe sized to the content.
+    // A parent that applies these measurements keeps the iframe content-sized without a nested scroller.
     useEffect(() => {
-        let injectedEmbedStyle = null;
-        if (window.parent !== window) {
-            injectedEmbedStyle = document.createElement('style');
-            injectedEmbedStyle.textContent = `
-        html, body {
-          overflow: hidden !important;
-          height: auto !important;
-        }
-      `;
-            document.head.appendChild(injectedEmbedStyle);
-        }
-
         const messenger = createEmbedHeightMessenger({
             root: containerRef.current,
         });
@@ -80,7 +66,6 @@ const EmbedPage = (): JSX.Element => {
         ];
 
         return () => {
-            injectedEmbedStyle?.remove();
             resizeObserver.disconnect();
             window.removeEventListener('resize', scheduleHeightPost);
             window.removeEventListener('load', scheduleHeightPost);
@@ -95,109 +80,77 @@ const EmbedPage = (): JSX.Element => {
         };
     }, []);
 
-    useEffect(() => {
-        if (!containerRef.current || !window.location.hash) {
-            return;
-        }
-
-        const rawTargetId = window.location.hash.slice(1).trim();
-        if (rawTargetId.length === 0) {
-            return;
-        }
-
-        let targetId: string;
-        try {
-            targetId = decodeURIComponent(rawTargetId).trim();
-        } catch {
-            return;
-        }
-
-        if (targetId.length === 0) {
-            return;
-        }
-
-        const sectionElement = document.getElementById(targetId);
-        if (!sectionElement) {
-            return;
-        }
-
-        sectionElement.scrollIntoView({ block: 'start' });
-    }, []);
-
     return (
-        <PublicPageLayout>
+        <div className="public-home public-home--embed">
             <main
                 ref={containerRef}
                 id="main-content"
-                className="public-page__main public-page__main--embed"
+                className="public-home__main public-home__main--embed"
             >
                 <section
-                    id="about"
-                    className="public-page__intro"
-                    aria-labelledby="embed-about-title"
+                    className="public-embed__intro"
+                    aria-labelledby="embed-title"
                 >
-                    <h1 id="embed-about-title">
-                        Footnote, anywhere you need it.
-                    </h1>
-                    <p className="public-page__lede">
-                        Footnote is a transparency-first AI framework that helps
-                        keep answers inspectable, understandable, and easier to
-                        steer.
-                    </p>
-                    <p>
-                        It can show useful context around responses, including
-                        sources and trace links when available, while staying
-                        practical to self-host.
-                    </p>
+                    <p className="public-embed__brand">Footnote</p>
+                    <h1 id="embed-title">AI that shows its work.</h1>
+                    <p>You shouldn&apos;t have to take its word for it.</p>
                 </section>
 
                 <section
-                    id="demo"
-                    className="public-page__section"
-                    aria-labelledby="embed-demo-title"
+                    className="public-embed__example"
+                    aria-labelledby="embed-example-title"
                 >
-                    <div>
-                        <h2 id="embed-demo-title">Chat from your own page.</h2>
-                        <p className="public-page__lede">
-                            Run a live prompt and inspect the response details.
-                        </p>
+                    <p className="public-embed__eyebrow">Recorded example</p>
+                    <h2 id="embed-example-title">{embedScenario.question}</h2>
+                    <article className="public-message public-message--assistant">
+                        <MarkdownResponse
+                            markdown={embedScenario.response.message}
+                        />
+                    </article>
+                    <CanonicalResponseFootnote
+                        metadata={embedScenario.response.metadata}
+                        artifacts={{
+                            trace: 'unavailable',
+                            report: 'unavailable',
+                        }}
+                        answerProvenanceEligible={
+                            embedScenario.response.answerProvenanceEligible
+                        }
+                    />
+                </section>
+
+                <section
+                    className="public-embed__live"
+                    aria-labelledby="embed-live-title"
+                >
+                    <h2 id="embed-live-title" className="public-embed__eyebrow">
+                        Ask Footnote
+                    </h2>
+                    <div className="public-home__chat-shell">
                         <Chat />
                     </div>
                 </section>
 
-                <section
-                    id="get-started"
-                    className="public-page__section"
-                    aria-labelledby="embed-start-title"
+                <nav
+                    className="public-embed__links"
+                    aria-label="Footnote links"
                 >
-                    <h2 id="embed-start-title">
-                        Go from embed to local runtime.
-                    </h2>
-                    <p className="public-page__lede">
-                        Install the CLI launcher from GitHub Releases to run
-                        Footnote with your own setup.
-                    </p>
-                    <div className="public-page__actions">
-                        <a
-                            className="public-page__action public-page__action--primary"
-                            href="https://github.com/footnote-ai/footnote/releases"
-                            target="_blank"
-                            rel="noreferrer"
-                        >
-                            Download Footnote
-                        </a>
-                        <a
-                            className="public-page__action"
-                            href="https://github.com/footnote-ai/footnote#quickstart"
-                            target="_blank"
-                            rel="noreferrer"
-                        >
-                            Quickstart
-                        </a>
-                    </div>
-                </section>
+                    <a href="/" target="_blank" rel="noreferrer">
+                        Open Footnote
+                    </a>
+                    <a href="/wiki/" target="_blank" rel="noreferrer">
+                        Docs
+                    </a>
+                    <a
+                        href="https://github.com/footnote-ai/footnote"
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        GitHub
+                    </a>
+                </nav>
             </main>
-        </PublicPageLayout>
+        </div>
     );
 };
 
