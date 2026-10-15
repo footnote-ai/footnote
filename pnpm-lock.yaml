@@ -23,8 +23,8 @@ catalogs:
       specifier: ^1.6.1
       version: 1.6.1
     '@openai/agents':
-      specifier: ^0.18.0
-      version: 0.18.0
+      specifier: ^0.20.0
+      version: 0.20.0
     '@resvg/resvg-js':
       specifier: ^2.6.2
       version: 2.6.2
@@ -137,8 +137,8 @@ catalogs:
       specifier: ^0.0.2
       version: 0.0.2
     openai:
-      specifier: ^7.28.0
-      version: 7.30.0
+      specifier: ^7.32.0
+      version: 7.32.0
     openid-client:
       specifier: ^6.8.8
       version: 6.8.8
@@ -337,7 +337,7 @@ importers:
         version: 1.5.5(zod@4.6.5)
       openai:
         specifier: 'catalog:'
-        version: 7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+        version: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       ws:
         specifier: 'catalog:'
         version: 8.22.0(bufferutil@4.1.0)
@@ -459,7 +459,7 @@ importers:
         version: link:../prompts
       '@openai/agents':
         specifier: 'catalog:'
-        version: 0.18.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+        version: 0.20.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       '@sapphire/shapeshift':
         specifier: 'catalog:'
         version: 4.0.0
@@ -498,7 +498,7 @@ importers:
         version: 0.0.2
       openai:
         specifier: 'catalog:'
-        version: 7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+        version: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       opusscript:
         specifier: 'catalog:'
         version: 0.1.1
@@ -1695,26 +1695,26 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@openai/agents-core@0.18.0':
-    resolution: {integrity: sha512-EMhTxl1iHX+bH3gGUnkSxU8l+fw36/+mjsvZH7zP3MyPBZ/4Zqtjg9oILcbZCkcLvii/+M+4ckck3MMdrpcWRA==}
+  '@openai/agents-core@0.20.0':
+    resolution: {integrity: sha512-9nJJ3iyQTwO2kmrZJPMqnHI61g3xp2DgtpW4V0cgNtYot5jocDqAMN5+dkjtsBo64U3Wbl7rIAV0q5kvycoIIA==}
     peerDependencies:
       zod: ^4.0.0
     peerDependenciesMeta:
       zod:
         optional: true
 
-  '@openai/agents-openai@0.18.0':
-    resolution: {integrity: sha512-dBE5NNVbkhEIsjZLUDjA8Gr8U1wGN6LTdP7Su4mY1djcxtIBaojQ/bjbpDd0EyqD5OkNTu0ziYyUyyrIfIGurQ==}
+  '@openai/agents-openai@0.20.0':
+    resolution: {integrity: sha512-6jAwFlUvlRiN/OBwTZa8xUSwbXb5nxGtSUG6kKEW19Zo70kN+CLqaVLTHy8cQpnQiTEMPuAICAXklRx7kTfE9Q==}
     peerDependencies:
       zod: ^4.0.0
 
-  '@openai/agents-realtime@0.18.0':
-    resolution: {integrity: sha512-joIG5Vj1BKHxx9a+UwI+pPEuiGh0zhRecVb1yYMMKSW0Oho9ntPi1+LM7KpT2mwv6M9Y11XNtuoaseolFzxwBQ==}
+  '@openai/agents-realtime@0.20.0':
+    resolution: {integrity: sha512-KK3w9k9rkqv5mC25vykWTe/1IIcOMsqwJs9mB0aX9Z2Us487xGduZgqr+ENEzthjZbQvTi/+qUv/tfoZeN/p/w==}
     peerDependencies:
       zod: ^4.0.0
 
-  '@openai/agents@0.18.0':
-    resolution: {integrity: sha512-i0dIeN8PsqLfEgfMLrmpcJPvgltY2fUxr2+CftBCvX6g1GgWdoiCKpbf+labmJJPqwidN7HfXkgBszM2CHg/IA==}
+  '@openai/agents@0.20.0':
+    resolution: {integrity: sha512-k3fm1qJ5VjYvBI1juwZGDdhtpd7CZqJlt+6zIMcmzHD1mIQoW9HhXN8Wv9G9PpemWz9ykaxj6CIQkY8kMAuWjA==}
     peerDependencies:
       zod: ^4.0.0
 
@@ -4532,8 +4532,8 @@ packages:
       zod:
         optional: true
 
-  openai@7.30.0:
-    resolution: {integrity: sha512-tvvcPdhS56B/79o0mJS5h4JndAov5Sz78T7CFl4gJ+C9S3GoSqHNLO6lG/8kdK+/c13zWEI97Srf66ar0V242g==}
+  openai@7.32.0:
+    resolution: {integrity: sha512-avqxu/jl1gsVBCBgFNPr9sTh+wZppQphuhhFy1zEvAJxEaJ4t0ery6hZdOT9kws/EcNTARoQcZs2IT3bliE1SA==}
     engines: {node: '>=22.0.0'}
     peerDependencies:
       '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
@@ -6507,7 +6507,7 @@ snapshots:
       '@voltagent/core': 2.11.0(@ai-sdk/provider-utils@4.0.38(zod@4.6.5))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.6.5))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       ai: 6.0.224(zod@4.6.5)
       ollama-ai-provider-v2: 1.5.5(zod@4.6.5)
-      openai: 7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      openai: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.5
     transitivePeerDependencies:
@@ -6831,11 +6831,11 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
 
-  '@openai/agents-core@0.18.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
+  '@openai/agents-core@0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
     dependencies:
       '@standard-schema/spec': 1.1.0
       debug: 4.4.3(supports-color@10.2.2)
-      openai: 7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      openai: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
     optionalDependencies:
       '@modelcontextprotocol/client': 2.3.1
       zod: 4.6.5
@@ -6847,11 +6847,10 @@ snapshots:
       - undici
       - ws
 
-  '@openai/agents-openai@0.18.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
+  '@openai/agents-openai@0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
     dependencies:
-      '@openai/agents-core': 0.18.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
-      debug: 4.4.3(supports-color@10.2.2)
-      openai: 7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      '@openai/agents-core': 0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      openai: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       zod: 4.6.5
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
@@ -6861,11 +6860,10 @@ snapshots:
       - undici
       - ws
 
-  '@openai/agents-realtime@0.18.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(zod@4.6.5)':
+  '@openai/agents-realtime@0.20.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(zod@4.6.5)':
     dependencies:
-      '@openai/agents-core': 0.18.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      '@openai/agents-core': 0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       '@types/ws': 8.18.2
-      debug: 4.4.3(supports-color@10.2.2)
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.5
     transitivePeerDependencies:
@@ -6877,13 +6875,12 @@ snapshots:
       - undici
       - utf-8-validate
 
-  '@openai/agents@0.18.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
+  '@openai/agents@0.20.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
     dependencies:
-      '@openai/agents-core': 0.18.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
-      '@openai/agents-openai': 0.18.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
-      '@openai/agents-realtime': 0.18.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(zod@4.6.5)
-      debug: 4.4.3(supports-color@10.2.2)
-      openai: 7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      '@openai/agents-core': 0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      '@openai/agents-openai': 0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      '@openai/agents-realtime': 0.20.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(zod@4.6.5)
+      openai: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       zod: 4.6.5
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
@@ -10225,7 +10222,7 @@ snapshots:
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 3.25.76
 
-  openai@7.30.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5):
+  openai@7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5):
     optionalDependencies:
       undici: 6.28.0
       ws: 8.22.0(bufferutil@4.1.0)
