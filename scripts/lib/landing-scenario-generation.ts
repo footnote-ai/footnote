@@ -92,6 +92,19 @@ const SCENARIO_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
  */
 export const LANDING_SCENARIO_PROMPTS = [
     {
+        id: 'inspect-an-answer',
+        question:
+            'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.',
+    },
+    {
+        id: 'unconfirmed-claims',
+        question: "What does Footnote do when it can't confirm a claim?",
+    },
+    {
+        id: 'run-locally',
+        question: 'Can I run Footnote locally instead of using a cloud model?',
+    },
+    {
         id: 'weekly-household-checklist',
         question:
             'What should I include in a simple weekly household checklist?',
@@ -191,7 +204,9 @@ export const sanitizeLandingScenarioResponse = (
         id: input.scenario.id,
         question: input.scenario.question,
         response: {
-            ...input.response,
+            action: input.response.action,
+            message: input.response.message,
+            modality: input.response.modality,
             metadata: {
                 responseId: `prepared-landing-${input.scenario.id}`,
                 provenance: input.response.metadata.provenance,

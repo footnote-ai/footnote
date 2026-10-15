@@ -35,19 +35,19 @@ test('public homepage keeps the approved hero, truthful handoff, and destination
     assert.doesNotMatch(source, /TraceFooterPlaceholder/);
     assert.match(source, /ResponseCarousel/);
     assert.match(source, /items=\{landingScenarios\}/);
-    assert.match(
-        source,
-        /https:\/\/github\.com\/footnote-ai\/footnote\/releases/
-    );
-    assert.match(source, /href="\/wiki\/getting-started\/"/);
+    assert.match(source, /href="\/wiki\/documentation\/"/);
+    assert.match(source, /href="\/wiki\/deployment\/"/);
     assert.match(
         source,
         /documentationHref: '\/wiki\/architecture\/admin-settings-architecture\/'/
     );
     assert.match(source, />\s*Get started\s*</);
-    assert.match(source, />\s*Setup guide\s*</);
-    assert.match(source, />Run Footnote</);
+    assert.match(source, />\s*Deployment guide\s*</);
+    assert.match(source, />Run it yourself</);
     assert.match(source, /documentationLabel: 'Philosophy'/);
+    assert.match(source, /Codebase/);
+    assert.match(source, /target="_blank"/);
+    assert.match(source, /linksOpenInNewTab/);
     assert.match(source, /Ask a question…/);
     assert.match(source, /documentationHref: '\/wiki\/deployment\/'/);
     assert.doesNotMatch(
@@ -92,7 +92,20 @@ test('public homepage presents plain-language blocks with useful documentation l
     assert.match(source, /See what happened/);
     assert.match(source, /Your rules/);
     assert.match(source, /Run it your way/);
-    assert.match(source, /Open about our choices/);
+    assert.match(source, /Transparent by design/);
+    assert.match(
+        source,
+        /Footnote gives you the A through Z of what happened, and also what didn't\./
+    );
+    assert.match(source, /You choose what Footnote may do and use\./);
+    assert.match(
+        source,
+        /Your choice of AI, on your own machine or with the latest cloud models\./
+    );
+    assert.match(
+        source,
+        /The entire project is open to inspect: its history, current state, and development trajectory\./
+    );
     assert.match(source, /documentationLabel: 'How answers are explained'/);
     assert.match(source, /documentationLabel: 'Configuration'/);
     assert.match(source, /documentationLabel: 'Deployment'/);
@@ -289,7 +302,30 @@ test('homepage projects prepared metadata through the canonical footnote', async
         /\.public-home \.canonical-response-footnote__summary-safety/
     );
     assert.match(stylesSource, /\.public-home__concept-art/);
-    assert.match(stylesSource, /grid-template-columns: 1\.9fr 1fr 1fr/);
+    assert.match(
+        stylesSource,
+        /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/
+    );
+    assert.match(
+        stylesSource,
+        /\.public-home__thread\s*\{\s*width:[\s\S]*?margin-top: 2\.5rem/
+    );
+    assert.match(
+        stylesSource,
+        /\.public-home__concept-wrap--see-what-happened \.public-home__concept-art\s*\{\s*justify-items: center/
+    );
+    assert.doesNotMatch(
+        stylesSource,
+        /\.public-home__narrative\s*\{[^}]*border-top/
+    );
+    assert.doesNotMatch(
+        stylesSource,
+        /\.public-home__get-started\s*\{[^}]*border-top/
+    );
+    assert.match(
+        stylesSource,
+        /\.public-home > \.public-footer\s*\{[^}]*border-top: 0/
+    );
     assert.match(
         stylesSource,
         /\.public-home__concept-wrap--open-about-our-choices/
