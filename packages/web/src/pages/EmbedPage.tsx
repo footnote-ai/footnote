@@ -10,7 +10,8 @@ import { useEffect, useRef } from 'react';
 import CanonicalResponseFootnote from '@components/CanonicalResponseFootnote';
 import Chat from '@components/Chat';
 import MarkdownResponse from '@components/MarkdownResponse';
-import { embedScenario } from '../data/embedScenario';
+import PublicHeader from '@components/PublicHeader';
+import { landingScenarios } from '../data/landingScenarios';
 import {
     createEmbedHeightMessenger,
     EMBED_LAYOUT_CHANGE_EVENT,
@@ -18,6 +19,13 @@ import {
 
 const EmbedPage = (): JSX.Element => {
     const containerRef = useRef<HTMLElement | null>(null);
+    const example = landingScenarios[0];
+
+    if (!example) {
+        throw new Error(
+            'The public embed requires a prepared landing example.'
+        );
+    }
 
     // A parent that applies these measurements keeps the iframe content-sized without a nested scroller.
     useEffect(() => {
@@ -82,52 +90,53 @@ const EmbedPage = (): JSX.Element => {
 
     return (
         <div className="public-home public-home--embed">
+            <PublicHeader />
             <main
                 ref={containerRef}
                 id="main-content"
                 className="public-home__main public-home__main--embed"
             >
                 <section
-                    className="public-embed__intro"
+                    className="public-home__intro public-embed__intro"
                     aria-labelledby="embed-title"
                 >
-                    <p className="public-embed__brand">Footnote</p>
-                    <h1 id="embed-title">AI that shows its work.</h1>
-                    <p>You shouldn&apos;t have to take its word for it.</p>
+                    <h1 id="embed-title">
+                        <span className="public-home__hero-title-line">
+                            AI that
+                        </span>{' '}
+                        <span className="public-home__hero-title-line">
+                            <em>shows its work.</em>
+                        </span>
+                    </h1>
+                    <p>
+                        See how an answer was made, set your own rules, and run
+                        Footnote your way.
+                    </p>
                 </section>
 
                 <section
                     className="public-embed__example"
                     aria-labelledby="embed-example-title"
                 >
-                    <p className="public-embed__eyebrow">Recorded example</p>
-                    <h2 id="embed-example-title">{embedScenario.question}</h2>
+                    <h2 id="embed-example-title">{example.question}</h2>
                     <article className="public-message public-message--assistant">
                         <MarkdownResponse
-                            markdown={embedScenario.response.message}
+                            markdown={example.response.message}
+                            linksOpenInNewTab
                         />
                     </article>
                     <CanonicalResponseFootnote
-                        metadata={embedScenario.response.metadata}
+                        metadata={example.response.metadata}
                         artifacts={{
                             trace: 'unavailable',
                             report: 'unavailable',
                         }}
-                        answerProvenanceEligible={
-                            embedScenario.response.answerProvenanceEligible
-                        }
                     />
                 </section>
 
-                <section
-                    className="public-embed__live"
-                    aria-labelledby="embed-live-title"
-                >
-                    <h2 id="embed-live-title" className="public-embed__eyebrow">
-                        Ask Footnote
-                    </h2>
+                <section className="public-embed__live" aria-label="Live chat">
                     <div className="public-home__chat-shell">
-                        <Chat />
+                        <Chat placeholder="Ask a question…" />
                     </div>
                 </section>
 

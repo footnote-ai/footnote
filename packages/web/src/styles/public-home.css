@@ -1121,6 +1121,10 @@
     display: none;
 }
 
+.public-home--embed > .public-header {
+    width: min(calc(100% - 2rem), 54.625rem);
+}
+
 .public-home__main--embed {
     width: min(calc(100% - 2rem), 46.25rem);
     padding-block: 1.5rem 1rem;
@@ -1132,14 +1136,6 @@
 
 .public-embed__intro {
     padding-bottom: 1.25rem;
-}
-
-.public-embed__brand {
-    margin: 0 0 0.55rem;
-    font-family: var(--fn-font-display);
-    font-size: 1.2rem;
-    font-weight: 600;
-    letter-spacing: -0.03em;
 }
 
 .public-home--embed .public-embed__intro h1 {
@@ -1156,7 +1152,6 @@
 }
 
 .public-embed__example,
-.public-embed__live,
 .public-embed__links {
     border-top: 1px solid var(--public-rule);
 }
@@ -1165,16 +1160,6 @@
 .public-embed__live {
     padding-top: 1.15rem !important;
     padding-bottom: 1.35rem !important;
-}
-
-.public-embed__eyebrow {
-    margin: 0 0 0.65rem;
-    color: var(--public-muted);
-    font-family: var(--fn-font-mono);
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.045em;
-    text-transform: uppercase;
 }
 
 .public-embed__example h2 {
@@ -1192,6 +1177,16 @@
 
 .public-embed__live .public-home__chat-shell {
     margin: 0;
+}
+
+.public-home--embed .interaction {
+    margin-top: 0;
+}
+
+.public-home--embed .interaction-input {
+    min-height: 3.25rem;
+    border-radius: 999px;
+    padding-left: 1.25rem;
 }
 
 .public-embed__links {

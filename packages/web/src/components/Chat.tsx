@@ -64,7 +64,11 @@ type CurrentChatRequest = {
     status: 'pending' | 'failed';
 };
 
-const Chat = (): JSX.Element => {
+const Chat = ({
+    placeholder = "What's on your mind?",
+}: {
+    placeholder?: string;
+}): JSX.Element => {
     const { theme } = useTheme();
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState<ChatStatus | null>(null);
@@ -683,7 +687,7 @@ const Chat = (): JSX.Element => {
                                     formRef.current?.requestSubmit();
                                 }
                             }}
-                            placeholder="What's on your mind?"
+                            placeholder={placeholder}
                             autoComplete="off"
                             ref={inputRef}
                             rows={1}

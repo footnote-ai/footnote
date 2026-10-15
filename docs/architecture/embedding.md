@@ -1,13 +1,13 @@
 # Embedding Footnote
 
-The `/embed` route lets other sites include a complete Footnote section without rebuilding the introduction or chat interface. It shows:
+The `/embed` route lets other sites include Footnote's public introduction and chat without rebuilding them. It uses:
 
-- Footnote's existing headline and supporting line.
-- A recorded answer with its original response metadata and the usual provenance footer.
+- The shared public header and the homepage headline and supporting line.
+- The same first prepared answer as the homepage, with its response metadata and provenance footer.
 - A separate, working chat.
 - Links to Footnote, its documentation, and GitHub.
 
-The recorded answer is separate from a visitor's conversation. Its original response details remain available, including sources, workflow information, and TRACE values. The stored example cannot open its full Trace view or use the Report action.
+The prepared answer is separate from a visitor's conversation. Its response details remain available, including sources, workflow information, and TRACE values. Trace and Report actions are unavailable for the prepared answer; their disabled controls do not show availability messages.
 
 ## Add it to a site
 

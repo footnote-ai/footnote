@@ -272,8 +272,8 @@ test('rendered prepared fixture exposes sources and controls but no Trace href',
     assert.doesNotMatch(markup, /href="\/traces\//);
     assert.match(markup, /Report/);
     assert.match(markup, /disabled/);
-    assert.match(markup, /canonical-response-footnote__action-status/);
-    assert.match(markup, /Reporting is not available on this surface\./);
+    assert.doesNotMatch(markup, /Unavailable for this response/);
+    assert.doesNotMatch(markup, /Reporting is not available on this surface\./);
 });
 
 test('rendered live fixture keeps unknown Trace linkable and unconfirmed', () => {
@@ -293,12 +293,24 @@ test('rendered live fixture keeps unknown Trace linkable and unconfirmed', () =>
     assert.doesNotMatch(markup, /Unavailable on web/);
 });
 
-test('rendered unavailable actions expose their projected reasons', () => {
+test('rendered unavailable actions omit their reasons from the action bar', () => {
     const nullMetadataMarkup = render(null, 'unavailable', 'unavailable');
     assert.match(nullMetadataMarkup, /Response metadata is unavailable\./);
-    assert.match(
-        nullMetadataMarkup,
-        /No controls were recorded for this response\./
+    const actionBarMarkup =
+        nullMetadataMarkup
+            .split(
+                'class="canonical-response-footnote__disclosure-actions">'
+            )[1]
+            ?.split('</div>')[0] ?? '';
+    assert.notEqual(actionBarMarkup, '');
+    assert.doesNotMatch(
+        actionBarMarkup,
+        /canonical-response-footnote__action-status/
+    );
+    assert.doesNotMatch(actionBarMarkup, /Unavailable for this response/);
+    assert.doesNotMatch(
+        actionBarMarkup,
+        /Reporting is not available on this surface\./
     );
 
     const partialMarkup = render(
@@ -306,7 +318,10 @@ test('rendered unavailable actions expose their projected reasons', () => {
         'unavailable',
         'unavailable'
     );
-    assert.match(partialMarkup, /Reporting is not available on this surface\./);
+    assert.doesNotMatch(
+        partialMarkup,
+        /Reporting is not available on this surface\./
+    );
 });
 
 test('rendered ineligible response provenance is omitted', () => {
@@ -359,8 +374,7 @@ test('rendered null metadata is unavailable and generated ids remain unique', ()
     assert.match(first, /data-state="unavailable"/);
     assert.match(first, /<span>Trace<\/span>/);
     assert.match(first, /<span>Report<\/span>/);
-    assert.match(first, /canonical-response-footnote__action-status/);
-    assert.match(first, /No controls were recorded for this response\./);
+    assert.doesNotMatch(first, /No controls were recorded for this response\./);
 });
 
 test('canonical stylesheet declares neutral missing token and narrow layout rules', async () => {

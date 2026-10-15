@@ -16,9 +16,9 @@ import {
 } from './chat-test-helpers';
 
 const exampleQuestion =
-    'Why does ice float in water? Please explain it simply in about 70 words.';
+    'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.';
 
-test('standalone embed presents the recorded answer, full footer, and project links', async ({
+test('standalone embed presents the first homepage answer, full footer, and project links', async ({
     page,
 }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -32,23 +32,29 @@ test('standalone embed presents the recorded answer, full footer, and project li
         name: 'Response provenance and controls',
     });
 
-    await expect(page.getByText('Footnote', { exact: true })).toBeVisible();
+    await expect(page.locator('.public-header__mark')).toContainText(
+        'Footnote'
+    );
     await expect(
         page.getByRole('heading', { name: 'AI that shows its work.' })
     ).toBeVisible();
     await expect(
-        page.getByText("You shouldn't have to take its word for it.", {
-            exact: true,
-        })
+        page.getByText(
+            'See how an answer was made, set your own rules, and run Footnote your way.',
+            { exact: true }
+        )
     ).toBeVisible();
-    await expect(example.getByText('Recorded example')).toBeVisible();
+    await expect(example.getByText('Recorded example')).toHaveCount(0);
     await expect(
         example.getByText(exampleQuestion, { exact: true })
     ).toBeVisible();
     await expect(example.locator('.public-message--assistant')).toContainText(
-        'Ice floats because it is less dense than liquid water.'
+        'Footnote is built around inspectability, so there are two natural places to look: provenance and observability.'
     );
-    await expect(footnote).toHaveAttribute('data-response-id', 'JUC6855x');
+    await expect(footnote).toHaveAttribute(
+        'data-response-id',
+        'prepared-landing-inspect-an-answer'
+    );
     for (const summary of ['Evidence', 'Sensitivity', 'Licensing']) {
         await expect(footnote).toContainText(summary);
     }
@@ -60,11 +66,11 @@ test('standalone embed presents the recorded answer, full footer, and project li
     await expect(sources).toBeVisible();
     await expect(
         sources.getByRole('link', {
-            name: 'Why Does Ice Float? | Ice and the Density of Water',
+            name: 'Provenance | footnote-ai/footnote',
         })
     ).toHaveAttribute(
         'href',
-        'https://www.thoughtco.com/why-does-ice-float-604304'
+        'https://deepwiki.com/footnote-ai/footnote/2.3-provenance'
     );
     await footnote
         .getByRole('button', { name: 'Close Sources drawer' })
@@ -77,16 +83,31 @@ test('standalone embed presents the recorded answer, full footer, and project li
     ).toBeVisible();
     await expect(
         footnote.getByRole('button', {
-            name: /Trace Unavailable for this response/,
+            name: 'Trace',
+            exact: true,
         })
     ).toBeDisabled();
     await expect(
         footnote.getByRole('button', {
-            name: /Report Reporting is not available/,
+            name: 'Report',
+            exact: true,
         })
     ).toBeDisabled();
 
-    await expect(page.locator('.public-header, .public-footer')).toHaveCount(0);
+    await expect(page.locator('.public-header')).toBeVisible();
+    await expect(page.locator('.public-footer')).toHaveCount(0);
+    await expect(page.getByText('Ask Footnote', { exact: true })).toHaveCount(
+        0
+    );
+    await expect(page.getByPlaceholder('Ask a question…')).toBeVisible();
+    await expect(page.locator('.public-embed__live')).toHaveCSS(
+        'border-top-width',
+        '0px'
+    );
+    await expect(page.getByPlaceholder('Ask a question…')).toHaveCSS(
+        'border-radius',
+        '999px'
+    );
     await expect(page.getByLabel('Ask a question')).toBeVisible();
     await expect(
         page.locator('.interaction').getByText(exampleQuestion)
