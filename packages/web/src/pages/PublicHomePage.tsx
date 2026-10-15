@@ -30,15 +30,14 @@ const publicConcepts: readonly PublicConcept[] = [
         id: 'see-what-happened',
         label: 'See what happened',
         description:
-            'Know where an answer came from, what Footnote did, and what it could not confirm.',
+            "Footnote gives you the A through Z of what happened, and also what didn't.",
         documentationHref: '/wiki/architecture/canonical-response-footnote/',
         documentationLabel: 'How answers are explained',
     },
     {
         id: 'your-rules',
         label: 'Your rules',
-        description:
-            'Decide what Footnote may use, what it can do, and how it should behave.',
+        description: 'You choose what Footnote may do and use.',
         documentationHref: '/wiki/architecture/admin-settings-architecture/',
         documentationLabel: 'Configuration',
     },
@@ -46,15 +45,15 @@ const publicConcepts: readonly PublicConcept[] = [
         id: 'run-it-your-way',
         label: 'Run it your way',
         description:
-            'Use local or online models, on your computer or a server.',
+            'Your choice of AI, on your own machine or with the latest cloud models.',
         documentationHref: '/wiki/deployment/',
         documentationLabel: 'Deployment',
     },
     {
         id: 'open-about-our-choices',
-        label: 'Open about our choices',
+        label: 'Transparent by design',
         description:
-            'Our code, licensing, limits, AI use, and resource claims should be open to scrutiny.',
+            'The entire project is open to inspect: its history, current state, and development trajectory.',
         documentationHref: '/wiki/philosophy/',
         documentationLabel: 'Philosophy',
     },
@@ -120,10 +119,27 @@ const PublicConceptList = (): JSX.Element => {
                             <div className="public-home__concept-content">
                                 <h3>{concept.label}</h3>
                                 <p>{concept.description}</p>
-                                <a href={concept.documentationHref}>
-                                    {concept.documentationLabel}
-                                    <span aria-hidden="true"> →</span>
-                                </a>
+                                <div className="public-home__concept-links">
+                                    {concept.id ===
+                                        'open-about-our-choices' && (
+                                        <a
+                                            href="https://github.com/footnote-ai/footnote"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                        >
+                                            Codebase
+                                            <span aria-hidden="true"> →</span>
+                                        </a>
+                                    )}
+                                    <a
+                                        href={concept.documentationHref}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        {concept.documentationLabel}
+                                        <span aria-hidden="true"> →</span>
+                                    </a>
+                                </div>
                             </div>
                         </article>
                     </li>
@@ -206,6 +222,7 @@ const PublicHomePage = (): JSX.Element => {
                                                 markdown={
                                                     scenario.response.message
                                                 }
+                                                linksOpenInNewTab
                                             />
                                         </article>
                                         <CanonicalResponseFootnote
@@ -241,12 +258,12 @@ const PublicHomePage = (): JSX.Element => {
                     className="public-home__get-started"
                     aria-labelledby="get-started-title"
                 >
-                    <h2 id="get-started-title">Run Footnote</h2>
-                    <p>Open source. Your computer or a server.</p>
+                    <h2 id="get-started-title">Run it yourself</h2>
+                    <p>Open-source and free forever.</p>
                     <div>
                         <a
                             className="public-home__download"
-                            href="https://github.com/footnote-ai/footnote/releases"
+                            href="/wiki/documentation/"
                             target="_blank"
                             rel="noreferrer"
                         >
@@ -254,9 +271,11 @@ const PublicHomePage = (): JSX.Element => {
                         </a>
                         <a
                             className="public-home__documentation"
-                            href="/wiki/getting-started/"
+                            href="/wiki/deployment/"
+                            target="_blank"
+                            rel="noreferrer"
                         >
-                            Setup guide
+                            Deployment guide
                         </a>
                     </div>
                 </section>

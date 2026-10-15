@@ -11,10 +11,26 @@ import remarkGfm from 'remark-gfm';
 
 type MarkdownResponseProps = {
     markdown: string;
+    linksOpenInNewTab?: boolean;
 };
 
-const MarkdownResponse = ({ markdown }: MarkdownResponseProps): JSX.Element => (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+const MarkdownResponse = ({
+    markdown,
+    linksOpenInNewTab = false,
+}: MarkdownResponseProps): JSX.Element => (
+    <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        skipHtml
+        components={
+            linksOpenInNewTab
+                ? {
+                      a: (props) => (
+                          <a {...props} target="_blank" rel="noreferrer" />
+                      ),
+                  }
+                : undefined
+        }
+    >
         {markdown}
     </ReactMarkdown>
 );

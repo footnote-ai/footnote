@@ -1,0 +1,785 @@
+{
+    "id": "run-locally",
+    "question": "Can I run Footnote locally instead of using a cloud model?",
+    "response": {
+        "action": "message",
+        "message": "Yes — the project is explicitly designed to be run on your own hardware. Footnote's own GitHub description says it is \"transparent, private, and easy to run yourself,\" and notes that it uses Docker containers for deployment on your own hardware or in the cloud [1](https://github.com/footnote-ai/footnote). So the application and backend can absolutely run locally rather than as a hosted cloud service.\n\nOne distinction worth making: \"running locally\" can mean two different things, and the docs don't blur them.\n\n1. **Running the Footnote application locally** — supported. Docker-based deployment on your own hardware is the stated model [1](https://github.com/footnote-ai/footnote).\n\n2. **Running the LLM itself locally** — that's a separate question, and I don't have source-level confirmation either way. The architecture docs describe an API client that centralizes HTTP calls, authentication headers, and error handling [5](https://deepwiki.com/footnote-ai/footnote/3.2-api-client), plus observability for model usage and cost tracking [4](https://deepwiki.com/footnote-ai/footnote/2.5-observability). That pattern is consistent with the framework calling a model API, which could be a cloud model by default — but it could equally be pointed at a locally hosted endpoint (e.g., Ollama, vLLM, or a local API server), depending on how the configuration is wired.\n\nSo the honest summary: the Footnote stack itself is designed for local, self-hosted operation via Docker [1](https://github.com/footnote-ai/footnote), while the underlying model backend is configured through an API client layer [5](https://deepwiki.com/footnote-ai/footnote/3.2-api-client). Whether \"local\" includes the model weights depends on your model backend choice — the docs I saw describe the client plumbing, not a bundled local model. For a definitive answer on local-model support, the setup or configuration docs (or a repo source file) would be the place to confirm.",
+        "modality": "text",
+        "metadata": {
+            "responseId": "prepared-landing-run-locally",
+            "provenance": "Retrieved",
+            "safetyTier": "Low",
+            "tradeoffCount": 0,
+            "chainHash": "f768052ce001ca7f",
+            "licenseContext": "MIT + HL3",
+            "modelVersion": "deepseek-v4-flash-0731",
+            "staleAfter": "2027-01-13T22:09:01.695Z",
+            "citations": [
+                {
+                    "title": "footnote-ai/footnote: AI that shows its work. Transparent, ...",
+                    "url": "https://github.com/footnote-ai/footnote",
+                    "snippet": "Transparent, private, and easy to run yourself. - footnote-ai/footnote. ... Footnote uses Docker containers for deployment on your own hardware or in the cloud."
+                },
+                {
+                    "title": "Foundations | footnote-ai/footnote",
+                    "url": "https://deepwiki.com/footnote-ai/footnote/2-foundations",
+                    "snippet": "This page explains the architectural patterns, package structure, and core concepts that apply across the entire Footnote system."
+                },
+                {
+                    "title": "footnote-ai/footnote",
+                    "url": "https://deepwiki.com/footnote-ai/footnote",
+                    "snippet": "Welcome to the Footnote wiki. Footnote is a transparency- and provenance-focused AI framework designed to move beyond \"black box\" AI. Unlike generic chat ..."
+                },
+                {
+                    "title": "Observability | footnote-ai/footnote",
+                    "url": "https://deepwiki.com/footnote-ai/footnote/2.5-observability",
+                    "snippet": "Document how Footnote records operational context and model usage through structured logging, lifecycle events, logging hygiene, and cost tracking."
+                },
+                {
+                    "title": "API Client | footnote-ai/footnote",
+                    "url": "https://deepwiki.com/footnote-ai/footnote/3.2-api-client",
+                    "snippet": "By centralizing HTTP logic, the client ensures that authentication headers, error handling, and response validation are applied uniformly across the monorepo."
+                }
+            ],
+            "provenanceAssessment": {
+                "methodId": "deterministic_multi_signal_v1",
+                "methodLabel": "Deterministic multi-signal provenance classification (backend)",
+                "signals": {
+                    "citationsPresent": true,
+                    "retrievalRequested": true,
+                    "retrievalUsed": true,
+                    "retrievalToolExecuted": true,
+                    "workflowEvidence": true,
+                    "trustGraphEvidenceAvailable": false,
+                    "trustGraphEvidenceUsed": false,
+                    "assistantDeclaredSpeculative": false
+                },
+                "conflicts": [],
+                "limitations": []
+            },
+            "execution": [
+                {
+                    "kind": "evaluator",
+                    "status": "executed",
+                    "evaluator": {
+                        "authorityLevel": "observe",
+                        "mode": "observe_only",
+                        "provenance": "Inferred",
+                        "safetyDecision": {
+                            "action": "allow",
+                            "safetyTier": "Low",
+                            "ruleId": null
+                        }
+                    },
+                    "durationMs": 0
+                },
+                {
+                    "kind": "tool",
+                    "status": "executed",
+                    "toolName": "web_search",
+                    "durationMs": 1015
+                },
+                {
+                    "kind": "generation",
+                    "status": "executed",
+                    "originalProfileId": "openai-text-fast",
+                    "effectiveProfileId": "openrouter-deepseek-v4-flash-0731",
+                    "profileId": "openrouter-deepseek-v4-flash-0731",
+                    "provider": "Cohere",
+                    "model": "deepseek-v4-flash-0731",
+                    "upstreamAttribution": {
+                        "resolvedModel": "deepseek/deepseek-v4-flash-20260731",
+                        "inferenceProvider": "Cohere",
+                        "routingAttempt": 1,
+                        "upstreamReportedCostUsd": 0.00057134
+                    },
+                    "finishReason": "stop",
+                    "completion": {
+                        "status": "completed",
+                        "visibleTextLength": 1950
+                    },
+                    "usage": {
+                        "promptTokens": 1907,
+                        "cachedInputTokens": 0,
+                        "completionTokens": 1087,
+                        "totalTokens": 2994,
+                        "reasoningTokens": 649
+                    },
+                    "durationMs": 10936
+                }
+            ],
+            "workflow": {
+                "runId": "wf_mva3c5zb_1puufl",
+                "runStatus": "completed",
+                "startedAt": "2026-10-15T22:08:50.759Z",
+                "finishedAt": "2026-10-15T22:09:01.694Z",
+                "durationMs": 10935,
+                "workflowId": "reviewed-chat",
+                "workflowName": "message_reviewed",
+                "status": "completed",
+                "stepCount": 5,
+                "maxSteps": 4,
+                "maxDurationMs": 90000,
+                "effectiveLimits": [
+                    {
+                        "key": "maxWorkflowSteps",
+                        "state": "enforced",
+                        "value": 4,
+                        "stoppedRun": false
+                    },
+                    {
+                        "key": "maxToolCalls",
+                        "state": "enforced",
+                        "value": 1,
+                        "stoppedRun": false
+                    },
+                    {
+                        "key": "maxDeliberationCalls",
+                        "state": "enforced",
+                        "value": 2,
+                        "stoppedRun": false
+                    },
+                    {
+                        "key": "maxTokensTotal",
+                        "state": "enforced",
+                        "value": 48000,
+                        "stoppedRun": false
+                    },
+                    {
+                        "key": "maxDurationMs",
+                        "state": "enforced",
+                        "value": 90000,
+                        "stoppedRun": false
+                    }
+                ],
+                "limitStop": {
+                    "stoppedByLimit": false,
+                    "terminationReason": "goal_satisfied"
+                },
+                "terminationReason": "goal_satisfied",
+                "results": [
+                    {
+                        "resultId": "wf_mva3c5zb_1puufl:step_1:plan",
+                        "name": "plan",
+                        "status": "produced",
+                        "producedByStepId": "step_1",
+                        "producedByAttempt": 1
+                    },
+                    {
+                        "resultId": "wf_mva3c5zb_1puufl:step_2:evidence",
+                        "name": "evidence",
+                        "status": "produced",
+                        "producedByStepId": "step_2",
+                        "producedByAttempt": 1
+                    },
+                    {
+                        "resultId": "wf_mva3c5zb_1puufl:step_3:draft",
+                        "name": "draft",
+                        "status": "produced",
+                        "producedByStepId": "step_3",
+                        "producedByAttempt": 1
+                    },
+                    {
+                        "resultId": "wf_mva3c5zb_1puufl:step_4:review",
+                        "name": "review",
+                        "status": "produced",
+                        "producedByStepId": "step_4",
+                        "producedByAttempt": 1
+                    },
+                    {
+                        "resultId": "wf_mva3c5zb_1puufl:evaluator_finding",
+                        "name": "evaluator_finding",
+                        "status": "produced",
+                        "producedByStepId": "step_evaluator",
+                        "producedByAttempt": 1
+                    }
+                ],
+                "steps": [
+                    {
+                        "stepId": "step_1",
+                        "attempt": 1,
+                        "stepKind": "plan",
+                        "startedAt": "2026-10-15T22:08:50.759Z",
+                        "finishedAt": "2026-10-15T22:08:54.660Z",
+                        "durationMs": 3901,
+                        "model": "deepseek/deepseek-v4-flash-20260731",
+                        "usage": {
+                            "promptTokens": 3637,
+                            "cachedInputTokens": 0,
+                            "completionTokens": 660,
+                            "totalTokens": 4297,
+                            "reasoningTokens": 364
+                        },
+                        "cost": {
+                            "inputCostUsd": 0,
+                            "outputCostUsd": 0,
+                            "totalCostUsd": 0,
+                            "costCompleteness": "unknown",
+                            "costAppliedRules": [],
+                            "costIncompleteReasons": ["unpriced_model"]
+                        },
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mva3c5zb_1puufl:step_1:plan",
+                                "name": "plan"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-10-15T22:08:50.759Z",
+                                "finishedAt": "2026-10-15T22:08:54.660Z",
+                                "durationMs": 3901,
+                                "profileId": "openrouter-deepseek-v4-flash-0731",
+                                "requestedProvider": "Baidu",
+                                "requestedModel": "deepseek/deepseek-v4-flash-20260731",
+                                "actualProvider": "Baidu",
+                                "actualModel": "deepseek/deepseek-v4-flash-20260731",
+                                "usage": {
+                                    "promptTokens": 3637,
+                                    "cachedInputTokens": 0,
+                                    "completionTokens": 660,
+                                    "totalTokens": 4297,
+                                    "reasoningTokens": 364
+                                },
+                                "cost": {
+                                    "inputCostUsd": 0,
+                                    "outputCostUsd": 0,
+                                    "totalCostUsd": 0,
+                                    "costCompleteness": "unknown",
+                                    "costAppliedRules": [],
+                                    "costIncompleteReasons": ["unpriced_model"]
+                                }
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Planner selected the next declared workflow outcome.",
+                            "signals": {
+                                "action": "message",
+                                "purpose": "chat_orchestrator_action_selection",
+                                "contractType": "structured",
+                                "applyOutcome": "applied",
+                                "structuredOutputOutcome": "strict_success",
+                                "upstreamProvider": "Baidu",
+                                "upstreamModel": "deepseek/deepseek-v4-flash-20260731"
+                            }
+                        }
+                    },
+                    {
+                        "stepId": "step_evaluator",
+                        "attempt": 1,
+                        "stepKind": "evaluator",
+                        "startedAt": "2026-10-15T22:08:50.759Z",
+                        "finishedAt": "2026-10-15T22:08:50.759Z",
+                        "durationMs": 0,
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mva3c5zb_1puufl:evaluator_finding",
+                                "name": "evaluator_finding"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-10-15T22:08:50.759Z",
+                                "finishedAt": "2026-10-15T22:08:50.759Z",
+                                "durationMs": 0
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Deterministic evaluator produced a bounded finding.",
+                            "signals": {
+                                "evaluatorMode": "observe_only",
+                                "evaluatorAuthorityLevel": "observe",
+                                "evaluatorAction": "allow",
+                                "evaluatorRuleId": null,
+                                "evaluatorSafetyTier": "Low"
+                            }
+                        }
+                    },
+                    {
+                        "stepId": "step_2",
+                        "parentStepId": "step_1",
+                        "attempt": 1,
+                        "stepKind": "tool",
+                        "startedAt": "2026-10-15T22:08:54.660Z",
+                        "finishedAt": "2026-10-15T22:08:55.676Z",
+                        "durationMs": 1016,
+                        "inputRefs": [
+                            {
+                                "resultId": "wf_mva3c5zb_1puufl:step_1:plan",
+                                "name": "plan"
+                            }
+                        ],
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mva3c5zb_1puufl:step_2:evidence",
+                                "name": "evidence"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-10-15T22:08:54.660Z",
+                                "finishedAt": "2026-10-15T22:08:55.676Z",
+                                "durationMs": 1016
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Context steps completed; failed integrations were retained as unavailable evidence.",
+                            "artifacts": [
+                                "Web search results for \"footnote-ai/footnote footnote-ai footnote DeepWiki architecture backend onboarding getting started chat Can Footnote be run locally instead of using a cloud model? deployment and local operation of footnote-ai/footnote\":",
+                                "1. UNTRUSTED SEARCH RESULT: footnote-ai/footnote: AI that shows its work. Transparent, ... (https://github.com/footnote-ai/footnote) - Transparent, private, and easy to run yourself. - footnote-ai/footnote. ... Footnote uses Docker containers for deployment on your own hardware or in the cloud.",
+                                "2. UNTRUSTED SEARCH RESULT: Foundations | footnote-ai/footnote (https://deepwiki.com/footnote-ai/footnote/2-foundations) - This page explains the architectural patterns, package structure, and core concepts that apply across the entire Footnote system.",
+                                "3. UNTRUSTED SEARCH RESULT: footnote-ai/footnote (https://deepwiki.com/footnote-ai/footnote) - Welcome to the Footnote wiki. Footnote is a transparency- and provenance-focused AI framework designed to move beyond \"black box\" AI. Unlike generic chat ...",
+                                "4. UNTRUSTED SEARCH RESULT: Observability | footnote-ai/footnote (https://deepwiki.com/footnote-ai/footnote/2.5-observability) - Document how Footnote records operational context and model usage through structured logging, lifecycle events, logging hygiene, and cost tracking.",
+                                "5. UNTRUSTED SEARCH RESULT: API Client | footnote-ai/footnote (https://deepwiki.com/footnote-ai/footnote/3.2-api-client) - By centralizing HTTP logic, the client ensures that authentication headers, error handling, and response validation are applied uniformly across the monorepo."
+                            ],
+                            "signals": {
+                                "contextStepCount": 1
+                            }
+                        }
+                    },
+                    {
+                        "stepId": "step_3",
+                        "parentStepId": "step_1",
+                        "attempt": 1,
+                        "stepKind": "generate",
+                        "startedAt": "2026-10-15T22:08:55.676Z",
+                        "finishedAt": "2026-10-15T22:08:59.940Z",
+                        "durationMs": 4264,
+                        "model": "deepseek-v4-flash-0731",
+                        "usage": {
+                            "promptTokens": 1907,
+                            "cachedInputTokens": 0,
+                            "completionTokens": 1087,
+                            "totalTokens": 2994,
+                            "reasoningTokens": 649
+                        },
+                        "cost": {
+                            "inputCostUsd": 0,
+                            "outputCostUsd": 0,
+                            "totalCostUsd": 0,
+                            "costCompleteness": "unknown",
+                            "costAppliedRules": [],
+                            "costIncompleteReasons": ["unpriced_model"]
+                        },
+                        "inputRefs": [
+                            {
+                                "resultId": "wf_mva3c5zb_1puufl:step_1:plan",
+                                "name": "plan",
+                                "optional": true
+                            },
+                            {
+                                "resultId": "wf_mva3c5zb_1puufl:step_2:evidence",
+                                "name": "evidence",
+                                "optional": true
+                            },
+                            {
+                                "name": "draft",
+                                "optional": true
+                            },
+                            {
+                                "name": "review",
+                                "optional": true
+                            },
+                            {
+                                "name": "revisionPlan",
+                                "optional": true
+                            }
+                        ],
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mva3c5zb_1puufl:step_3:draft",
+                                "name": "draft"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-10-15T22:08:55.676Z",
+                                "finishedAt": "2026-10-15T22:08:59.940Z",
+                                "durationMs": 4264,
+                                "profileId": "openrouter-deepseek-v4-flash-0731",
+                                "requestedProvider": "openrouter",
+                                "requestedModel": "deepseek/deepseek-v4-flash-0731",
+                                "actualProvider": "Cohere",
+                                "actualModel": "deepseek/deepseek-v4-flash-20260731",
+                                "settings": {
+                                    "requested": {
+                                        "maxOutputTokens": 41513,
+                                        "reasoningEffort": "medium",
+                                        "verbosity": "medium"
+                                    },
+                                    "applied": {
+                                        "maxOutputTokens": 41513,
+                                        "verbosity": "medium"
+                                    },
+                                    "ignored": [
+                                        {
+                                            "setting": "reasoningEffort",
+                                            "reasonCode": "reasoning_effort_not_supported"
+                                        }
+                                    ]
+                                },
+                                "capabilities": {
+                                    "reasoningEfforts": {
+                                        "none": "supported",
+                                        "low": "supported",
+                                        "medium": "unsupported",
+                                        "high": "unsupported",
+                                        "xhigh": "unsupported",
+                                        "max": "unsupported"
+                                    },
+                                    "verbosity": {
+                                        "low": "unsupported",
+                                        "medium": "unsupported",
+                                        "high": "unsupported"
+                                    },
+                                    "temperature": "unknown",
+                                    "topP": "unknown",
+                                    "outputLimit": "unknown",
+                                    "structuredOutput": "unknown",
+                                    "jsonMode": "unknown",
+                                    "nativeSearch": "unsupported"
+                                },
+                                "completion": {
+                                    "status": "completed",
+                                    "visibleTextLength": 1950
+                                },
+                                "usage": {
+                                    "promptTokens": 1907,
+                                    "cachedInputTokens": 0,
+                                    "completionTokens": 1087,
+                                    "totalTokens": 2994,
+                                    "reasoningTokens": 649
+                                },
+                                "cost": {
+                                    "inputCostUsd": 0,
+                                    "outputCostUsd": 0,
+                                    "totalCostUsd": 0,
+                                    "costCompleteness": "unknown",
+                                    "costAppliedRules": [],
+                                    "costIncompleteReasons": ["unpriced_model"]
+                                },
+                                "routingAttempts": [
+                                    {
+                                        "index": 0,
+                                        "profileId": "openrouter-deepseek-v4-flash-0731",
+                                        "requestedProvider": "openrouter",
+                                        "requestedModel": "deepseek/deepseek-v4-flash-0731",
+                                        "actualProvider": "Cohere",
+                                        "actualModel": "deepseek/deepseek-v4-flash-20260731",
+                                        "status": "executed",
+                                        "finishReason": "stop",
+                                        "completion": {
+                                            "status": "completed",
+                                            "visibleTextLength": 1950
+                                        },
+                                        "usage": {
+                                            "promptTokens": 1907,
+                                            "cachedInputTokens": 0,
+                                            "completionTokens": 1087,
+                                            "totalTokens": 2994,
+                                            "reasoningTokens": 649
+                                        },
+                                        "cost": {
+                                            "inputCostUsd": 0,
+                                            "outputCostUsd": 0,
+                                            "totalCostUsd": 0,
+                                            "costCompleteness": "unknown",
+                                            "costAppliedRules": [],
+                                            "costIncompleteReasons": [
+                                                "unpriced_model"
+                                            ]
+                                        },
+                                        "startedAt": "2026-10-15T22:08:55.676Z",
+                                        "finishedAt": "2026-10-15T22:08:59.938Z",
+                                        "durationMs": 4262,
+                                        "chooseOneUsed": false,
+                                        "selectionSource": "configured"
+                                    }
+                                ]
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Generated initial draft response.",
+                            "artifacts": [
+                                "candidate_c0dc4248-a508-4080-95f4-0c4f1ed3d88a"
+                            ],
+                            "signals": {}
+                        }
+                    },
+                    {
+                        "stepId": "step_4",
+                        "parentStepId": "step_3",
+                        "attempt": 1,
+                        "stepKind": "assess",
+                        "startedAt": "2026-10-15T22:08:59.940Z",
+                        "finishedAt": "2026-10-15T22:09:01.694Z",
+                        "durationMs": 1754,
+                        "model": "deepseek-v4-flash-0731",
+                        "usage": {
+                            "promptTokens": 2370,
+                            "cachedInputTokens": 0,
+                            "completionTokens": 478,
+                            "totalTokens": 2848,
+                            "reasoningTokens": 320
+                        },
+                        "cost": {
+                            "inputCostUsd": 0,
+                            "outputCostUsd": 0,
+                            "totalCostUsd": 0,
+                            "costCompleteness": "unknown",
+                            "costAppliedRules": [],
+                            "costIncompleteReasons": ["unpriced_model"]
+                        },
+                        "inputRefs": [
+                            {
+                                "resultId": "wf_mva3c5zb_1puufl:step_3:draft",
+                                "name": "draft"
+                            },
+                            {
+                                "resultId": "wf_mva3c5zb_1puufl:step_2:evidence",
+                                "name": "evidence",
+                                "optional": true
+                            }
+                        ],
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mva3c5zb_1puufl:step_4:review",
+                                "name": "review"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-10-15T22:08:59.940Z",
+                                "finishedAt": "2026-10-15T22:09:01.694Z",
+                                "durationMs": 1754,
+                                "profileId": "openrouter-deepseek-v4-flash-0731",
+                                "requestedProvider": "openrouter",
+                                "requestedModel": "deepseek/deepseek-v4-flash-0731",
+                                "actualProvider": "Wafer",
+                                "actualModel": "deepseek/deepseek-v4-flash-20260731",
+                                "settings": {
+                                    "requested": {
+                                        "maxOutputTokens": 512,
+                                        "reasoningEffort": "low",
+                                        "verbosity": "low"
+                                    },
+                                    "applied": {
+                                        "maxOutputTokens": 512,
+                                        "reasoningEffort": "low",
+                                        "verbosity": "low"
+                                    }
+                                },
+                                "capabilities": {
+                                    "reasoningEfforts": {
+                                        "none": "supported",
+                                        "low": "supported",
+                                        "medium": "unsupported",
+                                        "high": "unsupported",
+                                        "xhigh": "unsupported",
+                                        "max": "unsupported"
+                                    },
+                                    "verbosity": {
+                                        "low": "unsupported",
+                                        "medium": "unsupported",
+                                        "high": "unsupported"
+                                    },
+                                    "temperature": "unknown",
+                                    "topP": "unknown",
+                                    "outputLimit": "unknown",
+                                    "structuredOutput": "unknown",
+                                    "jsonMode": "unknown",
+                                    "nativeSearch": "unsupported"
+                                },
+                                "completion": {
+                                    "status": "completed",
+                                    "visibleTextLength": 438
+                                },
+                                "usage": {
+                                    "promptTokens": 2370,
+                                    "cachedInputTokens": 0,
+                                    "completionTokens": 478,
+                                    "totalTokens": 2848,
+                                    "reasoningTokens": 320
+                                },
+                                "cost": {
+                                    "inputCostUsd": 0,
+                                    "outputCostUsd": 0,
+                                    "totalCostUsd": 0,
+                                    "costCompleteness": "unknown",
+                                    "costAppliedRules": [],
+                                    "costIncompleteReasons": ["unpriced_model"]
+                                },
+                                "routingAttempts": [
+                                    {
+                                        "index": 0,
+                                        "profileId": "openrouter-deepseek-v4-flash-0731",
+                                        "requestedProvider": "openrouter",
+                                        "requestedModel": "deepseek/deepseek-v4-flash-0731",
+                                        "actualProvider": "Wafer",
+                                        "actualModel": "deepseek/deepseek-v4-flash-20260731",
+                                        "status": "executed",
+                                        "finishReason": "stop",
+                                        "completion": {
+                                            "status": "completed",
+                                            "visibleTextLength": 438
+                                        },
+                                        "usage": {
+                                            "promptTokens": 2370,
+                                            "cachedInputTokens": 0,
+                                            "completionTokens": 478,
+                                            "totalTokens": 2848,
+                                            "reasoningTokens": 320
+                                        },
+                                        "cost": {
+                                            "inputCostUsd": 0,
+                                            "outputCostUsd": 0,
+                                            "totalCostUsd": 0,
+                                            "costCompleteness": "unknown",
+                                            "costAppliedRules": [],
+                                            "costIncompleteReasons": [
+                                                "unpriced_model"
+                                            ]
+                                        },
+                                        "startedAt": "2026-10-15T22:08:59.940Z",
+                                        "finishedAt": "2026-10-15T22:09:01.693Z",
+                                        "durationMs": 1753,
+                                        "chooseOneUsed": false,
+                                        "selectionSource": "configured"
+                                    }
+                                ]
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Assessment evaluated draft quality and emitted a declared workflow outcome.",
+                            "signals": {
+                                "reviewDecision": "finalize",
+                                "reviewReason": "Draft directly answers the question, distinguishes local app vs local model, and appropriately flags uncertainty without overclaiming.",
+                                "traceAlignment": "aligned",
+                                "traceAlignmentReason": "",
+                                "finalTemperamentTightness": 2,
+                                "finalTemperamentRationale": 2,
+                                "finalTemperamentAttribution": 2,
+                                "finalTemperamentCaution": 3,
+                                "finalTemperamentExtent": 2,
+                                "lengthConcern": "ok",
+                                "styleConcern": "ok",
+                                "evidenceConcern": "ok",
+                                "moduleHintCount": 0,
+                                "assessRoutingHintsCsv": "grounding.citation_strict",
+                                "routingHintApplied": "openai_first_logic"
+                            }
+                        }
+                    }
+                ]
+            },
+            "steerabilityControls": {
+                "version": "v1",
+                "controls": [
+                    {
+                        "controlId": "workflow_mode",
+                        "value": "balanced",
+                        "source": "runtime_config",
+                        "rationale": "Used requested workflow mode id from runtime configuration.",
+                        "mattered": true,
+                        "impactedTargets": [
+                            "workflow_execution",
+                            "execution_contract_selection",
+                            "review_loop_execution"
+                        ]
+                    },
+                    {
+                        "controlId": "evidence_strictness",
+                        "value": "balanced",
+                        "source": "runtime_config",
+                        "rationale": "Workflow mode mapped evidence posture to \"balanced\" and Execution Contract response mode \"fast_direct\".",
+                        "mattered": true,
+                        "impactedTargets": ["execution_contract_selection"]
+                    },
+                    {
+                        "controlId": "review_intensity",
+                        "value": "light",
+                        "source": "runtime_config",
+                        "rationale": "Workflow mode review settings yielded intensity \"light\" (max deliberation calls: 2).",
+                        "mattered": true,
+                        "impactedTargets": ["review_loop_execution"]
+                    },
+                    {
+                        "controlId": "provider_preference",
+                        "value": "state:advisory_honored;advisory:openai-text-fast;resolved:openai-text-fast(openai/gpt-5.6-luna)",
+                        "source": "planner_output",
+                        "rationale": "Planner advisory profile preference aligned with capability policy and was used for provider/model selection.",
+                        "mattered": true,
+                        "impactedTargets": ["model_profile_selection"]
+                    },
+                    {
+                        "controlId": "persona_tone_overlay",
+                        "value": "state:presentation_not_applied;persona:footnote;source:none",
+                        "source": "surface_profile",
+                        "rationale": "No persona overlay was applied; default persona prompt path remained active and execution-policy authority stayed unchanged.",
+                        "mattered": false,
+                        "impactedTargets": []
+                    },
+                    {
+                        "controlId": "tool_allowance",
+                        "value": "allowed:web_search",
+                        "source": "tool_policy",
+                        "rationale": "Requested tool passed capability/policy checks and remained eligible for execution.",
+                        "mattered": true,
+                        "impactedTargets": ["tool_eligibility"]
+                    }
+                ]
+            },
+            "trace_target": {
+                "tightness": 3,
+                "rationale": 3,
+                "attribution": 3,
+                "caution": 3,
+                "extent": 3
+            },
+            "trace_final": {
+                "tightness": 2,
+                "rationale": 2,
+                "attribution": 2,
+                "caution": 3,
+                "extent": 2
+            },
+            "trace_final_reason_code": "runtime_posture_adjustment",
+            "reviewRuntime": {
+                "label": "reviewed_no_revision"
+            },
+            "evaluator": {
+                "authorityLevel": "observe",
+                "mode": "observe_only",
+                "provenance": "Inferred",
+                "safetyDecision": {
+                    "action": "allow",
+                    "safetyTier": "Low",
+                    "ruleId": null
+                }
+            },
+            "totalDurationMs": 10937
+        }
+    },
+    "capture": {
+        "generatedAt": "2026-10-15T22:09:01.699Z",
+        "backendBaseUrl": "http://localhost:3000",
+        "workflowModeId": "balanced",
+        "capturedResponseId": "dxdgYKZk",
+        "capturedChainHash": "53553a9241f10cfb"
+    }
+}

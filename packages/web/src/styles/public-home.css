@@ -210,6 +210,10 @@
     padding: 2.25rem 0 2.5rem;
 }
 
+.public-home > .public-header {
+    padding-block: 0.9375rem;
+}
+
 .public-home h1 {
     max-width: 24rem;
     margin: 0 0 0.65rem;
@@ -240,7 +244,7 @@
 
 .public-home__thread {
     width: min(100%, 46.25rem);
-    margin-top: 1rem;
+    margin-top: 2.5rem;
     margin-inline: auto;
 }
 
@@ -543,7 +547,6 @@
 }
 
 .public-home__narrative {
-    border-top: 1px solid var(--public-rule);
     padding-top: 2.1rem !important;
 }
 
@@ -559,7 +562,7 @@
 
 .public-home__concepts {
     display: grid;
-    grid-template-columns: 1.9fr 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
     align-items: stretch;
     margin: 1.25rem 0 0;
@@ -687,17 +690,12 @@
 }
 
 .public-home__concept-wrap--see-what-happened .public-home__concept-art {
-    justify-items: end;
+    justify-items: center;
 }
 
 .public-home__concept-wrap--see-what-happened .public-home__concept-art svg {
-    max-width: 20rem;
+    max-width: 100%;
     transform: none;
-}
-
-.public-home__concept-wrap--see-what-happened .public-home__concept h3 {
-    max-width: none;
-    font-size: 1.65rem;
 }
 
 @media (min-width: 761px) {
@@ -716,6 +714,12 @@
 .public-home__concept-wrap--open-about-our-choices
     .public-home__concept-content {
     justify-content: center;
+}
+
+.public-home__concept-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem 1.25rem;
 }
 
 .public-home__concept-wrap--open-about-our-choices .public-home__concept h3 {
@@ -754,7 +758,6 @@
 
 .public-home__get-started {
     padding: 2.2rem 1.5rem 2.5rem;
-    border-top: 1px solid var(--public-rule);
 }
 
 .public-home__get-started h2 {
@@ -823,6 +826,8 @@
 
 .public-home > .public-footer {
     width: min(calc(100% - 7rem), 57rem);
+    padding: 2.5rem 0 3.75rem;
+    border-top: 0;
 }
 
 .public-footer__mark {
@@ -967,6 +972,8 @@
 
     .public-home > .public-footer {
         width: min(calc(100% - 2.5rem), 72rem);
+        padding-top: 2.8125rem;
+        padding-bottom: 4.0625rem;
     }
 
     .public-footer__inner {

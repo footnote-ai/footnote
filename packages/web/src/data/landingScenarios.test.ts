@@ -122,10 +122,13 @@ const runtimeUiSourceFiles = collectSourceFiles(sourceRoot).filter(
 );
 
 test('landing scenarios contain the selected ordinary-use prompts in order', () => {
-    assert.equal(landingScenarios.length, 3);
+    assert.equal(landingScenarios.length, 6);
     assert.deepEqual(
         landingScenarios.map((scenario) => scenario.question),
         [
+            'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.',
+            "What does Footnote do when it can't confirm a claim?",
+            'Can I run Footnote locally instead of using a cloud model?',
             'What should I include in a simple weekly household checklist?',
             'How can I compare two commute options without relying on precise numerical claims?',
             "How does Footnote's project context integration work?",
@@ -140,6 +143,33 @@ test('landing scenario ids are unique stable kebab-case values', () => {
     for (const scenarioId of scenarioIds) {
         assert.match(scenarioId, SCENARIO_ID_PATTERN);
     }
+});
+
+test('new landing examples keep their requested length, inline links, and varied TRACE scores', () => {
+    const newExamples = landingScenarios.slice(0, 3);
+    const projectContextLength = landingScenarios[5].response.message.length;
+
+    for (const scenario of newExamples) {
+        assert.ok(
+            scenario.response.message.length >= projectContextLength * 0.55
+        );
+        assert.ok(
+            scenario.response.message.length <= projectContextLength * 0.85
+        );
+    }
+
+    assert.ok(
+        (newExamples[0].response.message.match(/\]\(https?:\/\//gu) ?? [])
+            .length >= 2
+    );
+
+    const finalTraceScores = newExamples.flatMap((scenario) =>
+        Object.values(scenario.response.metadata.trace_final)
+    );
+    assert.ok(new Set(finalTraceScores).size >= 3);
+    assert.ok(
+        Math.max(...finalTraceScores) - Math.min(...finalTraceScores) >= 2
+    );
 });
 
 test('landing scenario JSON files match the merged fixture loader', () => {
@@ -177,13 +207,20 @@ test('landing scenario JSON files match the merged fixture loader', () => {
             'modality',
         ]);
         assert.equal(hasOwn(filePayload.response, 'capture'), false);
-        assert.deepEqual(Object.keys(filePayload.capture).sort(), [
+        const expectedCaptureFields = [
             'backendBaseUrl',
             'capturedChainHash',
             'capturedResponseId',
             'generatedAt',
             'workflowModeId',
-        ]);
+        ];
+        if (fixture.capture.capturedQuestion) {
+            expectedCaptureFields.push('capturedQuestion');
+        }
+        assert.deepEqual(
+            Object.keys(filePayload.capture).sort(),
+            expectedCaptureFields.sort()
+        );
         assert.equal(hasOwn(filePayload.capture, 'commit'), false);
         assert.equal(hasOwn(filePayload.capture, 'providerModels'), false);
         assert.equal(hasOwn(filePayload.capture, 'defaultProfileId'), false);
@@ -293,6 +330,12 @@ test('landing scenario capture blocks are compact and aligned', () => {
             true
         );
         assert.equal(fixture.capture.capturedChainHash.trim().length > 0, true);
+        if (fixture.id === 'inspect-an-answer') {
+            assert.equal(
+                fixture.capture.capturedQuestion,
+                'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.'
+            );
+        }
     }
 });
 

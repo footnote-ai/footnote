@@ -58,7 +58,11 @@ test('canonical hash matches the checked-in landing fixture', () => {
 test('sanitizeLandingScenarioResponse rewrites prepared metadata', () => {
     const input = {
         scenario: LANDING_SCENARIO_PROMPTS[0],
-        response: createMessageResponse('A prepared answer'),
+        response: {
+            ...createMessageResponse('A prepared answer'),
+            answerProvenanceEligible: true,
+            publicationToken: 'publication-token-must-not-escape',
+        },
         capturedResponseId: 'AbCdEf12',
         capturedChainHash: '0123456789abcdef',
         capturedAt: '2026-06-11T00:34:07.189Z',
@@ -86,6 +90,8 @@ test('sanitizeLandingScenarioResponse rewrites prepared metadata', () => {
         input.response.metadata.modelVersion
     );
     assert.equal(hasOwn(sanitized, 'capture'), false);
+    assert.equal(hasOwn(sanitized.response, 'answerProvenanceEligible'), false);
+    assert.equal(hasOwn(sanitized.response, 'publicationToken'), false);
     assert.deepEqual(
         sanitized.response.metadata.provenanceAssessment,
         input.response.metadata.provenanceAssessment
@@ -238,13 +244,11 @@ test('buildChatRequest emits the landing capture payload shape', () => {
         surface: 'web',
         modeId: 'balanced',
         trigger: { kind: 'submit' },
-        latestUserInput:
-            'How can I compare two commute options without relying on precise numerical claims?',
+        latestUserInput: "What does Footnote do when it can't confirm a claim?",
         conversation: [
             {
                 role: 'user',
-                content:
-                    'How can I compare two commute options without relying on precise numerical claims?',
+                content: "What does Footnote do when it can't confirm a claim?",
             },
         ],
         capabilities: {
