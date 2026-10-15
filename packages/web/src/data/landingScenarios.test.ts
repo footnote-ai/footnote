@@ -207,13 +207,20 @@ test('landing scenario JSON files match the merged fixture loader', () => {
             'modality',
         ]);
         assert.equal(hasOwn(filePayload.response, 'capture'), false);
-        assert.deepEqual(Object.keys(filePayload.capture).sort(), [
+        const expectedCaptureFields = [
             'backendBaseUrl',
             'capturedChainHash',
             'capturedResponseId',
             'generatedAt',
             'workflowModeId',
-        ]);
+        ];
+        if (fixture.capture.capturedQuestion) {
+            expectedCaptureFields.push('capturedQuestion');
+        }
+        assert.deepEqual(
+            Object.keys(filePayload.capture).sort(),
+            expectedCaptureFields.sort()
+        );
         assert.equal(hasOwn(filePayload.capture, 'commit'), false);
         assert.equal(hasOwn(filePayload.capture, 'providerModels'), false);
         assert.equal(hasOwn(filePayload.capture, 'defaultProfileId'), false);
@@ -323,6 +330,12 @@ test('landing scenario capture blocks are compact and aligned', () => {
             true
         );
         assert.equal(fixture.capture.capturedChainHash.trim().length > 0, true);
+        if (fixture.id === 'inspect-an-answer') {
+            assert.equal(
+                fixture.capture.capturedQuestion,
+                'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.'
+            );
+        }
     }
 });
 

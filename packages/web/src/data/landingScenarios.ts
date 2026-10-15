@@ -48,6 +48,7 @@ export type LandingScenarioCapture = {
     workflowModeId: string;
     capturedResponseId: string;
     capturedChainHash: string;
+    capturedQuestion?: string;
 };
 
 export type LandingScenarioFixture = LandingScenario & {

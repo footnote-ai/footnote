@@ -775,6 +775,7 @@
         "backendBaseUrl": "http://localhost:3000",
         "workflowModeId": "balanced",
         "capturedResponseId": "EWluC0eD",
-        "capturedChainHash": "157b6bd95b166665"
+        "capturedChainHash": "157b6bd95b166665",
+        "capturedQuestion": "In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages."
     }
 }
