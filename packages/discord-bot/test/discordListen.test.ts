@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ButtonInteraction } from 'discord.js';
 import { botApi } from '../src/api/botApi.js';
-import { handleProvenanceButtonInteraction } from '../src/interactions/button/provenanceButtons.js';
+import { handleButtonInteraction } from '../src/interactions/buttonHandlers.js';
 
 type InteractionHarness = {
     customId: string;
@@ -28,7 +28,8 @@ const createInteraction = (
     responseId: string,
     content: string,
     replies: unknown[],
-    messageEdits: unknown[]
+    messageEdits: unknown[],
+    deferredReplies: unknown[] = []
 ): InteractionHarness => ({
     customId: `listen:${responseId}`,
     channelId: 'channel-1',
@@ -40,45 +41,52 @@ const createInteraction = (
         },
         channel: { isTextBased: () => true },
     },
-    deferReply: async () => undefined,
+    deferReply: async (payload) => {
+        deferredReplies.push(payload);
+    },
     editReply: async (payload) => {
         replies.push(payload);
     },
 });
 
-test('Listen sends the exact delivered text through backend TTS once', async () => {
+const createTtsResponse = (
+    text: string
+): Awaited<ReturnType<typeof botApi.runVoiceTtsViaApi>> => ({
+    task: 'synthesize',
+    result: {
+        audioBase64: Buffer.from('speech').toString('base64'),
+        outputFormat: 'mp3',
+        mimeType: 'audio/mpeg',
+        model: 'speech-model',
+        voice: 'alloy',
+        speechSelection: {},
+        usage: {
+            billingUnit: 'characters',
+            inputQuantity: text.length,
+            inputCharacters: text.length,
+        },
+        costs: {
+            input: 0,
+            output: 0,
+            total: 0,
+            completeness: 'unknown',
+            incompleteReasons: ['unpriced_model'],
+        },
+        generationTimeMs: 10,
+    },
+});
+
+test('Listen routes an eligible short stored response through backend TTS once', async () => {
     const originalRunTts = botApi.runVoiceTtsViaApi;
     let ttsCalls = 0;
     let requestText = '';
     const replies: unknown[] = [];
     const messageEdits: unknown[] = [];
+    const deferredReplies: unknown[] = [];
     botApi.runVoiceTtsViaApi = (async (request) => {
         ttsCalls += 1;
         requestText = request.text;
-        return {
-            task: 'synthesize',
-            result: {
-                audioBase64: Buffer.from('speech').toString('base64'),
-                outputFormat: 'mp3',
-                mimeType: 'audio/mpeg',
-                model: 'speech-model',
-                voice: 'alloy',
-                speechSelection: {},
-                usage: {
-                    billingUnit: 'characters',
-                    inputQuantity: request.text.length,
-                    inputCharacters: request.text.length,
-                },
-                costs: {
-                    input: 0,
-                    output: 0,
-                    total: 0,
-                    completeness: 'unknown',
-                    incompleteReasons: ['unpriced_model'],
-                },
-                generationTimeMs: 10,
-            },
-        };
+        return createTtsResponse(request.text);
     }) as typeof botApi.runVoiceTtsViaApi;
 
     try {
@@ -87,24 +95,33 @@ test('Listen sends the exact delivered text through backend TTS once', async () 
             'listen_exact_001',
             deliveredText,
             replies,
-            messageEdits
+            messageEdits,
+            deferredReplies
         );
-        await handleProvenanceButtonInteraction(
-            first as unknown as ButtonInteraction
+        assert.equal(
+            await handleButtonInteraction(
+                first as unknown as ButtonInteraction
+            ),
+            true
         );
         const second = createInteraction(
             'listen_exact_001',
             deliveredText,
             replies,
-            messageEdits
+            messageEdits,
+            deferredReplies
         );
-        await handleProvenanceButtonInteraction(
-            second as unknown as ButtonInteraction
+        assert.equal(
+            await handleButtonInteraction(
+                second as unknown as ButtonInteraction
+            ),
+            true
         );
 
         assert.equal(ttsCalls, 1);
         assert.equal(requestText, deliveredText);
         assert.equal(replies.length, 2);
+        assert.equal(deferredReplies.length, 2);
         assert.equal(
             (replies[0] as { files: Array<{ name: string }> }).files[0]?.name,
             'listen.mp3'
@@ -114,6 +131,10 @@ test('Listen sends the exact delivered text through backend TTS once', async () 
             /already been synthesized/
         );
         assert.equal(messageEdits.length, 1);
+        assert.equal(
+            (messageEdits[0] as { content?: string }).content,
+            undefined
+        );
     } finally {
         botApi.runVoiceTtsViaApi = originalRunTts;
     }
@@ -122,6 +143,7 @@ test('Listen sends the exact delivered text through backend TTS once', async () 
 test('Listen synthesis failure leaves the original text response available', async () => {
     const originalRunTts = botApi.runVoiceTtsViaApi;
     const replies: unknown[] = [];
+    const deferredReplies: unknown[] = [];
     botApi.runVoiceTtsViaApi = (async () => {
         throw new Error('provider unavailable');
     }) as typeof botApi.runVoiceTtsViaApi;
@@ -131,11 +153,16 @@ test('Listen synthesis failure leaves the original text response available', asy
             'listen_failure_001',
             'Original text still here.',
             replies,
-            []
+            [],
+            deferredReplies
         );
-        await handleProvenanceButtonInteraction(
-            interaction as unknown as ButtonInteraction
+        assert.equal(
+            await handleButtonInteraction(
+                interaction as unknown as ButtonInteraction
+            ),
+            true
         );
+        assert.equal(deferredReplies.length, 1);
         assert.equal(interaction.message.content, 'Original text still here.');
         assert.match(
             (replies[0] as { content: string }).content,
@@ -143,5 +170,53 @@ test('Listen synthesis failure leaves the original text response available', asy
         );
     } finally {
         botApi.runVoiceTtsViaApi = originalRunTts;
+    }
+});
+
+test('Listen defers before slow backend TTS finishes', async () => {
+    const originalRunTts = botApi.runVoiceTtsViaApi;
+    const replies: unknown[] = [];
+    const messageEdits: unknown[] = [];
+    const deferredReplies: unknown[] = [];
+    const response = createTtsResponse('Short stored response.');
+    let releaseTts: (() => void) | undefined;
+    let markTtsStarted: () => void = () => undefined;
+    const ttsStarted = new Promise<void>((resolve) => {
+        markTtsStarted = resolve;
+    });
+    botApi.runVoiceTtsViaApi = (async () => {
+        markTtsStarted();
+        await new Promise<void>((resolve) => {
+            releaseTts = resolve;
+        });
+        return response;
+    }) as typeof botApi.runVoiceTtsViaApi;
+
+    const interaction = createInteraction(
+        'listen_slow_001',
+        'Short stored response.',
+        replies,
+        messageEdits,
+        deferredReplies
+    );
+    const handling = handleButtonInteraction(
+        interaction as unknown as ButtonInteraction
+    );
+    try {
+        const firstResult = await Promise.race([
+            ttsStarted.then(() => 'tts-started' as const),
+            handling.then(() => 'interaction-finished' as const),
+        ]);
+        assert.equal(firstResult, 'tts-started');
+        assert.equal(deferredReplies.length, 1);
+        releaseTts?.();
+        assert.equal(await handling, true);
+    } finally {
+        releaseTts?.();
+        try {
+            await handling;
+        } finally {
+            botApi.runVoiceTtsViaApi = originalRunTts;
+        }
     }
 });

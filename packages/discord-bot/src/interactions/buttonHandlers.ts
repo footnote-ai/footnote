@@ -37,6 +37,7 @@ const provenancePrefixes = [
     'sources:',
     'controls:',
     'trace:',
+    'listen:',
     'report_issue:',
 ] as const;
 const variationPrefix = 'image:variation:';
