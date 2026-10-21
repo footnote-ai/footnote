@@ -32,7 +32,12 @@ const TRACE_AXES = [
     'extent',
 ] as const;
 
-const PUBLIC_STEP_SIGNAL_KEYS = new Set(['action', 'contractType']);
+const PUBLIC_STEP_SIGNAL_KEYS = new Set([
+    'action',
+    'contractType',
+    'purpose',
+    'applyOutcome',
+]);
 const PUBLIC_FALLBACK_ROUTE_REASON_CODE = 'search_rerouted_to_fallback_profile';
 
 const OPTIONAL_METADATA_FIELDS = [

@@ -7,6 +7,7 @@
  */
 import test from 'node:test';
 import { strict as assert } from 'node:assert';
+import { TraceDisplayMetadataSchema } from '@footnote/contracts/web/schemas';
 import { projectTraceMetadataForDisplay } from '../src/storage/traces/traceDisplayProjection.js';
 
 const baseTrace = {
@@ -475,9 +476,12 @@ test('public trace display keeps valid planner fallback while withholding operat
     );
 
     assert.ok(projected?.workflow);
+    assert.equal(TraceDisplayMetadataSchema.safeParse(projected).success, true);
     assert.deepEqual(projected.workflow.steps[0]?.outcome.signals, {
         action: 'message',
         contractType: 'fallback',
+        purpose: 'chat_orchestrator_action_selection',
+        applyOutcome: 'not_applied',
     });
     assert.equal(JSON.stringify(projected).includes('private-profile'), false);
     assert.equal(
