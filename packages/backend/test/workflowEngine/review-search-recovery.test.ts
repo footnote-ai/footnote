@@ -1165,20 +1165,20 @@ test('Balanced non-search revisions retain the baseline model-call allowance', a
     const baseline = await runRecovery({
         fixture: fixtures.stableControl,
         maxSearchRecoveryCycles: 0,
-        maxIterations: 1,
+        maxIterations: 2,
         assessmentDecisions: reviseThenFinalize,
         executionLimits: executionLimits({
-            maxWorkflowSteps: 4,
+            maxWorkflowSteps: 5,
             maxToolCalls: 1,
-            maxDeliberationCalls: 2,
-            maxReviewCycles: 1,
+            maxDeliberationCalls: 3,
+            maxReviewCycles: 2,
         }),
         requests: baselineRequests,
     });
     const current = await runRecovery({
         fixture: fixtures.stableControl,
         maxSearchRecoveryCycles: 1,
-        maxIterations: 1,
+        maxIterations: 2,
         assessmentDecisions: reviseThenFinalize,
         executionLimits: executionLimits(),
         requests: currentRequests,
@@ -1186,6 +1186,16 @@ test('Balanced non-search revisions retain the baseline model-call allowance', a
 
     assert.equal(baseline.result.outcome, 'generated');
     assert.equal(current.result.outcome, 'generated');
+    for (const result of [baseline.result, current.result]) {
+        assert.ok(
+            result.workflowLineage.steps.some(
+                (step) =>
+                    step.stepKind === 'generate' &&
+                    step.outcome.signals?.refinementApplied === true
+            ),
+            'the comparison must exercise an actual non-search revision'
+        );
+    }
     assert.equal(
         currentRequests.length,
         baselineRequests.length,
