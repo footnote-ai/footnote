@@ -1636,12 +1636,11 @@ export const runBoundedReviewWorkflow = async (
               )
           )
         : 0;
+    // `maxIterations` retains the ordinary mode cap; recovery capacity is added separately below.
     const regularMaxIterations = Math.max(
         0,
         Math.min(
-            suppliedExecutionLimits === undefined
-                ? normalizedMaxIterations
-                : Math.ceil(executionLimits.maxDeliberationCalls / 2),
+            normalizedMaxIterations,
             executionLimits.maxReviewCycles ??
                 Math.ceil(executionLimits.maxDeliberationCalls / 2),
             Math.ceil(Math.max(0, executionLimits.maxWorkflowSteps - 1) / 2)
@@ -1679,7 +1678,7 @@ export const runBoundedReviewWorkflow = async (
                         on: ['continue', 'no_retrieval', 'terminal'],
                     },
                     next: {
-                        continue: 'retrieve',
+                        continue: hasToolStep ? 'retrieve' : afterPlan,
                         no_retrieval: afterPlan,
                         terminal: 'finish',
                         failed: 'defaultPlan',
@@ -1691,7 +1690,7 @@ export const runBoundedReviewWorkflow = async (
                     activity: { deliberation: 'plan' },
                     output: { name: 'plan', on: ['continue', 'no_retrieval'] },
                     next: {
-                        continue: 'retrieve',
+                        continue: hasToolStep ? 'retrieve' : afterPlan,
                         no_retrieval: afterPlan,
                         failed: 'finish',
                     },
@@ -1709,7 +1708,12 @@ export const runBoundedReviewWorkflow = async (
                     ],
                     output: {
                         name: 'evidence',
-                        on: ['available', 'clarification', 'recovery_failed'],
+                        on: [
+                            'available',
+                            'recovered',
+                            'clarification',
+                            'recovery_failed',
+                        ],
                     },
                     activity: { tool: 'one-or-more' },
                     next: {
@@ -1718,6 +1722,7 @@ export const runBoundedReviewWorkflow = async (
                             : workflowPolicy.enableGeneration === false
                               ? 'finish'
                               : 'generate',
+                        recovered: 'generate',
                         clarification: 'finish',
                         recovery_failed: 'finish',
                         failed:
@@ -2448,7 +2453,9 @@ export const runBoundedReviewWorkflow = async (
                 ? 'clarification'
                 : searchRecovery && !recoverySucceeded
                   ? 'recovery_failed'
-                  : 'available',
+                  : searchRecovery
+                    ? 'recovered'
+                    : 'available',
             result: toSerializable({
                 results: mergedResults,
                 failures: mergedFailures,
@@ -3796,7 +3803,7 @@ export const runBoundedReviewWorkflow = async (
                   ? searchBlockedReason === undefined
                       ? 'search'
                       : 'limit'
-                  : handlerInput.iteration >= effectiveMaxIterations
+                  : handlerInput.iteration >= regularMaxIterations
                     ? 'limit'
                     : 'revise';
         return {

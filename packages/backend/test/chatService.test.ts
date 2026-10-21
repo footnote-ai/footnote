@@ -2582,6 +2582,66 @@ test('runChatMessages falls back to reviewed workflow behavior for unknown workf
     assert.equal(capturedWorkflow?.workflowName, 'message_reviewed');
 });
 
+test('runChatMessages reserves Balanced recovery capacity without raising ordinary review iterations', async () => {
+    let capturedMaxIterations: number | undefined;
+    let capturedRecoveryCycles: number | undefined;
+    let capturedReviewCycles: number | undefined;
+    let capturedDeliberationCalls: number | undefined;
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'balanced',
+            reviewLoopEnabled: true,
+            maxIterations: 5,
+            maxDurationMs: 15_000,
+        },
+        runReviewWorkflow: async (input) => {
+            capturedMaxIterations = input.workflowConfig.maxIterations;
+            capturedRecoveryCycles =
+                input.workflowConfig.maxSearchRecoveryCycles;
+            capturedReviewCycles =
+                input.workflowConfig.executionLimits?.maxReviewCycles;
+            capturedDeliberationCalls =
+                input.workflowConfig.executionLimits?.maxDeliberationCalls;
+            return {
+                outcome: 'generated',
+                generationResult: {
+                    text: 'Balanced response.',
+                    model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    citations: [],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_balanced_recovery_budget',
+                    workflowName: input.workflowConfig.workflowName,
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps: 7,
+                    maxDurationMs: input.workflowConfig.maxDurationMs,
+                    maxSearchRecoveryCycles:
+                        input.workflowConfig.maxSearchRecoveryCycles,
+                    steps: [],
+                },
+            } satisfies RunBoundedReviewWorkflowResult;
+        },
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    assert.equal(capturedMaxIterations, 1);
+    assert.equal(capturedRecoveryCycles, 1);
+    assert.equal(capturedReviewCycles, 2);
+    assert.equal(capturedDeliberationCalls, 3);
+});
+
 test('runChatMessages forwards profile-owned review prompt config and module ids to workflow runtime', async () => {
     let capturedReviewDecisionPrompt: string | undefined;
     let capturedRevisionPromptPrefix: string | undefined;

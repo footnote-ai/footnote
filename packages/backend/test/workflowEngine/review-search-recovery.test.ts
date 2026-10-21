@@ -13,8 +13,13 @@ import type {
     GenerationResult,
     GenerationRuntime,
 } from '@footnote/agent-runtime';
+import type { ModelProfile } from '@footnote/contracts';
 import type { ContextStepResult } from '@footnote/contracts/policy';
 import type { ExecutionLimits } from '../../src/services/workflowEngine/limits.js';
+import type {
+    PresentationConfig,
+    PresentationPersona,
+} from '../../src/services/presentation.js';
 import { parseReviewDecisionOutputResult } from '../../src/services/workflowEngine/reviewDecision.js';
 import {
     buildExecutedContextStepResult,
@@ -89,6 +94,34 @@ const executionLimits = (
     maxDurationMs: input.maxDurationMs ?? 90_000,
 });
 
+const presentationProfile: ModelProfile = {
+    id: 'search-recovery-presentation',
+    description: 'Search recovery test presentation profile.',
+    provider: 'openai',
+    providerModel: 'fixture-model',
+    enabled: true,
+    tierBindings: [],
+    capabilities: { canUseSearch: false },
+    maxInputTokens: 2000,
+    maxOutputTokens: 500,
+    costClass: 'low',
+};
+
+const presentationConfig: PresentationConfig = {
+    enabled: true,
+    profileId: presentationProfile.id,
+    profile: presentationProfile,
+    timeoutMs: 100,
+};
+
+const presentationPersona: PresentationPersona = {
+    id: 'search-recovery-test',
+    presentationGuidance: 'Clear, direct wording.',
+    expressionStrength: 'strong',
+    expressionSource: 'profile',
+    expressionGuidance: 'Persona expression strength: strong.',
+};
+
 const createRuntime = (input: {
     assessmentDecisions: string[];
     onRequest?: (request: GenerationRequest) => void;
@@ -96,6 +129,7 @@ const createRuntime = (input: {
     tokensPerCall?: number;
     initialNativeSearchUsed?: boolean;
     initialNativeToolExecution?: GenerationResult['toolExecution'];
+    presentationEnabled?: boolean;
 }): GenerationRuntime => {
     let callCount = 0;
     let assessmentCount = 0;
@@ -104,7 +138,10 @@ const createRuntime = (input: {
         async generate(request) {
             callCount += 1;
             input.onRequest?.(request);
-            if (callCount % 2 === 0) {
+            const assessmentCall = input.presentationEnabled
+                ? callCount > 1 && callCount % 2 === 1
+                : callCount % 2 === 0;
+            if (assessmentCall) {
                 const decision =
                     input.assessmentDecisions[assessmentCount++] ??
                     makeDecision('finalize');
@@ -129,9 +166,11 @@ const createRuntime = (input: {
             }
             return {
                 text:
-                    callCount === 1
-                        ? 'Initial draft with an unsupported current claim.'
-                        : 'Updated draft based on the returned discovery context.',
+                    input.presentationEnabled && callCount === 1
+                        ? 'A concise presentation candidate.'
+                        : callCount === (input.presentationEnabled ? 2 : 1)
+                          ? 'Initial draft with an unsupported current claim.'
+                          : 'Updated draft based on the returned discovery context.',
                 model: 'fixture-model',
                 provenance: 'Inferred',
                 citations:
@@ -228,6 +267,8 @@ const runRecovery = async (input: {
     nativeSearchHint?: string;
     initialNativeSearchUsed?: boolean;
     initialNativeToolExecution?: GenerationResult['toolExecution'];
+    presentationEnabled?: boolean;
+    maxIterations?: number;
     generationStartedAtMs?: number;
 }) => {
     const requestMessages = [
@@ -272,10 +313,12 @@ const runRecovery = async (input: {
             tokensPerCall: input.tokensPerCall,
             initialNativeSearchUsed: input.initialNativeSearchUsed,
             initialNativeToolExecution: input.initialNativeToolExecution,
+            presentationEnabled: input.presentationEnabled,
         }),
         generationRequest: {
             model: 'fixture-model',
             messages: requestMessages,
+            ...(input.presentationEnabled ? { maxOutputTokens: 500 } : {}),
             ...(input.nativeSearchHint === undefined
                 ? {}
                 : {
@@ -291,7 +334,7 @@ const runRecovery = async (input: {
         generationStartedAtMs: input.generationStartedAtMs ?? Date.now(),
         workflowConfig: {
             workflowName: 'message_reviewed',
-            maxIterations: 3,
+            maxIterations: input.maxIterations ?? 3,
             maxDurationMs: 90_000,
             maxSearchRecoveryCycles: input.maxSearchRecoveryCycles,
             executionLimits: input.executionLimits ?? executionLimits(),
@@ -304,6 +347,27 @@ const runRecovery = async (input: {
             enableAssessment: true,
             enableRevision: true,
         },
+        ...(input.presentationEnabled
+            ? {
+                  presentation: {
+                      config: presentationConfig,
+                      persona: presentationPersona,
+                      captureUsage: (generationResult: GenerationResult) => ({
+                          model: generationResult.model ?? 'fixture-model',
+                          promptTokens:
+                              generationResult.usage?.promptTokens ?? 0,
+                          completionTokens:
+                              generationResult.usage?.completionTokens ?? 0,
+                          totalTokens: generationResult.usage?.totalTokens ?? 0,
+                          estimatedCost: {
+                              inputCostUsd: 0,
+                              outputCostUsd: 0,
+                              totalCostUsd: 0,
+                          },
+                      }),
+                  },
+              }
+            : {}),
         contextStepRequests,
         contextStepExecutor: async ({ request, signal }) => {
             executedIntegrations.push(request.integrationName);
@@ -435,6 +499,7 @@ test('missed initial search is recovered with merged evidence and linked lineage
     const { result, executedQueries } = await runRecovery({
         fixture: fixtures.missedInitialSearch,
         maxSearchRecoveryCycles: 1,
+        maxIterations: 1,
         assessmentDecisions: [
             makeDecision('search', fixtures.missedInitialSearch.followUpQuery),
             makeDecision('finalize'),
@@ -496,6 +561,7 @@ test('Balanced allowances admit plan, initial retrieval, recovery, and reassessm
     const { result, executedQueries, plannerCallCount } = await runRecovery({
         fixture: fixtures.staleInitialResults,
         maxSearchRecoveryCycles: 1,
+        maxIterations: 1,
         assessmentDecisions: [
             makeDecision('search', fixtures.staleInitialResults.followUpQuery),
             makeDecision('finalize'),
@@ -559,6 +625,42 @@ test('stale initial results are retained and a fresh query runs as the only foll
         [1, 2]
     );
     assert.equal(tools[1]?.parentStepId, assessments[0]?.stepId);
+});
+
+test('successful recovery skips the single-use presentation step', async () => {
+    const requests: GenerationRequest[] = [];
+    const { result } = await runRecovery({
+        fixture: fixtures.missedInitialSearch,
+        maxSearchRecoveryCycles: 1,
+        assessmentDecisions: [
+            makeDecision('search', fixtures.missedInitialSearch.followUpQuery),
+            makeDecision('finalize'),
+        ],
+        presentationEnabled: true,
+        requests,
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.deepEqual(
+        result.workflowLineage.steps.map((step) => step.stepKind),
+        ['presentation', 'generate', 'assess', 'tool', 'generate', 'assess']
+    );
+    assert.equal(result.presentation?.outcome, 'candidate_generated');
+    assert.equal(requests.length, 5);
+    assert.equal(
+        result.workflowLineage.steps.filter(
+            (step) => step.stepKind === 'presentation'
+        ).length,
+        1
+    );
+    assert.equal(
+        result.workflowLineage.steps.find(
+            (step) =>
+                step.stepKind === 'generate' &&
+                step.outcome.signals?.searchRecoveryOutcome === 'regenerated'
+        )?.outcome.status,
+        'executed'
+    );
 });
 
 test('recovery does not rerun unrelated integrations from the initial retrieval batch', async () => {
@@ -927,6 +1029,61 @@ test('search-free stable-control answers do not call the retrieval executor', as
     assert.equal(
         result.workflowLineage.steps.some((step) => step.stepKind === 'tool'),
         false
+    );
+});
+
+test('Balanced non-search revisions retain the baseline model-call allowance', async () => {
+    const baselineRequests: GenerationRequest[] = [];
+    const currentRequests: GenerationRequest[] = [];
+    const reviseThenFinalize = [
+        makeDecision('revise'),
+        makeDecision('finalize'),
+    ];
+    const baseline = await runRecovery({
+        fixture: fixtures.stableControl,
+        maxSearchRecoveryCycles: 0,
+        maxIterations: 1,
+        assessmentDecisions: reviseThenFinalize,
+        executionLimits: executionLimits({
+            maxWorkflowSteps: 4,
+            maxToolCalls: 1,
+            maxDeliberationCalls: 2,
+            maxReviewCycles: 1,
+        }),
+        requests: baselineRequests,
+    });
+    const current = await runRecovery({
+        fixture: fixtures.stableControl,
+        maxSearchRecoveryCycles: 1,
+        maxIterations: 1,
+        assessmentDecisions: reviseThenFinalize,
+        executionLimits: executionLimits(),
+        requests: currentRequests,
+    });
+
+    assert.equal(baseline.result.outcome, 'generated');
+    assert.equal(current.result.outcome, 'generated');
+    assert.equal(
+        currentRequests.length,
+        baselineRequests.length,
+        JSON.stringify({
+            baselineCalls: baselineRequests.length,
+            baselineSteps: baseline.result.workflowLineage.steps.map(
+                (step) => ({
+                    kind: step.stepKind,
+                    outcome: step.outcome.signals,
+                })
+            ),
+            currentCalls: currentRequests.length,
+            currentSteps: current.result.workflowLineage.steps.map((step) => ({
+                kind: step.stepKind,
+                outcome: step.outcome.signals,
+            })),
+        })
+    );
+    assert.deepEqual(
+        current.result.workflowLineage.steps.map((step) => step.stepKind),
+        baseline.result.workflowLineage.steps.map((step) => step.stepKind)
     );
 });
 

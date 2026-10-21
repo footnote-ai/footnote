@@ -483,6 +483,7 @@ test('resolveWorkflowRuntimeConfig gives Balanced one recovery within the contra
     assert.equal(balanced.workflowExecutionLimits.maxReviewCycles, 2);
     assert.equal(balanced.workflowExecutionLimits.maxDeliberationCalls, 3);
     assert.equal(balanced.maxSearchRecoveryCycles, 1);
+    assert.equal(balanced.modeDecision.behavior.maxReviewCycles, 1);
 });
 
 test('search-recovery settings default by mode and clamp to resolved capacities', () => {
@@ -505,6 +506,10 @@ test('search-recovery settings default by mode and clamp to resolved capacities'
     assert.equal(resolve('balanced').maxSearchRecoveryCycles, 1);
     assert.equal(resolve('grounded').maxSearchRecoveryCycles, 1);
     assert.equal(resolve('balanced', 0).maxSearchRecoveryCycles, 0);
+    assert.equal(
+        resolve('balanced', 0).workflowExecutionLimits.maxReviewCycles,
+        1
+    );
     assert.equal(resolve('grounded', 2).maxSearchRecoveryCycles, 2);
     assert.equal(resolve('express', 2).maxSearchRecoveryCycles, 0);
 });

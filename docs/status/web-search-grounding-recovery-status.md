@@ -83,6 +83,11 @@ when the allowance is `0`; the stable no-search control remains two model calls
 with no retrieval. These fixtures omit provider usage, elapsed time, and
 billable cost, so they do not provide a token, latency, or cost comparison.
 
+A deterministic Balanced non-search revision fixture also compares the earlier
+four-step/one-review limits with recovery-enabled defaults: both stop after two
+model calls and perform no retrieval. The recovery allowance does not enable
+extra revision work on that path.
+
 No live provider/model comparison or production latency/cost measurement was run.
 A successful recovery adds one approved retrieval request and, when the
 remaining budget permits, one generation and one assessment; it does not call

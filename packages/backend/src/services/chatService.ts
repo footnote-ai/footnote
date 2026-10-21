@@ -1657,6 +1657,19 @@ export const createChatService = ({
                     contextStepRequests,
                     trustGraphContextStepRequest,
                 });
+                // Recovery capacity is additive; it must not raise ordinary revision iterations.
+                const defaultReviewCycleLimit = Math.ceil(
+                    workflowExecutionLimits.maxDeliberationCalls / 2
+                );
+                const ordinaryReviewCycleLimit = Math.min(
+                    workflowRuntimeConfig.modeDecision.behavior
+                        .maxReviewCycles ?? defaultReviewCycleLimit,
+                    workflowMaxReviewCycles ??
+                        runtimeConfig.chatWorkflow.maxRequestReviewCycles ??
+                        defaultReviewCycleLimit,
+                    workflowExecutionLimits.maxReviewCycles ??
+                        defaultReviewCycleLimit
+                );
                 const workflowResult = await runReviewWorkflow({
                     generationRuntime,
                     generationRequest: effectiveGenerationRequest,
@@ -1667,11 +1680,7 @@ export const createChatService = ({
                         maxIterations: Math.max(
                             0,
                             Math.min(
-                                workflowExecutionLimits.maxReviewCycles ??
-                                    Math.ceil(
-                                        workflowExecutionLimits.maxDeliberationCalls /
-                                            2
-                                    ),
+                                ordinaryReviewCycleLimit,
                                 Math.ceil(
                                     Math.max(
                                         0,

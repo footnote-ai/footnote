@@ -263,9 +263,11 @@ Result and is not counted as a semantic workflow Step.
 retrieval. A recovery retrieval receives only the validated assessment query;
 it does not rerun the initial request batch or call the planner again. The same
 named `evidence` Result retains prior results and appends the follow-up result,
-including each result's original provenance. A failed, cancelled, repeated, or
-over-budget recovery finishes with the latest successful draft and records the
-failure or limit reason. Chat delivery retains that draft and adds a note that
+including each result's original provenance. Successful recovery returns
+directly to authoritative generation; the optional presentation candidate is
+single-use and is not rerun. A failed, cancelled, repeated, or over-budget
+recovery finishes with the latest successful draft and records the failure or
+limit reason. Chat delivery retains that draft and adds a note that
 current-fact claims depending on the failed search are unconfirmed. The
 effective recovery-cycle allowance is recorded on the Run and public trace.
 
@@ -296,7 +298,9 @@ Operators can set `chat-workflow.max-search-recovery-cycles` in `footnote.yaml`
 or `CHAT_WORKFLOW_MAX_SEARCH_RECOVERY_CYCLES` to `0`, `1`, or `2`. The resolver
 clamps that value to the effective review, step, tool, and deliberation budgets;
 it also reserves token capacity for a recovery generation and its assessment
-before retrieval. Additional `chat-workflow` limit overrides are needed if the
+before retrieval. Recovery capacity is additive to the mode's total review
+budget, while ordinary revise decisions remain capped by the mode's existing
+review allowance. Additional `chat-workflow` limit overrides are needed if the
 current Execution Contract does not leave room for two cycles. Step, tool-call,
 deliberation, and elapsed-time admission continue to use the shared workflow
 limits. Elapsed time is admitted step by step because provider duration cannot

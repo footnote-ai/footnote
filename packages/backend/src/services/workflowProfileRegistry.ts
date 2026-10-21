@@ -154,7 +154,7 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         evidencePosture: 'balanced',
         maxWorkflowSteps: 7,
         maxPlanCycles: 1,
-        maxReviewCycles: 2,
+        maxReviewCycles: 1,
         maxDeliberationCalls: 3,
         maxSearchRecoveryCycles: 1,
     },
@@ -679,6 +679,15 @@ export const resolveWorkflowRuntimeConfig = (input: {
     const modeMaxReviewCycles =
         modeDecision.behavior.maxReviewCycles ??
         Math.max(0, modeDecision.behavior.maxDeliberationCalls - 1);
+    const requestedSearchRecoveryCycles = sanitizeNonNegativeInteger(
+        input.maxSearchRecoveryCycles ??
+            modeDecision.behavior.maxSearchRecoveryCycles ??
+            0,
+        0
+    );
+    // Reserve the requested recovery assessments in the total budget without raising the mode's ordinary review cap.
+    const totalReviewCycleCeiling =
+        modeMaxReviewCycles + requestedSearchRecoveryCycles;
     const defaultPlanCycles =
         workflowProfile.defaultLimits.maxPlanCycles ??
         (workflowProfile.requiredHooks.forceWorkflowExecution ? 1 : 0);
@@ -689,7 +698,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
         defaultPlanCycles,
         defaultReviewCycles,
         modeMaxPlanCycles,
-        modeMaxReviewCycles,
+        modeMaxReviewCycles: totalReviewCycleCeiling,
         executionContractMaxDeliberationCalls:
             executionContract?.limits.maxDeliberationCalls ??
             modeDecision.behavior.maxDeliberationCalls,
@@ -738,12 +747,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
     };
 
     const maxSearchRecoveryCycles = Math.min(
-        sanitizeNonNegativeInteger(
-            input.maxSearchRecoveryCycles ??
-                modeDecision.behavior.maxSearchRecoveryCycles ??
-                0,
-            0
-        ),
+        requestedSearchRecoveryCycles,
         Math.max(0, (workflowExecutionLimits.maxReviewCycles ?? 0) - 1),
         Math.floor(
             Math.max(0, workflowExecutionLimits.maxWorkflowSteps - 4) / 3
