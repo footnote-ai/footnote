@@ -1,0 +1,20 @@
+{
+    "missedInitialSearch": {
+        "userRequest": "Which Node.js release lines are currently supported?",
+        "followUpQuery": "Node.js official current release schedule supported lines",
+        "followUpTitle": "Release schedule (sanitized fixture)",
+        "followUpText": "Synthetic current release-line evidence for deterministic workflow tests."
+    },
+    "staleInitialResults": {
+        "userRequest": "Which Node.js release lines are currently supported?",
+        "initialQuery": "Node.js release lines 2023",
+        "initialTitle": "Archived release note (sanitized fixture)",
+        "initialText": "Synthetic stale result; it does not state current supported release lines.",
+        "followUpQuery": "Node.js official current release schedule supported lines",
+        "followUpTitle": "Release schedule (sanitized fixture)",
+        "followUpText": "Synthetic current release-line evidence for deterministic workflow tests."
+    },
+    "stableControl": {
+        "userRequest": "What is the capital of France?"
+    }
+}

@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { resolveExecutionContract } from '../src/services/executionContractResolver.js';
 import {
     deriveReviewIntensityFromWorkflowBehavior,
     resolveWorkflowModeDecision,
@@ -114,20 +115,21 @@ test('resolveWorkflowRuntimeConfig applies reviewed workflow defaults and review
     assert.equal(balancedRuntimeConfig.workflowExecutionEnabled, true);
     assert.equal(
         balancedRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
-        4
+        7
     );
     assert.equal(
         balancedRuntimeConfig.workflowExecutionLimits.maxPlanCycles,
-        1
+        2
     );
     assert.equal(
         balancedRuntimeConfig.workflowExecutionLimits.maxReviewCycles,
-        1
+        2
     );
     assert.equal(
         balancedRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
-        2
+        3
     );
+    assert.equal(balancedRuntimeConfig.maxSearchRecoveryCycles, 1);
     assert.equal(
         balancedRuntimeConfig.workflowExecutionLimits.maxDurationMs,
         9000
@@ -144,11 +146,11 @@ test('resolveWorkflowRuntimeConfig applies reviewed workflow defaults and review
     assert.equal(groundedRuntimeConfig.workflowExecutionEnabled, false);
     assert.equal(
         groundedRuntimeConfig.workflowExecutionLimits.maxWorkflowSteps,
-        8
+        10
     );
     assert.equal(
         groundedRuntimeConfig.workflowExecutionLimits.maxPlanCycles,
-        1
+        3
     );
     assert.equal(
         groundedRuntimeConfig.workflowExecutionLimits.maxReviewCycles,
@@ -162,6 +164,7 @@ test('resolveWorkflowRuntimeConfig applies reviewed workflow defaults and review
         groundedRuntimeConfig.workflowExecutionLimits.maxDurationMs,
         9000
     );
+    assert.equal(groundedRuntimeConfig.maxSearchRecoveryCycles, 1);
 });
 
 test('resolveWorkflowRuntimeConfig applies a bounded deployment token override without changing mode policy', () => {
@@ -177,7 +180,7 @@ test('resolveWorkflowRuntimeConfig applies a bounded deployment token override w
     assert.equal(config.modeId, 'balanced');
     assert.equal(config.workflowExecutionLimits.maxTokensTotal, 512_000);
     assert.equal(config.workflowExecutionLimits.maxWorkflowSteps, 4);
-    assert.equal(config.workflowExecutionLimits.maxDeliberationCalls, 2);
+    assert.equal(config.workflowExecutionLimits.maxDeliberationCalls, 3);
 });
 
 test('resolveWorkflowRuntimeConfig carries bounded deployment allowances into the existing runtime contract', () => {
@@ -279,15 +282,15 @@ test('resolveWorkflowModeDecision fails open by inferring from execution contrac
         executionContractResponseMode: 'fast_direct',
     });
     assert.equal(inferredBalanced.isKnownRequestedModeId, false);
-    assert.equal(inferredBalanced.modeDecision.modeId, 'balanced');
-    assert.equal(inferredBalanced.modeDecision.initial_mode, 'balanced');
+    assert.equal(inferredBalanced.modeDecision.modeId, 'express');
+    assert.equal(inferredBalanced.modeDecision.initial_mode, 'express');
     assert.equal(
         inferredBalanced.modeDecision.selectedBy,
         'inferred_from_execution_contract'
     );
     assert.equal(
         inferredBalanced.modeDecision.behavior.executionContractPresetId,
-        'balanced'
+        'fast-direct'
     );
 
     const inferred = resolveWorkflowModeDecision({
@@ -309,8 +312,8 @@ test('resolveWorkflowModeDecision fails open by inferring from execution contrac
     const fallbackDefault = resolveWorkflowModeDecision({
         modeId: 'unknown-mode',
     });
-    assert.equal(fallbackDefault.modeDecision.modeId, 'grounded');
-    assert.equal(fallbackDefault.modeDecision.initial_mode, 'grounded');
+    assert.equal(fallbackDefault.modeDecision.modeId, 'balanced');
+    assert.equal(fallbackDefault.modeDecision.initial_mode, 'balanced');
     assert.equal(fallbackDefault.modeDecision.selectedBy, 'fail_open_default');
 });
 
@@ -319,8 +322,8 @@ test('resolveWorkflowModeDecision treats non-canonical mode ids as unknown and f
         modeId: 'generate-only',
     });
     assert.equal(legacyFast.isKnownRequestedModeId, false);
-    assert.equal(legacyFast.modeDecision.modeId, 'grounded');
-    assert.equal(legacyFast.modeDecision.initial_mode, 'grounded');
+    assert.equal(legacyFast.modeDecision.modeId, 'balanced');
+    assert.equal(legacyFast.modeDecision.initial_mode, 'balanced');
     assert.equal(legacyFast.modeDecision.selectedBy, 'fail_open_default');
     assert.equal(legacyFast.modeDecision.requestedModeId, 'generate-only');
 });
@@ -460,19 +463,79 @@ test('deriveReviewIntensityFromWorkflowBehavior centralizes review intensity map
     );
 });
 
-test('resolveWorkflowRuntimeConfig keeps maxDeliberationCalls compatibility mapped from plan/review cycles', () => {
+test('resolveWorkflowRuntimeConfig gives Balanced one recovery within the contract budget', () => {
+    const contract = resolveExecutionContract({
+        presetId: 'balanced',
+    }).policyContract;
     const balanced = resolveWorkflowRuntimeConfig({
         modeId: 'balanced',
         reviewLoopEnabled: true,
         maxIterations: 5,
         maxDurationMs: 9000,
         maxRequestReviewCycles: 7,
+        ExecutionContract: {
+            response: contract.response,
+            limits: contract.limits,
+        },
     });
+    assert.equal(balanced.workflowExecutionLimits.maxWorkflowSteps, 7);
+    assert.equal(balanced.workflowExecutionLimits.maxToolCalls, 2);
+    assert.equal(balanced.workflowExecutionLimits.maxReviewCycles, 2);
+    assert.equal(balanced.workflowExecutionLimits.maxDeliberationCalls, 3);
+    assert.equal(balanced.maxSearchRecoveryCycles, 1);
+    assert.equal(balanced.modeDecision.behavior.maxReviewCycles, 1);
+});
+
+test('Balanced keeps recovery capacity for a six-step no-initial-retrieval path', () => {
+    const contract = resolveExecutionContract({
+        presetId: 'balanced',
+    }).policyContract;
+    const balanced = resolveWorkflowRuntimeConfig({
+        modeId: 'balanced',
+        reviewLoopEnabled: true,
+        maxIterations: 5,
+        maxDurationMs: 90_000,
+        maxRequestReviewCycles: 7,
+        maxWorkflowStepsOverride: 6,
+        maxToolCallsOverride: 1,
+        ExecutionContract: {
+            response: contract.response,
+            limits: contract.limits,
+        },
+    });
+
+    assert.equal(balanced.workflowExecutionLimits.maxWorkflowSteps, 6);
+    assert.equal(balanced.workflowExecutionLimits.maxToolCalls, 1);
+    assert.equal(balanced.workflowExecutionLimits.maxReviewCycles, 2);
+    assert.equal(balanced.maxSearchRecoveryCycles, 1);
+});
+
+test('search-recovery settings default by mode and clamp to resolved capacities', () => {
+    const resolve = (
+        modeId: 'express' | 'balanced' | 'grounded',
+        maxSearchRecoveryCycles?: number
+    ) =>
+        resolveWorkflowRuntimeConfig({
+            modeId,
+            reviewLoopEnabled: true,
+            maxIterations: 5,
+            maxDurationMs: 90_000,
+            maxRequestReviewCycles: 7,
+            ...(maxSearchRecoveryCycles === undefined
+                ? {}
+                : { maxSearchRecoveryCycles }),
+        });
+
+    assert.equal(resolve('express').maxSearchRecoveryCycles, 0);
+    assert.equal(resolve('balanced').maxSearchRecoveryCycles, 1);
+    assert.equal(resolve('grounded').maxSearchRecoveryCycles, 1);
+    assert.equal(resolve('balanced', 0).maxSearchRecoveryCycles, 0);
     assert.equal(
-        balanced.workflowExecutionLimits.maxDeliberationCalls,
-        (balanced.workflowExecutionLimits.maxPlanCycles ?? 0) +
-            (balanced.workflowExecutionLimits.maxReviewCycles ?? 0)
+        resolve('balanced', 0).workflowExecutionLimits.maxReviewCycles,
+        1
     );
+    assert.equal(resolve('grounded', 2).maxSearchRecoveryCycles, 2);
+    assert.equal(resolve('express', 2).maxSearchRecoveryCycles, 0);
 });
 
 test('resolveWorkflowRuntimeConfig allows grounded contract defaults to run at least one refinement cycle', () => {
@@ -502,7 +565,7 @@ test('resolveWorkflowRuntimeConfig allows grounded contract defaults to run at l
         groundedWithContract.workflowExecutionLimits.maxWorkflowSteps,
         8
     );
-    assert.equal(groundedWithContract.workflowExecutionLimits.maxPlanCycles, 1);
+    assert.equal(groundedWithContract.workflowExecutionLimits.maxPlanCycles, 2);
     assert.equal(
         groundedWithContract.workflowExecutionLimits.maxReviewCycles,
         2
@@ -511,6 +574,7 @@ test('resolveWorkflowRuntimeConfig allows grounded contract defaults to run at l
         groundedWithContract.workflowExecutionLimits.maxDeliberationCalls,
         3
     );
+    assert.equal(groundedWithContract.maxSearchRecoveryCycles, 1);
     assert.equal(
         groundedWithContract.workflowExecutionLimits.maxTokensTotal,
         20_000
@@ -527,7 +591,7 @@ test('resolveWorkflowRuntimeConfig clamps request maxReviewCycles to configured 
         requestMaxReviewCycles: 50,
     });
 
-    assert.equal(capped.workflowExecutionLimits.maxReviewCycles, 7);
-    assert.equal(capped.workflowExecutionLimits.maxPlanCycles, 7);
-    assert.equal(capped.workflowExecutionLimits.maxDeliberationCalls, 14);
+    assert.equal(capped.workflowExecutionLimits.maxReviewCycles, 3);
+    assert.equal(capped.workflowExecutionLimits.maxPlanCycles, 3);
+    assert.equal(capped.workflowExecutionLimits.maxDeliberationCalls, 4);
 });

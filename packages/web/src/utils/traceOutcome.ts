@@ -42,6 +42,14 @@ const STOP_REASON_EXPLANATIONS: Record<WorkflowTerminationReason, string> = {
         'Workflow stopped after reaching the configured tool-call limit.',
     max_deliberation_calls_reached:
         'Workflow stopped after reaching the configured deliberation-call limit.',
+    max_search_recovery_cycles_reached:
+        'Workflow stopped after reaching the configured search-recovery limit.',
+    search_query_repeated:
+        'Workflow stopped because the requested recovery search repeated an earlier query.',
+    search_recovery_unavailable:
+        'Workflow stopped because the requested recovery search was unavailable.',
+    search_recovery_no_results:
+        'Workflow stopped because the requested recovery search returned no usable results.',
     executor_error_fail_open:
         'Workflow recorded an executor error and terminated in fail-open mode.',
     provider_cancelled:

@@ -61,6 +61,10 @@ const ENV_PATH_OVERRIDES: Record<string, string[]> = {
         'chat-workflow',
         'max-deliberation-calls-override',
     ],
+    CHAT_WORKFLOW_MAX_SEARCH_RECOVERY_CYCLES: [
+        'chat-workflow',
+        'max-search-recovery-cycles',
+    ],
     CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: [
         'chat-workflow',
         'max-tokens-total-override',

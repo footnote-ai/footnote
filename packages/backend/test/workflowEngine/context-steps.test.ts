@@ -1414,7 +1414,7 @@ test('runBoundedReviewWorkflow stops before generation when injected context ste
     );
 });
 
-test('runBoundedReviewWorkflow returns terminal planner action outcome without generation', async () => {
+test('runBoundedReviewWorkflow keeps planning valid without retrieval for a terminal action', async () => {
     let generationCalls = 0;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
@@ -1559,6 +1559,10 @@ test('runBoundedReviewWorkflow returns terminal planner action outcome without g
     }
     assert.equal(result.terminalAction.responseAction, 'react');
     assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
+    assert.equal(
+        result.workflowLineage.steps.some((step) => step.stepKind === 'tool'),
+        false
+    );
 });
 
 test('runBoundedReviewWorkflow uses web_search hints for one OpenAI native follow-up when enabled', async () => {

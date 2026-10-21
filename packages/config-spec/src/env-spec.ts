@@ -2184,6 +2184,10 @@ export const envEntries = [
         'Optional deliberation-call limit override in the canonical settings YAML; use 0 through 6.'
     ),
     defineWorkflowLimitOverrideEnv(
+        'CHAT_WORKFLOW_MAX_SEARCH_RECOVERY_CYCLES',
+        'Optional assessment-triggered web-search recovery limit in the canonical settings YAML; use 0 through 2.'
+    ),
+    defineWorkflowLimitOverrideEnv(
         'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE',
         'Optional cumulative token limit override in the canonical settings YAML; use 1 through 512000.'
     ),

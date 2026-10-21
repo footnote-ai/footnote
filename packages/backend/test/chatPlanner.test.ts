@@ -1489,7 +1489,7 @@ test('search topicHints are bounded, deduped, and normalized fail-open', async (
     ]);
 });
 
-test('invalid web_search query downgrades safely to none', async () => {
+test('planner explicitly requested search with a blank query repairs from the user request', async () => {
     const planner = createPlanner(
         JSON.stringify({
             action: 'message',
@@ -1516,10 +1516,198 @@ test('invalid web_search query downgrades safely to none', async () => {
             },
         })
     );
-    const { plan } = await planFromWorkflow(planner, createChatRequest());
+    const { plan } = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Which Node.js release lines are current?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'Which Node.js release lines are current?',
+                },
+            ],
+        })
+    );
+
+    assert.equal(
+        plan.generation.search?.query,
+        'Which Node.js release lines are current?'
+    );
+    assert.equal(plan.generation.search?.querySource, 'backend_repair');
+});
+
+test('search-query repair uses the most recent user-authored context', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Search is required.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                search: {
+                    query: '',
+                    contextSize: 'medium',
+                    intent: 'current_facts',
+                },
+            },
+        })
+    );
+    const { plan } = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: '  ',
+            conversation: [
+                { role: 'user', content: 'An older unrelated request.' },
+                { role: 'assistant', content: 'A response.' },
+                { role: 'user', content: 'The latest release question.' },
+            ],
+        })
+    );
+
+    assert.equal(plan.generation.search?.query, 'The latest release question.');
+});
+
+test('search-query repair rejects incomplete tokens but keeps a complete-token fallback', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Search is required.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                search: {
+                    query: '',
+                    contextSize: 'medium',
+                    intent: 'current_facts',
+                },
+            },
+        })
+    );
+
+    const { plan } = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'x'.repeat(513),
+            conversation: [{ role: 'user', content: 'x'.repeat(513) }],
+        })
+    );
+
+    assert.equal(plan.generation.search, undefined);
+
+    const completePrefix = 'complete '.repeat(56).trim();
+    const { plan: completeFallbackPlan } = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: `${'complete '.repeat(56)}partialtoken`,
+            conversation: [
+                {
+                    role: 'user',
+                    content: `${'complete '.repeat(56)}partialtoken`,
+                },
+            ],
+        })
+    );
+    assert.equal(completeFallbackPlan.generation.search?.query, completePrefix);
+});
+
+test('legacy planner web-search intent repairs an empty query only when requested', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Search is required.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 4,
+                    rationale: 3,
+                    attribution: 4,
+                    caution: 3,
+                    extent: 4,
+                },
+                toolIntent: {
+                    toolName: 'web_search',
+                    requested: true,
+                    input: { query: '' },
+                },
+            },
+        })
+    );
+    const { plan } = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Current release support for Node.js?',
+            conversation: [],
+        })
+    );
+
+    const repairedSearch = plan.generation.toolIntent?.input;
+    assert.ok(repairedSearch && 'query' in repairedSearch);
+    assert.equal(repairedSearch.query, 'Current release support for Node.js?');
+    assert.equal(repairedSearch.querySource, 'backend_repair');
+});
+
+test('planner does not invent a search query when explicit search has no user-authored context', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Search was requested.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                search: { query: '  ' },
+            },
+        })
+    );
+    const { plan } = await planFromWorkflow(
+        planner,
+        createChatRequest({ latestUserInput: '', conversation: [] })
+    );
 
     assert.equal(plan.generation.search, undefined);
     assert.match(plan.reasoning, /search was disabled safely/i);
+});
+
+test('planner does not request search when the plan omitted it', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'A stable fact needs a direct answer.',
+            generation: { reasoningEffort: 'low', verbosity: 'low' },
+        })
+    );
+    const { plan } = await planFromWorkflow(planner, createChatRequest());
+
+    assert.equal(plan.generation.search, undefined);
 });
 
 test('planner weather request is normalized when location contract is valid', async () => {

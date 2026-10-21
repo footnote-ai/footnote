@@ -11,7 +11,7 @@ work is done.
 - [Repository context and TrustGraph](./repository-context-status.md) — one-time
   setup is complete; source-code retrieval is tracked separately in #539
 - [Web search grounding recovery](./web-search-grounding-recovery-status.md) —
-  implementation has not started (#451)
+  implemented; one bounded live recovery demonstrated in PR #916 (#451)
 
 ## Deferred Evaluation Notes
 

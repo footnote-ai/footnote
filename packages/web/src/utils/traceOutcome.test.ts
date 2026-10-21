@@ -113,6 +113,25 @@ test('buildRunOutcomeSummary returns stopped for workflow budget limits', () => 
     );
 });
 
+test('buildRunOutcomeSummary explains search-recovery stop reasons', () => {
+    const reasons: WorkflowRecord['terminationReason'][] = [
+        'max_search_recovery_cycles_reached',
+        'search_query_repeated',
+        'search_recovery_unavailable',
+        'search_recovery_no_results',
+    ];
+
+    for (const reason of reasons) {
+        const summary = buildRunOutcomeSummary(
+            createSource({ workflow: createWorkflow(reason) })
+        );
+
+        assert.equal(summary?.category, 'stopped');
+        assert.equal(summary?.reasonCode, reason);
+        assert.match(summary?.explanation ?? '', /^Workflow stopped/u);
+    }
+});
+
 test('buildRunOutcomeSummary distinguishes a generated answer from a pre-generation budget stop', () => {
     const workflow = createWorkflow('budget_exhausted_tokens');
     workflow.stepCount = 1;

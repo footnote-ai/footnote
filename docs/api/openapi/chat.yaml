@@ -813,9 +813,17 @@ components:
                     enum:
                         - finalize
                         - revise
+                        - search
                 reviewReason:
                     type: string
                 revisionInstruction:
+                    type: string
+                searchQuery:
+                    type: string
+                    maxLength: 512
+                searchDeficitsCsv:
+                    type: string
+                searchRecoveryOutcome:
                     type: string
                 refinementRequested:
                     type: boolean
@@ -1613,6 +1621,11 @@ components:
                 maxDurationMs:
                     type: integer
                     minimum: 1
+                maxSearchRecoveryCycles:
+                    type: integer
+                    minimum: 0
+                    maximum: 2
+                    description: Effective limit for assessment-triggered web-search recoveries.
                 effectiveLimits:
                     type: array
                     items:
@@ -1657,6 +1670,10 @@ components:
                                 - transition_blocked_by_policy
                                 - max_tool_calls_reached
                                 - max_deliberation_calls_reached
+                                - max_search_recovery_cycles_reached
+                                - search_query_repeated
+                                - search_recovery_unavailable
+                                - search_recovery_no_results
                                 - executor_error_fail_open
                                 - provider_cancelled
                                 - provider_incomplete
@@ -1712,6 +1729,10 @@ components:
                         - transition_blocked_by_policy
                         - max_tool_calls_reached
                         - max_deliberation_calls_reached
+                        - max_search_recovery_cycles_reached
+                        - search_query_repeated
+                        - search_recovery_unavailable
+                        - search_recovery_no_results
                         - executor_error_fail_open
                         - provider_cancelled
                         - provider_incomplete

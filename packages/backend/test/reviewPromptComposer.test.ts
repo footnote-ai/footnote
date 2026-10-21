@@ -12,6 +12,7 @@ import {
     composeAssessPrompt,
     composeRefinementPrompt,
 } from '../src/services/prompts/reviewPromptComposer.js';
+import { DEFAULT_REVIEW_DECISION_PROMPT } from '../src/services/workflowEngine/reviewDecision.js';
 
 test('composeAssessPrompt includes base assess prompt and selected modules in deterministic order', () => {
     const composed = composeAssessPrompt({
@@ -25,6 +26,17 @@ test('composeAssessPrompt includes base assess prompt and selected modules in de
     assert.match(composed.prompt, /Required JSON shape/);
     assert.match(composed.prompt, /repetitive contrast patterns/i);
     assert.match(composed.prompt, /longer than needed/i);
+});
+
+test('workflow assessment prompt does not finalize acknowledged evidence gaps', () => {
+    const composed = composeAssessPrompt({
+        basePromptOverride: DEFAULT_REVIEW_DECISION_PROMPT,
+    });
+
+    assert.match(
+        composed.prompt,
+        /Do not finalize when the draft acknowledges that a key fact requested by the user is missing, unverified, or inferred/u
+    );
 });
 
 test('composeRefinementPrompt applies bounded module set and includes revision instruction', () => {

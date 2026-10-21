@@ -136,15 +136,17 @@ primary labels under an answer.
 
 All three modes use the reviewed workflow shape:
 
-| Workflow shape | Purpose                     | Main steps                                                                                             |
-| -------------- | --------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `reviewed`     | reviewed message generation | `plan? -> tool? -> presentation? -> generate -> assess? -> [replan? -> generate -> assess?] -> finish` |
+| Workflow shape | Purpose                     | Main steps                                                                                                 |
+| -------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `reviewed`     | reviewed message generation | `plan? -> retrieve? -> presentation? -> generate -> assess? -> [replan? -> generate -> assess?] -> finish` |
 
-The live conditional topology is `plan? -> tool? -> presentation? -> generate
+The live conditional topology is `plan? -> retrieve? -> presentation? -> generate
 -> assess? -> [replan? -> generate -> assess?] -> finish`. A `?` step runs only
 when the active policy and dependencies enable it. When assessment requests a
 revision, `replan` returns to `generate`, which may enter `assess` again before
-`finish`.
+`finish`. Assessment can also request a bounded search; that transition reuses
+the same `retrieve` Step and then returns to generation and assessment. Search
+is an assessment decision, not a new Workflow Step.
 
 Mode details:
 
@@ -153,6 +155,13 @@ Mode details:
 | `express`  | `fast-direct`      | `reviewed`     | lower-allowance run | gated  | minimal          |
 | `balanced` | `balanced`         | `reviewed`     | reviewed generation | yes    | balanced         |
 | `grounded` | `quality-grounded` | `reviewed`     | reviewed generation | yes    | stricter         |
+
+Default Execution Contract allowances are 3 workflow steps, 0 tool calls, and
+0 deliberation calls for Express; 7 steps, 2 tool calls, and 3 deliberation
+calls for Balanced; and 10 steps, 3 tool calls, and 4 deliberation calls for
+Grounded. Balanced and Grounded default to one search-recovery cycle; Express
+defaults to zero. These counts include the run's initial work, not just
+recovery. Explicit operator limits and resolved contract limits remain binding.
 
 `Grounded` and `reviewed` describe the path Footnote took. They are not claims
 that the answer is true.
@@ -236,7 +245,7 @@ bounded context to generation.
 The reviewed workflow declares this bounded path:
 
 ```text
-plan(defaultPlan on failure) -> tool(fail-open) -> presentation(optional) -> generate -> assess
+plan(defaultPlan on failure) -> retrieve(fail-open) -> presentation(optional) -> generate -> assess
   -> replan(optional) -> generate -> assess ... -> finish
 ```
 
@@ -244,18 +253,60 @@ The exact start and optional Steps are selected by backend policy before the
 Run begins. Each Step declares its accepted outcomes, named Result output, and
 next Step. `presentation` is an optional candidate: an unavailable candidate
 routes to authoritative generation and does not consume a workflow-step
-allowance. `generate` is the authoritative writer, and `assess` can emit only
-`done`, `revise`, or `limit`. A revision uses `replan` when configured and
+allowance. `generate` is the authoritative writer, and `assess` can emit
+`done`, `revise`, `search`, or `limit`. A revision uses `replan` when configured and
 otherwise follows the declared direct-generation route. `finish` emits no
 Result and is not counted as a semantic workflow Step.
 
-The `generate` step produces the current draft. The `assess` step returns
-`reviewDecision` and `reviewReason`.
+`generate` produces the current draft. `assess` returns `reviewDecision` and
+`reviewReason`. It can finalize, request a bounded revision, or request another
+retrieval. A recovery retrieval receives only the validated assessment query;
+it does not rerun the initial request batch or call the planner again. The same
+named `evidence` Result retains prior results and appends the follow-up result,
+including each result's original provenance. Successful recovery returns
+directly to authoritative generation; the optional presentation candidate is
+single-use and is not rerun. A failed, cancelled, repeated, or over-budget
+recovery finishes with the latest successful draft and records the failure or
+limit reason. Chat delivery retains that draft and adds a note that
+current-fact claims depending on the failed search are unconfirmed. The
+effective recovery-cycle allowance is recorded on the Run and public trace.
 
-`reviewDecision` is either `finalize` or `revise`. When the decision is
-`revise`, `assess` may also return `revisionInstruction`. `reviewReason` explains
-why revision is needed. `revisionInstruction` gives concrete guidance for the
-follow-up refinement `generate` step.
+`reviewDecision` is `finalize`, `revise`, or `search`. A search decision requires
+a non-empty bounded query and a short reason; optional deficit labels are
+`freshness`, `relevance`, `authority`, and `coverage`. Search content and
+assessment decisions remain advisory: the backend checks policy, query
+repetition, provider availability, and all existing limits before retrieval.
+When the decision is `revise`, `assess` may also return
+`revisionInstruction`, which guides the follow-up `generate` step.
+
+Assessment receives the bounded retrieval outcome, query, provider status,
+returned source titles and URLs, and the answer's own citations. Retrieved text
+is untrusted context, not an instruction or proof. Trace lineage distinguishes
+sources returned by retrieval from citations emitted with the answer; citations
+alone do not prove that a source supports a claim. Public trace projection
+continues to omit private query and signal details.
+For provider-native search, assessment receives only the runtime-reported query
+and requested/used flags plus answer citations; the runtime contract does not
+expose its full result records.
+
+If the planner explicitly requests web search but supplies a blank or overlong
+query, backend normalization makes one bounded deterministic repair from the
+latest user-authored conversation text. It does not add a model call or infer a
+search request when the planner did not make one.
+
+Operators can set `chat-workflow.max-search-recovery-cycles` in `footnote.yaml`
+to `0`, `1`, or `2`. The resolver clamps that value to the effective review,
+tool, and deliberation budgets; the workflow applies the topology-aware step
+limit and reserves token capacity for a recovery generation and its assessment
+before retrieval. Recovery capacity is additive to the mode's total review
+budget, while ordinary revise decisions remain capped by the mode's existing
+review allowance. Additional `chat-workflow` limit overrides are needed if the
+current Execution Contract does not leave room for two cycles. Step, tool-call,
+deliberation, and elapsed-time admission continue to use the shared workflow
+limits. Elapsed time is admitted step by step because provider duration cannot
+be predicted; a retrieval can finish near the deadline and leave too little time
+for regeneration. In that case the last successful draft is retained and the
+recovery is recorded as incomplete. There is no separate recovery toggle.
 
 `revisionInstruction` is revise-only and is not recorded for `finalize`.
 
@@ -378,8 +429,12 @@ They are not general telemetry.
 
 For `assess` steps, use `reviewDecision` and `reviewReason`. When
 `reviewDecision` is `revise`, `signals` may also include
-`revisionInstruction`. Assess signals may also include TRACE alignment and
-flattened final posture axes.
+`revisionInstruction`. When `reviewDecision` is `search`, signals include the
+approved `searchQuery` and optional `searchDeficitsCsv`; retrieval and the
+following generation record query source, outcome, source count, and citation
+count. Assess signals may also include TRACE alignment and flattened final
+posture axes. Public trace projection remains allowlisted and does not expose
+these private query signals.
 
 Failed assess steps caused by invalid review parser output do not include
 `reviewDecision`, `reviewReason`, or `revisionInstruction`. They may include:

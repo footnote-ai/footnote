@@ -73,7 +73,7 @@ test('TraceStore round trips metadata with citation URLs', async () => {
     }
 });
 
-test('TraceStore preserves cached usage in execution, workflow, and display traces', async () => {
+test('TraceStore preserves cached usage in canonical and display workflow traces', async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-cache-'));
     const responseId = 'cached_usage_trace_123';
     const store = new SqliteTraceStore({
@@ -167,18 +167,7 @@ test('TraceStore preserves cached usage in execution, workflow, and display trac
         const display = await store.retrieveForDisplay(responseId);
         assert.ok(display);
         assert.equal(display.displayIntegrity.status, 'complete');
-        const displayedGeneration = display.execution?.[0];
-        if (displayedGeneration?.kind !== 'generation') {
-            assert.fail('expected a displayed generation execution event');
-        }
-        assert.deepEqual(displayedGeneration.usage, {
-            promptTokens: 100,
-            cachedInputTokens: 80,
-            cacheWriteTokens: 10,
-            completionTokens: 20,
-            reasoningTokens: 5,
-            totalTokens: 120,
-        });
+        assert.equal(display.execution, undefined);
         assert.deepEqual(
             display.workflow?.steps[0]?.usage,
             metadata.workflow.steps[0]?.usage

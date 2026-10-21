@@ -26,9 +26,9 @@ test('resolveExecutionContract maps known preset ids deterministically', () => {
         qualityGrounded.policyContract.response.responseMode,
         'quality_grounded'
     );
-    assert.equal(qualityGrounded.policyContract.limits.maxWorkflowSteps, 8);
+    assert.equal(qualityGrounded.policyContract.limits.maxWorkflowSteps, 10);
     assert.equal(qualityGrounded.policyContract.limits.maxToolCalls, 3);
-    assert.equal(qualityGrounded.policyContract.limits.maxDeliberationCalls, 3);
+    assert.equal(qualityGrounded.policyContract.limits.maxDeliberationCalls, 4);
     assert.equal(qualityGrounded.policyContract.limits.maxTokensTotal, 96_000);
     assert.equal(qualityGrounded.policyContract.limits.maxDurationMs, 180_000);
     assert.equal(
@@ -97,9 +97,9 @@ test('resolveExecutionContract sanitizes unsafe numeric overrides and keeps hard
         'Test Policy Display Name'
     );
     assert.equal(resolved.policyContract.evidence.maxEscalationRounds, 1);
-    assert.equal(resolved.policyContract.limits.maxWorkflowSteps, 4);
-    assert.equal(resolved.policyContract.limits.maxToolCalls, 1);
-    assert.equal(resolved.policyContract.limits.maxDeliberationCalls, 2);
+    assert.equal(resolved.policyContract.limits.maxWorkflowSteps, 7);
+    assert.equal(resolved.policyContract.limits.maxToolCalls, 2);
+    assert.equal(resolved.policyContract.limits.maxDeliberationCalls, 3);
     assert.equal(resolved.policyContract.limits.maxTokensTotal, 48_000);
     assert.equal(resolved.policyContract.limits.maxDurationMs, 90_000);
     assert.equal(resolved.policyContract.failOpen.authority, 'backend');

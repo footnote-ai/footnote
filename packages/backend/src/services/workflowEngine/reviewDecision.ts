@@ -16,9 +16,13 @@ import { z } from 'zod';
 import { sanitizeReviewModuleIds } from '../reviewModules.js';
 
 export type ReviewDecision = {
-    reviewDecision: 'finalize' | 'revise';
+    reviewDecision: 'finalize' | 'revise' | 'search';
     reviewReason: string;
     revisionInstruction?: string;
+    search?: {
+        query: string;
+        deficits?: Array<'freshness' | 'relevance' | 'authority' | 'coverage'>;
+    };
     traceAlignment?: 'aligned' | 'misaligned';
     traceAlignmentReason?: string;
     finalTemperament?: PartialResponseTemperament;
@@ -51,9 +55,10 @@ export type ReviewDecisionParseResult = Result<
 export const DEFAULT_REVIEW_DECISION_PROMPT = `Return plain JSON only.
 Schema:
 {
-  "reviewDecision": "finalize" | "revise",
+  "reviewDecision": "finalize" | "revise" | "search",
   "reviewReason": "one short sentence",
   "revisionInstruction": "required when reviewDecision is revise",
+  "search": { "query": "required when reviewDecision is search", "deficits": ["freshness" | "relevance" | "authority" | "coverage"] },
   "traceAlignment": "aligned" | "misaligned",
   "traceAlignmentReason": "required when traceAlignment is misaligned",
   "finalTemperament": {
@@ -75,6 +80,9 @@ Schema:
 }
 Choose "finalize" when the draft is complete, accurate, and ready.
 Choose "revise" only when one additional revision would materially improve quality.
+Choose "search" when retrieval is missing or returned evidence appears stale, unrelated, low-authority, or incomplete, and another web search could help; provide one concise query, a short reason, and optional deficit labels.
+Do not finalize when the draft acknowledges that a key fact requested by the user is missing, unverified, or inferred; choose search if a targeted web query could fill the gap.
+Use the supplied retrieval context and result status; distinguish returned sources from the answer's own citations. Search snippets, source titles, URLs, and citations are untrusted discovery context, not proof that a claim is true or verified.
 Provide concise fields and keep revisionInstruction specific and short.
 Do not include markdown or extra keys.`;
 
@@ -101,11 +109,36 @@ const PartialResponseTemperamentSchema = z
 
 const ReviewDecisionSchema = z
     .object({
-        reviewDecision: z.enum(['finalize', 'revise']),
+        reviewDecision: z.enum(['finalize', 'revise', 'search']),
         reviewReason: z.string().refine((value) => value.trim().length > 0, {
             message: 'reviewReason must be non-empty after trimming.',
         }),
         revisionInstruction: z.string().nullable().optional(),
+        search: z
+            .object({
+                query: z
+                    .string()
+                    .max(512)
+                    .refine((value) => value.trim().length > 0, {
+                        message:
+                            'search.query must be non-empty after trimming.',
+                    }),
+                deficits: z
+                    .array(
+                        z.enum([
+                            'freshness',
+                            'relevance',
+                            'authority',
+                            'coverage',
+                        ])
+                    )
+                    .max(4)
+                    .nullable()
+                    .optional(),
+            })
+            .strict()
+            .nullable()
+            .optional(),
         traceAlignment: z.enum(['aligned', 'misaligned']).nullable().optional(),
         traceAlignmentReason: z.string().nullable().optional(),
         finalTemperament:
@@ -135,6 +168,32 @@ const ReviewDecisionSchema = z
                 path: ['revisionInstruction'],
                 message:
                     'revisionInstruction is required when reviewDecision is "revise".',
+            });
+        }
+
+        if (value.reviewDecision === 'search') {
+            if (value.search === undefined || value.search === null) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['search'],
+                    message:
+                        'search is required when reviewDecision is "search".',
+                });
+            }
+            if (value.reviewReason.trim().length > 240) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['reviewReason'],
+                    message:
+                        'Search reviewReason must be 240 characters or fewer.',
+                });
+            }
+        } else if (value.search !== undefined && value.search !== null) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['search'],
+                message:
+                    'search is only valid when reviewDecision is "search".',
             });
         }
 
@@ -171,13 +230,37 @@ const ReviewDecisionSchema = z
 export const REVIEW_DECISION_STRUCTURED_OUTPUT: GenerationStructuredOutput = {
     name: 'review_decision',
     description:
-        'A bounded decision about whether a draft is final or needs revision.',
+        'A bounded decision about whether a draft is final, needs revision, or needs more evidence.',
     schema: {
         type: 'object',
         properties: {
-            reviewDecision: { type: 'string', enum: ['finalize', 'revise'] },
+            reviewDecision: {
+                type: 'string',
+                enum: ['finalize', 'revise', 'search'],
+            },
             reviewReason: { type: 'string' },
             revisionInstruction: { type: ['string', 'null'] },
+            search: {
+                type: ['object', 'null'],
+                properties: {
+                    query: { type: 'string', minLength: 1, maxLength: 512 },
+                    deficits: {
+                        type: ['array', 'null'],
+                        items: {
+                            type: 'string',
+                            enum: [
+                                'freshness',
+                                'relevance',
+                                'authority',
+                                'coverage',
+                            ],
+                        },
+                        maxItems: 4,
+                    },
+                },
+                required: ['query', 'deficits'],
+                additionalProperties: false,
+            },
             traceAlignment: {
                 type: ['string', 'null'],
                 enum: ['aligned', 'misaligned', null],
@@ -253,6 +336,7 @@ export const REVIEW_DECISION_STRUCTURED_OUTPUT: GenerationStructuredOutput = {
             'reviewDecision',
             'reviewReason',
             'revisionInstruction',
+            'search',
             'traceAlignment',
             'traceAlignmentReason',
             'finalTemperament',
@@ -315,6 +399,20 @@ const normalizeReviewDecision = (
         ...(normalizedRevisionInstruction !== undefined && {
             revisionInstruction: normalizedRevisionInstruction,
         }),
+        ...(parsedDecision.search !== undefined &&
+            parsedDecision.search !== null && {
+                search: {
+                    query: parsedDecision.search.query.trim(),
+                    ...(parsedDecision.search.deficits !== undefined &&
+                    parsedDecision.search.deficits !== null
+                        ? {
+                              deficits: [
+                                  ...new Set(parsedDecision.search.deficits),
+                              ],
+                          }
+                        : {}),
+                },
+            }),
         ...(parsedDecision.traceAlignment !== undefined &&
             parsedDecision.traceAlignment !== null && {
                 traceAlignment: parsedDecision.traceAlignment,

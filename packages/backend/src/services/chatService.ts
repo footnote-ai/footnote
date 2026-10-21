@@ -950,6 +950,50 @@ const pickTrustGraphResultFromContextSteps = (
     return trustGraphResult as TrustGraphEvidenceIngestionResult;
 };
 
+const hasUnresolvedSearchRecovery = (
+    workflow: ResponseMetadata['workflow']
+): boolean => {
+    // Only a completed retrieve -> regenerate -> finalize path clears the user's current-fact caveat.
+    if (workflow === undefined) return false;
+    const searchAssessmentIndex = workflow.steps.findLastIndex(
+        (step) =>
+            step.stepKind === 'assess' &&
+            step.outcome.signals?.reviewDecision === 'search'
+    );
+    if (searchAssessmentIndex === undefined || searchAssessmentIndex < 0) {
+        return false;
+    }
+    const assessment = workflow.steps[searchAssessmentIndex];
+    if (assessment?.outcome.signals?.searchRecoveryOutcome !== 'requested') {
+        return true;
+    }
+    const recoveryRetrieval = workflow.steps
+        .slice(searchAssessmentIndex + 1)
+        .find(
+            (step) =>
+                step.stepKind === 'tool' &&
+                step.outcome.signals?.searchRecoveryOutcome !== undefined
+        );
+    if (
+        recoveryRetrieval?.outcome.signals?.searchRecoveryOutcome !== 'executed'
+    ) {
+        return true;
+    }
+    const recoveryRetrievalIndex = workflow.steps.indexOf(recoveryRetrieval);
+    const regenerationIndex = workflow.steps.findIndex(
+        (step, index) =>
+            index > recoveryRetrievalIndex &&
+            step.stepKind === 'generate' &&
+            step.outcome.signals?.searchRecoveryOutcome === 'regenerated'
+    );
+    if (regenerationIndex < 0) return true;
+
+    const finalAssessment = workflow.steps
+        .slice(regenerationIndex + 1)
+        .findLast((step) => step.stepKind === 'assess');
+    return finalAssessment?.outcome.signals?.reviewDecision !== 'finalize';
+};
+
 /**
  * Dependencies for the shared chat workflow.
  * The HTTP handler injects these so the core logic stays transport-agnostic.
@@ -1372,6 +1416,8 @@ export const createChatService = ({
                     runtimeConfig.chatWorkflow.maxToolCallsOverride,
                 maxDeliberationCallsOverride:
                     runtimeConfig.chatWorkflow.maxDeliberationCallsOverride,
+                maxSearchRecoveryCycles:
+                    runtimeConfig.chatWorkflow.maxSearchRecoveryCycles,
                 maxTokensTotalOverride:
                     runtimeConfig.chatWorkflow.maxTokensTotalOverride,
                 maxDurationMsOverride:
@@ -1526,6 +1572,7 @@ export const createChatService = ({
         const executionPhases = initializeChatExecutionPhases();
         const generationStartedAt = executionPhases.generationStartedAt;
         const workflowProfile = executionPhases.workflowProfile;
+        const workflowRuntimeConfig = executionPhases.workflowRuntimeConfig;
         const workflowExecutionEnabled =
             executionPhases.workflowExecutionEnabled;
         const workflowExecutionLimits = executionPhases.workflowExecutionLimits;
@@ -1610,6 +1657,19 @@ export const createChatService = ({
                     contextStepRequests,
                     trustGraphContextStepRequest,
                 });
+                // Recovery capacity is additive; it must not raise ordinary revision iterations.
+                const defaultReviewCycleLimit = Math.ceil(
+                    workflowExecutionLimits.maxDeliberationCalls / 2
+                );
+                const ordinaryReviewCycleLimit = Math.min(
+                    workflowRuntimeConfig.modeDecision.behavior
+                        .maxReviewCycles ?? defaultReviewCycleLimit,
+                    workflowMaxReviewCycles ??
+                        runtimeConfig.chatWorkflow.maxRequestReviewCycles ??
+                        defaultReviewCycleLimit,
+                    workflowExecutionLimits.maxReviewCycles ??
+                        defaultReviewCycleLimit
+                );
                 const workflowResult = await runReviewWorkflow({
                     generationRuntime,
                     generationRequest: effectiveGenerationRequest,
@@ -1620,11 +1680,7 @@ export const createChatService = ({
                         maxIterations: Math.max(
                             0,
                             Math.min(
-                                workflowExecutionLimits.maxReviewCycles ??
-                                    Math.ceil(
-                                        workflowExecutionLimits.maxDeliberationCalls /
-                                            2
-                                    ),
+                                ordinaryReviewCycleLimit,
                                 Math.ceil(
                                     Math.max(
                                         0,
@@ -1636,6 +1692,8 @@ export const createChatService = ({
                         ),
                         maxDurationMs: workflowExecutionLimits.maxDurationMs,
                         executionLimits: workflowExecutionLimits,
+                        maxSearchRecoveryCycles:
+                            workflowRuntimeConfig.maxSearchRecoveryCycles,
                     },
                     workflowPolicy,
                     ...(workflowProfile.optionalExtensions
@@ -2128,9 +2186,13 @@ export const createChatService = ({
             generationPhase.generationCanBecomeAnswer &&
             generationAdmission.admitted;
         const generationIncompleteBeforeOutput = !generationAdmission.admitted;
+        const unresolvedSearchRecovery =
+            hasUnresolvedSearchRecovery(workflowLineage);
         const deliveredMessage = generationIncompleteBeforeOutput
             ? SURFACED_INCOMPLETE_GENERATION_MESSAGE
-            : generationResult.text;
+            : unresolvedSearchRecovery
+              ? `${generationResult.text}\n\nI couldn't complete the requested follow-up grounding check, so any current-fact claims that depend on it are unconfirmed.`
+              : generationResult.text;
         const normalizedDeliveredMessage = normalizeChatOutput(
             deliveredMessage,
             effectiveOutputBoundary

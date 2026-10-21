@@ -17,6 +17,10 @@ import type {
     WorkflowResultRecord,
     WorkflowResultReference,
 } from '@footnote/contracts/policy';
+import {
+    BOUNDED_REVIEW_ASSESS_DECISIONS,
+    TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS,
+} from '@footnote/contracts/policy';
 import type { TraceDisplayMetadata } from '@footnote/contracts/web';
 import {
     CitationSchema,
@@ -32,7 +36,21 @@ const TRACE_AXES = [
     'extent',
 ] as const;
 
-const PUBLIC_STEP_SIGNAL_KEYS = new Set(['action', 'contractType']);
+const PUBLIC_STEP_SIGNAL_KEYS = new Set([
+    'action',
+    'contractType',
+    'purpose',
+    'applyOutcome',
+]);
+const PUBLIC_ASSESS_SIGNAL_KEYS = new Set([
+    'reviewDecision',
+    'traceAlignment',
+    ...Object.values(TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS),
+]);
+const PUBLIC_REVIEW_DECISIONS = new Set<string>(
+    BOUNDED_REVIEW_ASSESS_DECISIONS
+);
+const PUBLIC_TRACE_WITHHELD = '[withheld from public trace]';
 const PUBLIC_FALLBACK_ROUTE_REASON_CODE = 'search_rerouted_to_fallback_profile';
 
 const OPTIONAL_METADATA_FIELDS = [
@@ -140,22 +158,52 @@ const readValidOptionalField = (
     return parsed.success ? parsed.data[field] : undefined;
 };
 
-const projectPublicOutcome = (outcome: StepOutcome): StepOutcome => ({
-    status: outcome.status,
-    summary: outcome.summary,
-    ...(outcome.artifacts !== undefined && {
-        artifacts: outcome.artifacts.map(
-            (artifact) => `[redacted:${artifact.length} chars]`
-        ),
-    }),
-    ...(outcome.signals !== undefined && {
-        signals: Object.fromEntries(
-            Object.entries(outcome.signals).filter(([key]) =>
-                PUBLIC_STEP_SIGNAL_KEYS.has(key)
-            )
-        ),
-    }),
-});
+const projectPublicOutcome = (
+    step: StepRecord,
+    outcome: StepOutcome
+): StepOutcome => {
+    const isExecutedAssessment =
+        step.stepKind === 'assess' && outcome.status === 'executed';
+    const signals: NonNullable<StepOutcome['signals']> = {};
+    for (const [key, value] of Object.entries(outcome.signals ?? {})) {
+        if (
+            PUBLIC_STEP_SIGNAL_KEYS.has(key) ||
+            (isExecutedAssessment && PUBLIC_ASSESS_SIGNAL_KEYS.has(key))
+        ) {
+            signals[key] = value;
+        }
+    }
+
+    if (isExecutedAssessment) {
+        const reviewDecision = outcome.signals?.reviewDecision;
+        if (
+            typeof reviewDecision === 'string' &&
+            PUBLIC_REVIEW_DECISIONS.has(reviewDecision)
+        ) {
+            signals.reviewReason = PUBLIC_TRACE_WITHHELD;
+            if (reviewDecision === 'revise') {
+                signals.revisionInstruction = PUBLIC_TRACE_WITHHELD;
+            } else if (reviewDecision === 'search') {
+                signals.searchQuery = PUBLIC_TRACE_WITHHELD;
+            }
+        }
+
+        if (outcome.signals?.traceAlignment === 'misaligned') {
+            signals.traceAlignmentReason = PUBLIC_TRACE_WITHHELD;
+        }
+    }
+
+    return {
+        status: outcome.status,
+        summary: outcome.summary,
+        ...(outcome.artifacts !== undefined && {
+            artifacts: outcome.artifacts.map(
+                (artifact) => `[redacted:${artifact.length} chars]`
+            ),
+        }),
+        ...(outcome.signals !== undefined && { signals }),
+    };
+};
 
 const projectPublicAttempt = (
     attempt: WorkflowAttemptRecord
@@ -283,7 +331,7 @@ const projectPublicStep = (step: StepRecord): StepRecord => ({
     ...(step.attempts !== undefined && {
         attempts: step.attempts.map(projectPublicAttempt),
     }),
-    outcome: projectPublicOutcome(step.outcome),
+    outcome: projectPublicOutcome(step, step.outcome),
 });
 
 const projectPublicWorkflow = (workflow: WorkflowRecord): WorkflowRecord => ({
@@ -303,6 +351,9 @@ const projectPublicWorkflow = (workflow: WorkflowRecord): WorkflowRecord => ({
     stepCount: workflow.stepCount,
     maxSteps: workflow.maxSteps,
     maxDurationMs: workflow.maxDurationMs,
+    ...(workflow.maxSearchRecoveryCycles !== undefined && {
+        maxSearchRecoveryCycles: workflow.maxSearchRecoveryCycles,
+    }),
     ...(workflow.effectiveLimits !== undefined && {
         effectiveLimits: workflow.effectiveLimits.map((limit) => ({
             key: limit.key,

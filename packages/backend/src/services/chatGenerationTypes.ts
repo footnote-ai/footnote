@@ -29,6 +29,7 @@ export type ChatGenerationSearch = Omit<
     GenerationSearchRequest,
     'repoHints' | 'topicHints'
 > & {
+    querySource?: 'planner' | 'backend_repair';
     repoHints?: ChatRepoSearchHint[];
     topicHints?: string[];
 };

@@ -366,6 +366,7 @@ chat-workflow:
     max-workflow-steps-override: 12
     max-tool-calls-override: 5
     max-deliberation-calls-override: 6
+    max-search-recovery-cycles: 1
     max-tokens-total-override: 512000
     max-duration-ms-override: 300000
     chat-presentation-timeout-ms: 90000
@@ -385,12 +386,15 @@ Each YAML setting maps to exactly one existing Execution Contract allowance:
 | `chat-workflow.max-workflow-steps-override`     | `CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE`     | 1–12                   |
 | `chat-workflow.max-tool-calls-override`         | `CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE`         | 0–5                    |
 | `chat-workflow.max-deliberation-calls-override` | `CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE` | 0–6                    |
+| `chat-workflow.max-search-recovery-cycles`      | `footnote.yaml only`                            | 0–2                    |
 | `chat-workflow.max-tokens-total-override`       | `CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE`       | 1–512,000              |
 | `chat-workflow.max-duration-ms-override`        | `CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE`        | 1–300,000 milliseconds |
 
 Omit an override to retain the selected mode's existing limit; zero is valid
 only for tool calls and deliberation calls. The deliberation limit stays
 coherent with the derived plan/review cycle bounds.
+Search recovery is separately capped to the configured value and the effective
+review, step, tool, and deliberation budgets.
 
 These are non-secret settings from `/data/config/footnote.yaml`. The canonical
 paths above take precedence over defaults; process environment values named
