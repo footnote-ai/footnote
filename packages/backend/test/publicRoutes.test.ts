@@ -40,6 +40,9 @@ const createTestServer = (
             resolve({
                 baseUrl: `http://${TEST_HOST}:${address.port}`,
                 stop: async () => {
+                    if (!server.listening) {
+                        return;
+                    }
                     await new Promise<void>((resolveClose, rejectClose) => {
                         server.close((error) => {
                             if (error) {
@@ -57,6 +60,7 @@ const createTestServer = (
 test('public routes are Express-owned and bypass central /api dispatch while preserving route ownership', async (t) => {
     const handledPaths: string[] = [];
     const dispatchCalls: string[] = [];
+    let staticCalls = 0;
 
     const app = createExpressApp({
         dispatchHttpRoute: async ({ normalizedPathname }) => {
@@ -159,11 +163,14 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
             res.statusCode = 200;
             res.end('setup-operator-link');
         },
-        handleSetupRepositoryContextConnectionStateRequest: createUnhandledRouteHandler,
-        handleSetupRepositoryContextConnectionTestRequest: createUnhandledRouteHandler,
+        handleSetupRepositoryContextConnectionStateRequest:
+            createUnhandledRouteHandler,
+        handleSetupRepositoryContextConnectionTestRequest:
+            createUnhandledRouteHandler,
         handleSetupRepositoryContextPreviewRequest: createUnhandledRouteHandler,
         handleSetupRepositoryContextLoadRequest: createUnhandledRouteHandler,
         handleStaticTransportRequest: async ({ res }) => {
+            staticCalls += 1;
             res.statusCode = 404;
             res.end('static');
         },
@@ -189,6 +196,19 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
     const healthResponse = await fetch(`${server.baseUrl}/api/health`);
     assert.equal(healthResponse.status, 404);
 
+    const staticCallsBeforeProbe = staticCalls;
+    const probeResponse = await fetch(`${server.baseUrl}/healthz`);
+    assert.equal(probeResponse.status, 200);
+    assert.equal(
+        probeResponse.headers.get('content-type'),
+        'text/plain; charset=utf-8'
+    );
+    assert.equal(await probeResponse.text(), 'ok');
+    assert.equal(staticCalls, staticCallsBeforeProbe);
+
     assert.deepEqual(handledPaths, ['/config.json', '/api/chat/profiles']);
     assert.deepEqual(dispatchCalls, ['/api/health']);
+
+    await server.stop();
+    await assert.rejects(fetch(`${server.baseUrl}/healthz`));
 });

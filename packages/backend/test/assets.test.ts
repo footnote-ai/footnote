@@ -1,5 +1,6 @@
 /**
- * @description: Verifies static asset routing, wiki fallback isolation, and generated asset MIME coverage.
+ * @description: Verifies static asset routing, wiki and health-probe fallback.
+ * Also covers generated asset MIME entries.
  * @footnote-scope: test
  * @footnote-module: AssetResolverTests
  * @footnote-risk: medium - Static route regressions can hide broken documentation or application delivery.
@@ -13,7 +14,7 @@ import test from 'node:test';
 
 import { createAssetResolver, MIME_MAP } from '../src/http/assets.js';
 
-test('asset resolver serves nested wiki files without SPA fallback for missing wiki paths', async () => {
+test('asset resolver excludes missing wiki and health-probe paths from SPA fallback', async () => {
     const distDir = await fs.mkdtemp(
         path.join(os.tmpdir(), 'footnote-assets-test-')
     );
@@ -43,12 +44,13 @@ test('asset resolver serves nested wiki files without SPA fallback for missing w
         );
 
         const { resolveAsset } = createAssetResolver(distDir, {
-            spaFallbackExemptPrefixes: ['wiki'],
+            spaFallbackExemptPrefixes: ['wiki', 'healthz'],
         });
         const wikiHome = await resolveAsset('/wiki/');
         const wikiReference = await resolveAsset('/wiki/reference/');
         const machineIndex = await resolveAsset('/wiki/llms.txt');
         const wikiMissing = await resolveAsset('/wiki/missing/');
+        const healthProbeMissing = await resolveAsset('/healthz');
         const wikiMissingWithQuery = await resolveAsset(
             '/wiki/missing?search=docs'
         );
@@ -61,6 +63,7 @@ test('asset resolver serves nested wiki files without SPA fallback for missing w
             '# Footnote Documentation'
         );
         assert.equal(wikiMissing, undefined);
+        assert.equal(healthProbeMissing, undefined);
         assert.equal(wikiMissingWithQuery, undefined);
         assert.equal(await spaFallback?.content.toString(), 'react-app');
         assert.equal(MIME_MAP.get('.woff2'), 'font/woff2');

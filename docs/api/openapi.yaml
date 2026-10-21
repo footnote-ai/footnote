@@ -2229,6 +2229,24 @@ paths:
                     $ref: '#/components/responses/MethodNotAllowed'
                 '500':
                     $ref: '#/components/responses/InternalServerError'
+    /healthz:
+        get:
+            operationId: getHealthz
+            x-codeRefs:
+                - packages/backend/src/http/publicRoutes.ts#registerPublicRoutes
+            summary: Check backend HTTP availability
+            description: >
+                Returns plain-text `ok` when the backend HTTP server can handle requests.
+                Does not indicate readiness of Discord, model providers, TrustGraph, or optional services.
+            tags:
+                - System
+            responses:
+                '200':
+                    description: The backend HTTP server is serving requests.
+                    content:
+                        text/plain:
+                            schema:
+                                type: string
 components:
     schemas:
         ChatRequest:

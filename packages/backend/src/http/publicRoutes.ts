@@ -26,6 +26,7 @@ type RegisterPublicRoutesDeps = {
  * Registers public routes in the Express shell.
  *
  * Public route contract:
+ * - `/healthz`
  * - `/config.json`
  * - `/api/chat/profiles`
  * - Unmatched `/api/chat/*` requests intentionally fall through to downstream
@@ -43,6 +44,11 @@ const registerPublicRoutes = ({
     handleChatProfilesRequest,
     logRequest,
 }: RegisterPublicRoutesDeps): void => {
+    /** @api.operationId: getHealthz @api.path: GET /healthz */
+    app.get('/healthz', (_req, res) => {
+        res.status(200).type('text/plain').send('ok');
+    });
+
     app.all('/config.json', async (req, res) => {
         try {
             await handleRuntimeConfigRequest(req, res);
