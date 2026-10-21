@@ -465,6 +465,8 @@ test('public trace display keeps valid planner fallback while withholding operat
                                 purpose: 'chat_orchestrator_action_selection',
                                 applyOutcome: 'not_applied',
                                 selectedProfileId: 'private-profile',
+                                reviewDecision: 'search',
+                                searchQuery: 'private query',
                                 privateSignal: 'operator-only detail',
                             },
                         },
@@ -488,4 +490,68 @@ test('public trace display keeps valid planner fallback while withholding operat
         JSON.stringify(projected).includes('operator-only detail'),
         false
     );
+    assert.equal(JSON.stringify(projected).includes('private query'), false);
+});
+
+test('public trace display preserves typed assess decisions and redacts private review text', () => {
+    const projected = projectTraceMetadataForDisplay(
+        {
+            ...baseTrace,
+            provenanceAssessment: undefined,
+            trace_target: {},
+            trace_final: {},
+            citations: [],
+            workflow: {
+                workflowId: 'workflow-assess',
+                workflowName: 'reviewed_chat',
+                status: 'completed',
+                terminationReason: 'goal_satisfied',
+                stepCount: 1,
+                maxSteps: 7,
+                maxDurationMs: 10_000,
+                steps: [
+                    {
+                        stepId: 'step-assess',
+                        attempt: 1,
+                        stepKind: 'assess',
+                        startedAt: '2026-10-04T00:00:00.000Z',
+                        finishedAt: '2026-10-04T00:00:00.001Z',
+                        durationMs: 1,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Reviewed the current draft.',
+                            signals: {
+                                reviewDecision: 'search',
+                                reviewReason:
+                                    'private review details must not be public',
+                                searchQuery:
+                                    'private follow-up query must not be public',
+                                searchDeficitsCsv: 'freshness,authority',
+                                traceAlignment: 'misaligned',
+                                traceAlignmentReason:
+                                    'private alignment details must not be public',
+                                finalTemperamentAttribution: 3,
+                            },
+                        },
+                    },
+                ],
+            },
+        },
+        baseTrace.responseId
+    );
+
+    assert.ok(projected?.workflow);
+    assert.equal(TraceDisplayMetadataSchema.safeParse(projected).success, true);
+    assert.deepEqual(projected.workflow.steps[0]?.outcome.signals, {
+        reviewDecision: 'search',
+        reviewReason: '[withheld from public trace]',
+        searchQuery: '[withheld from public trace]',
+        traceAlignment: 'misaligned',
+        traceAlignmentReason: '[withheld from public trace]',
+        finalTemperamentAttribution: 3,
+    });
+    const publicTrace = JSON.stringify(projected);
+    assert.equal(publicTrace.includes('private review details'), false);
+    assert.equal(publicTrace.includes('private follow-up query'), false);
+    assert.equal(publicTrace.includes('private alignment details'), false);
 });

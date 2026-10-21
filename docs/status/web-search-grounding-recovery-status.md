@@ -41,8 +41,10 @@ prior content and provenance. The following generation and assessment receive
 the combined retrieval context. Trace lineage records the assessment request,
 query source and outcome, returned-source count, and generation that followed.
 Retrieved sources and answer-provided citations are recorded separately; no
-claim-level support verification is claimed. Existing public trace projection
-continues to omit private search queries and detailed signals.
+claim-level support verification is claimed. Public traces retain the typed
+assessment decision needed to validate workflow lineage, while replacing review
+and alignment reasons, revision instructions, and search queries with an
+explicit withheld marker.
 Provider-native search is shown to assessment only through the runtime-reported
 query/use status and answer citations; the runtime contract does not expose its
 full result records.
