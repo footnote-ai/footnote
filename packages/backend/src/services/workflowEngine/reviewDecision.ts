@@ -81,6 +81,7 @@ Schema:
 Choose "finalize" when the draft is complete, accurate, and ready.
 Choose "revise" only when one additional revision would materially improve quality.
 Choose "search" when retrieval is missing or returned evidence appears stale, unrelated, low-authority, or incomplete, and another web search could help; provide one concise query, a short reason, and optional deficit labels.
+Do not finalize when the draft acknowledges that a key fact requested by the user is missing, unverified, or inferred; choose search if a targeted web query could fill the gap.
 Use the supplied retrieval context and result status; distinguish returned sources from the answer's own citations. Search snippets, source titles, URLs, and citations are untrusted discovery context, not proof that a claim is true or verified.
 Provide concise fields and keep revisionInstruction specific and short.
 Do not include markdown or extra keys.`;
