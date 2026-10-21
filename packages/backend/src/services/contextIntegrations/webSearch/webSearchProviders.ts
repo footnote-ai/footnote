@@ -16,14 +16,19 @@ import type {
 const withTimeout = async (
     url: string,
     init: Parameters<typeof fetch>[1],
-    timeoutMs: number
+    timeoutMs: number,
+    signal?: AbortSignal
 ): Promise<Response> => {
     const controller = new AbortController();
-    const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+    const onAbort = (): void => controller.abort();
+    if (signal?.aborted) controller.abort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
+    const timeoutHandle = setTimeout(onAbort, timeoutMs);
     try {
         return await fetch(url, { ...init, signal: controller.signal });
     } finally {
         clearTimeout(timeoutHandle);
+        signal?.removeEventListener('abort', onAbort);
     }
 };
 
@@ -32,11 +37,13 @@ const runSearxng = async ({
     query,
     timeoutMs,
     maxResults,
+    signal,
 }: {
     baseUrl: string;
     query: string;
     timeoutMs: number;
     maxResults: number;
+    signal?: AbortSignal;
 }): Promise<WebSearchProviderResult> => {
     const baseUrl = rawBaseUrl.endsWith('/') ? rawBaseUrl : `${rawBaseUrl}/`;
     const endpoint = new URL('search', baseUrl);
@@ -46,7 +53,8 @@ const runSearxng = async ({
         const response = await withTimeout(
             endpoint.toString(),
             { method: 'GET' },
-            timeoutMs
+            timeoutMs,
+            signal
         );
         if (!response.ok) {
             return { ok: false, reasonCode: 'tool_http_error' };
@@ -94,11 +102,13 @@ const runBrave = async ({
     query,
     timeoutMs,
     maxResults,
+    signal,
 }: {
     apiKey: string;
     query: string;
     timeoutMs: number;
     maxResults: number;
+    signal?: AbortSignal;
 }): Promise<WebSearchProviderResult> => {
     const endpoint = new URL('https://api.search.brave.com/res/v1/web/search');
     endpoint.searchParams.set('q', query);
@@ -112,7 +122,8 @@ const runBrave = async ({
                     'X-Subscription-Token': apiKey,
                 },
             },
-            timeoutMs
+            timeoutMs,
+            signal
         );
         if (!response.ok) {
             return { ok: false, reasonCode: 'tool_http_error' };
@@ -157,6 +168,7 @@ const runSerpApi = async ({
     hl,
     timeoutMs,
     maxResults,
+    signal,
 }: {
     apiKey: string;
     query: string;
@@ -165,6 +177,7 @@ const runSerpApi = async ({
     hl: string | null;
     timeoutMs: number;
     maxResults: number;
+    signal?: AbortSignal;
 }): Promise<WebSearchProviderResult> => {
     const endpoint = buildSerpApiSearchUrl({
         q: query,
@@ -177,7 +190,8 @@ const runSerpApi = async ({
         const response = await withTimeout(
             endpoint,
             { method: 'GET' },
-            timeoutMs
+            timeoutMs,
+            signal
         );
         if (!response.ok) {
             return { ok: false, reasonCode: 'tool_http_error' };
@@ -220,6 +234,7 @@ export type WebSearchProviderRegistryEntry = {
         query: string;
         timeoutMs: number;
         maxResults: number;
+        signal?: AbortSignal;
     }) => Promise<WebSearchProviderResult>;
 };
 
@@ -233,27 +248,29 @@ export const buildWebSearchProviderRegistry = (input: {
 }): Record<WebSearchProviderName, WebSearchProviderRegistryEntry> => ({
     searxng: {
         isConfigured: () => Boolean(input.searxngBaseUrl),
-        run: async ({ query, timeoutMs, maxResults }) =>
+        run: async ({ query, timeoutMs, maxResults, signal }) =>
             runSearxng({
                 baseUrl: input.searxngBaseUrl as string,
                 query,
                 timeoutMs,
                 maxResults,
+                signal,
             }),
     },
     brave: {
         isConfigured: () => Boolean(input.braveApiKey),
-        run: async ({ query, timeoutMs, maxResults }) =>
+        run: async ({ query, timeoutMs, maxResults, signal }) =>
             runBrave({
                 apiKey: input.braveApiKey as string,
                 query,
                 timeoutMs,
                 maxResults,
+                signal,
             }),
     },
     serpapi: {
         isConfigured: () => Boolean(input.serpApiKey),
-        run: async ({ query, timeoutMs, maxResults }) =>
+        run: async ({ query, timeoutMs, maxResults, signal }) =>
             runSerpApi({
                 apiKey: input.serpApiKey as string,
                 query,
@@ -262,6 +279,7 @@ export const buildWebSearchProviderRegistry = (input: {
                 hl: input.serpApiHl,
                 timeoutMs,
                 maxResults,
+                signal,
             }),
     },
 });

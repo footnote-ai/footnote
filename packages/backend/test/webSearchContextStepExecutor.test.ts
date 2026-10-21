@@ -67,6 +67,66 @@ test('web search executor returns executed with normalized citations from searxn
             result.evidence?.content.some((line) => line.includes('OpenAI'))
         );
         assert.ok(observedUrl.includes('/custom/base/search'));
+        const payload = result.integrationContext?.payload as {
+            query: string;
+            querySource: string;
+        };
+        assert.equal(payload.query, 'latest OpenAI policy update');
+        assert.equal(payload.querySource, 'planner');
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test('web search executor aborts an in-flight provider request on workflow cancellation', async () => {
+    const originalFetch = globalThis.fetch;
+    const controller = new AbortController();
+    let providerSignal: AbortSignal | undefined;
+    globalThis.fetch = async (_url, init) => {
+        providerSignal = init?.signal ?? undefined;
+        return await new Promise<Response>((_resolve, reject) => {
+            providerSignal?.addEventListener(
+                'abort',
+                () => {
+                    const error = new Error('Aborted');
+                    error.name = 'AbortError';
+                    reject(error);
+                },
+                { once: true }
+            );
+        });
+    };
+    try {
+        const executor = createWebSearchContextStepExecutor({
+            enabled: true,
+            providerPriority: ['searxng'],
+            searxngBaseUrl: 'https://searxng.example',
+            braveApiKey: null,
+            serpApiKey: null,
+            serpApiEngine: null,
+            serpApiGl: null,
+            serpApiHl: null,
+            providerTimeoutMs: 1000,
+            maxResults: 4,
+        });
+        const pending = executor({
+            ...createBaseInput(),
+            signal: controller.signal,
+        });
+        assert.ok(providerSignal);
+        controller.abort();
+        const result = await pending;
+
+        assert.equal(providerSignal?.aborted, true);
+        assert.equal(result.outcome, 'failed');
+        assert.equal(
+            result.executionContext.reasonCode,
+            'tool_execution_error'
+        );
+        const payload = result.integrationContext?.payload as {
+            attempts: Array<{ status: string }>;
+        };
+        assert.equal(payload.attempts[0]?.status, 'failed');
     } finally {
         globalThis.fetch = originalFetch;
     }

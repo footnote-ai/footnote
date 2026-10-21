@@ -17,7 +17,7 @@ import {
     GenerationRuntimeError,
 } from '@footnote/agent-runtime';
 import type { ModelProfile } from '@footnote/contracts';
-import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type { ResponseMetadata, StepRecord } from '@footnote/contracts/policy';
 import { ResponseMetadataSchema } from '@footnote/contracts/web';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import {
@@ -2338,6 +2338,140 @@ test('runChatMessages fails open when review output is invalid', async () => {
         capturedWorkflow?.terminationReason,
         'executor_error_fail_open'
     );
+});
+
+test('runChatMessages labels a regenerated draft unconfirmed when follow-up assessment fails', async () => {
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15_000,
+        },
+        runReviewWorkflow: async (input) =>
+            ({
+                outcome: 'generated',
+                generationResult: {
+                    text: 'Node.js 26 is the latest release line.',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 20,
+                        completionTokens: 10,
+                        totalTokens: 30,
+                    },
+                    provenance: 'Retrieved',
+                    citations: [],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_search_repeated',
+                    workflowName: input.workflowConfig.workflowName,
+                    status: 'degraded',
+                    terminationReason: 'executor_error_fail_open',
+                    stepCount: 5,
+                    maxSteps: 7,
+                    maxSearchRecoveryCycles: 1,
+                    steps: [
+                        {
+                            stepId: 'step_generate_1',
+                            attempt: 1,
+                            stepKind: 'generate',
+                            startedAt: TEST_TIMESTAMP,
+                            finishedAt: TEST_TIMESTAMP,
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Generated initial draft response.',
+                            },
+                        },
+                        {
+                            stepId: 'step_assess_1',
+                            parentStepId: 'step_generate_1',
+                            attempt: 1,
+                            stepKind: 'assess',
+                            startedAt: TEST_TIMESTAMP,
+                            finishedAt: TEST_TIMESTAMP,
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Assessment requested a new search.',
+                                signals: {
+                                    reviewDecision: 'search',
+                                    reviewReason:
+                                        'The current source query already ran.',
+                                    searchQuery: 'latest Node.js release lines',
+                                    searchRecoveryOutcome: 'requested',
+                                },
+                            },
+                        },
+                        {
+                            stepId: 'step_tool_1',
+                            parentStepId: 'step_assess_1',
+                            attempt: 1,
+                            stepKind: 'tool',
+                            startedAt: TEST_TIMESTAMP,
+                            finishedAt: TEST_TIMESTAMP,
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Follow-up retrieval completed.',
+                                signals: {
+                                    searchRecoveryOutcome: 'executed',
+                                    searchQuery: 'latest Node.js release lines',
+                                },
+                            },
+                        },
+                        {
+                            stepId: 'step_generate_2',
+                            parentStepId: 'step_tool_1',
+                            attempt: 1,
+                            stepKind: 'generate',
+                            startedAt: TEST_TIMESTAMP,
+                            finishedAt: TEST_TIMESTAMP,
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Generated from retrieved evidence.',
+                                signals: {
+                                    searchRecoveryOutcome: 'regenerated',
+                                },
+                            },
+                        },
+                        {
+                            stepId: 'step_assess_2',
+                            parentStepId: 'step_generate_2',
+                            attempt: 1,
+                            stepKind: 'assess',
+                            startedAt: TEST_TIMESTAMP,
+                            finishedAt: TEST_TIMESTAMP,
+                            durationMs: 1,
+                            outcome: {
+                                status: 'failed',
+                                summary: 'Follow-up assessment failed.',
+                            },
+                        },
+                    ] as StepRecord[],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [
+            { role: 'user', content: 'What is the current Node.js LTS?' },
+        ],
+        conversationSnapshot: 'What is the current Node.js LTS?',
+        contextEnvelope: TEST_CONTEXT_ENVELOPE,
+    });
+
+    assert.match(
+        response.message,
+        /^Node\.js 26 is the latest release line\./u
+    );
+    assert.match(response.message, /current-fact claims.*unconfirmed/u);
+    assert.equal(response.answerProvenanceEligible, true);
 });
 
 test('runChatMessages skips review loop when enabled but maxIterations is zero', async () => {

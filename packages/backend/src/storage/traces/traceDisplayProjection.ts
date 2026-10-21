@@ -303,6 +303,9 @@ const projectPublicWorkflow = (workflow: WorkflowRecord): WorkflowRecord => ({
     stepCount: workflow.stepCount,
     maxSteps: workflow.maxSteps,
     maxDurationMs: workflow.maxDurationMs,
+    ...(workflow.maxSearchRecoveryCycles !== undefined && {
+        maxSearchRecoveryCycles: workflow.maxSearchRecoveryCycles,
+    }),
     ...(workflow.effectiveLimits !== undefined && {
         effectiveLimits: workflow.effectiveLimits.map((limit) => ({
             key: limit.key,

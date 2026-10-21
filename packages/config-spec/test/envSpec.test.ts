@@ -63,6 +63,10 @@ test('workflow allowance overrides use canonical YAML paths', () => {
             ['chat-workflow', 'max-deliberation-calls-override'],
         ],
         [
+            'CHAT_WORKFLOW_MAX_SEARCH_RECOVERY_CYCLES',
+            ['chat-workflow', 'max-search-recovery-cycles'],
+        ],
+        [
             'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE',
             ['chat-workflow', 'max-tokens-total-override'],
         ],

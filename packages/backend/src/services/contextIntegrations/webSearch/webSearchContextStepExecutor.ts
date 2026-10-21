@@ -124,7 +124,7 @@ export const createWebSearchContextStepExecutor = ({
         serpApiGl,
         serpApiHl,
     });
-    return async ({ request }): Promise<ContextStepResult> => {
+    return async ({ request, signal }): Promise<ContextStepResult> => {
         if (!enabled) {
             return buildSkippedContextStepResult({
                 toolName: request.integrationName,
@@ -180,13 +180,16 @@ export const createWebSearchContextStepExecutor = ({
                 query: input.query,
                 timeoutMs: providerTimeoutMs,
                 maxResults,
+                signal,
             });
             const durationMs = Math.max(0, Date.now() - providerStartedAt);
             if (!result.ok) {
                 attemptRecorder.failed(provider, result.reasonCode, durationMs);
+                if (signal?.aborted) break;
                 continue;
             }
             attemptRecorder.completed(provider, result.records, durationMs);
+            if (signal?.aborted) break;
             if (result.records.length > 0) {
                 providerCandidateRecords.push(...result.records);
                 if (providerRecords.length === 0) {
@@ -264,6 +267,8 @@ export const createWebSearchContextStepExecutor = ({
                         kind: 'web_search',
                         version: 'v1',
                         payload: {
+                            query: input.query,
+                            querySource: input.querySource ?? 'planner',
                             attempts,
                             searchHints,
                             ...(repositoryScopeAudit !== undefined && {
@@ -282,6 +287,8 @@ export const createWebSearchContextStepExecutor = ({
                         kind: 'web_search',
                         version: 'v1',
                         payload: {
+                            query: input.query,
+                            querySource: input.querySource ?? 'planner',
                             attempts,
                             searchHints,
                             ...(repositoryScopeAudit !== undefined && {
@@ -299,6 +306,8 @@ export const createWebSearchContextStepExecutor = ({
                     kind: 'web_search',
                     version: 'v1',
                     payload: {
+                        query: input.query,
+                        querySource: input.querySource ?? 'planner',
                         attempts,
                         searchHints,
                         ...(repositoryScopeAudit !== undefined && {
@@ -320,6 +329,8 @@ export const createWebSearchContextStepExecutor = ({
                 kind: 'web_search',
                 version: 'v1',
                 payload: {
+                    query: input.query,
+                    querySource: input.querySource ?? 'planner',
                     attempts,
                     searchHints,
                     ...(repositoryScopeAudit !== undefined && {

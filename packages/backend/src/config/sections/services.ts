@@ -259,6 +259,13 @@ export const buildServiceSections = (
             6,
             warn
         ),
+        maxSearchRecoveryCycles: parseOptionalWorkflowLimitOverride(
+            env.CHAT_WORKFLOW_MAX_SEARCH_RECOVERY_CYCLES,
+            'CHAT_WORKFLOW_MAX_SEARCH_RECOVERY_CYCLES',
+            0,
+            2,
+            warn
+        ),
         maxTokensTotalOverride: parseOptionalWorkflowLimitOverride(
             env.CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE,
             'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE',

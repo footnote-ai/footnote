@@ -424,6 +424,7 @@ const TOPIC_HINT_MAX_COUNT = 5;
 const TOPIC_HINT_MAX_LENGTH = 40;
 const CURRENT_WINDOW_MESSAGE_LIMIT = 6;
 const EXPANDED_RECENT_MESSAGE_LIMIT = 20;
+const MAX_SEARCH_QUERY_LENGTH = 512;
 
 /**
  * Coerces arbitrary planner output into the SafetyTier contract.
@@ -505,6 +506,29 @@ const normalizeSearchContextSize = (
     }
 
     return 'low';
+};
+
+const repairPlannerSearchQuery = (
+    request: PostChatRequest
+): string | undefined => {
+    const authoredMessages = [
+        request.latestUserInput,
+        ...request.conversation
+            .filter((message) => message.role === 'user')
+            .reverse()
+            .map((message) => message.content),
+    ];
+    const candidate = authoredMessages
+        .map((message) => message.replace(/\s+/gu, ' ').trim())
+        .find((message) => message.length > 0 && /[\p{L}\p{N}]/u.test(message));
+    if (candidate === undefined) return undefined;
+    if (candidate.length <= MAX_SEARCH_QUERY_LENGTH) return candidate;
+    return (
+        candidate
+            .slice(0, MAX_SEARCH_QUERY_LENGTH)
+            .replace(/\s+\S*$/u, '')
+            .trim() || candidate.slice(0, MAX_SEARCH_QUERY_LENGTH).trim()
+    );
 };
 
 /**
@@ -663,7 +687,8 @@ const normalizeWeatherLocation = (
 };
 
 const normalizeToolIntent = (
-    value: unknown
+    value: unknown,
+    request: PostChatRequest
 ): ChatGenerationPlan['toolIntent'] | undefined => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return undefined;
@@ -718,18 +743,28 @@ const normalizeToolIntent = (
 
     // generation.search is the canonical planner path for search. This branch is
     // kept as a compatibility guard for older or stale planner outputs that still
-    // emit toolIntent.web_search. It validates and normalizes the payload rather
-    // than treating arbitrary input as executable.
+    // emit toolIntent.web_search. Repair is limited to an explicitly requested
+    // search and user-authored text; other malformed tool requests stay disabled.
     if (toolName === 'web_search') {
-        const input = candidate.input as Record<string, unknown> | undefined;
-        if (!input || typeof input !== 'object') {
-            return undefined;
+        const input =
+            candidate.input !== null &&
+            typeof candidate.input === 'object' &&
+            !Array.isArray(candidate.input)
+                ? (candidate.input as Record<string, unknown>)
+                : {};
+        let query = typeof input.query === 'string' ? input.query.trim() : '';
+        let querySource: ChatGenerationSearch['querySource'] = 'planner';
+        if (query.length === 0 || query.length > MAX_SEARCH_QUERY_LENGTH) {
+            const repairedQuery = repairPlannerSearchQuery(request);
+            if (repairedQuery !== undefined) {
+                query = repairedQuery;
+                querySource = 'backend_repair';
+            }
         }
-        const query = input.query;
-        if (typeof query !== 'string' || query.trim().length === 0) {
+        if (query.length === 0 || query.length > MAX_SEARCH_QUERY_LENGTH) {
             logger.warn('web_search: missing or invalid query', {
                 toolName: 'web_search',
-                hasQuery: typeof query === 'string',
+                hasQuery: query.length > 0,
             });
             return undefined;
         }
@@ -749,7 +784,8 @@ const normalizeToolIntent = (
             toolName: 'web_search',
             requested,
             input: {
-                query: query.trim(),
+                query,
+                querySource,
                 ...(contextSize !== undefined && { contextSize }),
                 ...(typeof input.intent === 'string' && {
                     intent: input.intent,
@@ -1228,7 +1264,10 @@ const normalizeGeneration = (
     } else if (candidate?.githubSource !== undefined) {
         correctionCodes.push('github_source_invalid');
     }
-    const normalizedToolIntent = normalizeToolIntent(candidate?.toolIntent);
+    const normalizedToolIntent = normalizeToolIntent(
+        candidate?.toolIntent,
+        request
+    );
     if (normalizedToolIntent) {
         baseGeneration.toolIntent = normalizedToolIntent;
     } else if (candidate?.toolIntent !== undefined) {
@@ -1245,29 +1284,37 @@ const normalizeGeneration = (
         };
     }
 
-    const rawQuery =
+    let rawQuery =
         typeof candidate.search.query === 'string'
             ? candidate.search.query.trim()
             : '';
-    if (!rawQuery) {
-        correctionCodes.push('search_query_invalid');
-        if (
-            !reasoning.includes('search was disabled safely') &&
-            !reasoningSuffixes.some((suffix) =>
-                suffix.includes('search was disabled safely')
-            )
-        ) {
-            reasoningSuffixes.push(
-                'The planner requested search without a usable query, so search was disabled safely.'
-            );
+    let querySource: ChatGenerationSearch['querySource'] = 'planner';
+    if (!rawQuery || rawQuery.length > MAX_SEARCH_QUERY_LENGTH) {
+        const repairedQuery = repairPlannerSearchQuery(request);
+        if (repairedQuery !== undefined) {
+            rawQuery = repairedQuery;
+            querySource = 'backend_repair';
+            correctionCodes.push('search_query_repaired');
+        } else {
+            correctionCodes.push('search_query_invalid');
+            if (
+                !reasoning.includes('search was disabled safely') &&
+                !reasoningSuffixes.some((suffix) =>
+                    suffix.includes('search was disabled safely')
+                )
+            ) {
+                reasoningSuffixes.push(
+                    'The planner requested search without a usable query, so search was disabled safely.'
+                );
+            }
+            return {
+                generation: baseGeneration,
+                correctionCodes,
+                ...(reasoningSuffixes.length > 0 && {
+                    reasoningSuffix: reasoningSuffixes.join(' '),
+                }),
+            };
         }
-        return {
-            generation: baseGeneration,
-            correctionCodes,
-            ...(reasoningSuffixes.length > 0 && {
-                reasoningSuffix: reasoningSuffixes.join(' '),
-            }),
-        };
     }
 
     const searchIntent = normalizeSearchIntent(candidate.search.intent);
@@ -1283,6 +1330,7 @@ const normalizeGeneration = (
     // context, so the user does not need to include the slug.
     const search = {
         query: rawQuery,
+        querySource,
         contextSize: normalizeSearchContextSize(
             candidate.search.contextSize,
             searchIntent

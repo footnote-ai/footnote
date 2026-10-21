@@ -138,6 +138,7 @@ test('workflow overrides are loaded from canonical YAML, not process environment
             '  max-workflow-steps-override: 12',
             '  max-tool-calls-override: 5',
             '  max-deliberation-calls-override: 6',
+            '  max-search-recovery-cycles: 2',
             '  max-tokens-total-override: 512000',
             '  max-duration-ms-override: 300000',
             '',
@@ -156,6 +157,7 @@ test('workflow overrides are loaded from canonical YAML, not process environment
     assert.equal(config.chatWorkflow.maxWorkflowStepsOverride, 12);
     assert.equal(config.chatWorkflow.maxToolCallsOverride, 5);
     assert.equal(config.chatWorkflow.maxDeliberationCallsOverride, 6);
+    assert.equal(config.chatWorkflow.maxSearchRecoveryCycles, 2);
     assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
     assert.equal(config.chatWorkflow.maxDurationMsOverride, 300_000);
 });
@@ -169,6 +171,7 @@ test('invalid optional workflow override values warn and fail open without block
             '  max-workflow-steps-override: .inf',
             '  max-tool-calls-override: "five"',
             '  max-deliberation-calls-override: 7',
+            '  max-search-recovery-cycles: 3',
             '  max-tokens-total-override: 512001',
             '  max-duration-ms-override: 300001',
             '',
@@ -186,13 +189,14 @@ test('invalid optional workflow override values warn and fail open without block
     assert.equal(config.chatWorkflow.maxWorkflowStepsOverride, undefined);
     assert.equal(config.chatWorkflow.maxToolCallsOverride, undefined);
     assert.equal(config.chatWorkflow.maxDeliberationCallsOverride, undefined);
+    assert.equal(config.chatWorkflow.maxSearchRecoveryCycles, undefined);
     assert.equal(config.chatWorkflow.maxTokensTotalOverride, undefined);
     assert.equal(config.chatWorkflow.maxDurationMsOverride, undefined);
     assert.equal(
         warnings.filter((message) =>
             /workflow limit|CHAT_WORKFLOW/.test(message)
         ).length,
-        5
+        6
     );
 });
 

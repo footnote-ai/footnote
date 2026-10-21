@@ -152,6 +152,7 @@ export type RuntimeConfig = {
         maxWorkflowStepsOverride?: number;
         maxToolCallsOverride?: number;
         maxDeliberationCallsOverride?: number;
+        maxSearchRecoveryCycles?: number;
         maxTokensTotalOverride?: number;
         maxDurationMsOverride?: number;
         presentation: {

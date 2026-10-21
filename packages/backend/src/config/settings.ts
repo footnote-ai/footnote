@@ -263,6 +263,7 @@ const OPTIONAL_WORKFLOW_OVERRIDE_PATHS = new Set([
     'chat-workflow.max-workflow-steps-override',
     'chat-workflow.max-tool-calls-override',
     'chat-workflow.max-deliberation-calls-override',
+    'chat-workflow.max-search-recovery-cycles',
     'chat-workflow.max-tokens-total-override',
     'chat-workflow.max-duration-ms-override',
 ]);

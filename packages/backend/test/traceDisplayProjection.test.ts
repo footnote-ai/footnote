@@ -110,6 +110,7 @@ test('public trace display allowlists workflow receipts while omitting operator 
                 stepCount: 1,
                 maxSteps: 4,
                 maxDurationMs: 10_000,
+                maxSearchRecoveryCycles: 2,
                 effectiveLimits: [
                     {
                         key: 'maxWorkflowSteps',
@@ -199,6 +200,8 @@ test('public trace display allowlists workflow receipts while omitting operator 
                                 routingChainAttemptCount: 1,
                                 routingChainAttemptsJson: '[]',
                                 privateSignal: 'private signal value',
+                                searchQuery: 'private follow-up query',
+                                searchDeficitsCsv: 'freshness,relevance',
                             },
                             recommendations: ['private recommendation body'],
                         },
@@ -285,6 +288,7 @@ test('public trace display allowlists workflow receipts while omitting operator 
         false
     );
     assert.equal(projected.workflow.userMemory?.includedItemCount, 1);
+    assert.equal(projected.workflow.maxSearchRecoveryCycles, 2);
     assert.equal(
         projected.workflow.effectiveLimits?.[0]?.key,
         'maxWorkflowSteps'
@@ -299,6 +303,10 @@ test('public trace display allowlists workflow receipts while omitting operator 
     });
     assert.equal(
         'privateSignal' in (projected.workflow.steps[0]?.outcome.signals ?? {}),
+        false
+    );
+    assert.equal(
+        JSON.stringify(projected.workflow).includes('private follow-up query'),
         false
     );
     assert.deepEqual(projected.workflow.steps[0]?.outcome.artifacts, [

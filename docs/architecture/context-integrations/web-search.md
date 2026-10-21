@@ -47,6 +47,33 @@ If no provider returns records:
 - any failed -> `failed/tool_execution_error`
 - otherwise -> `skipped/tool_not_used`
 
+## Assessment-triggered recovery
+
+The reviewed workflow can ask for one more search after assessment when
+retrieval is missing or its returned sources appear stale, unrelated, or
+incomplete. This reuses the existing `retrieve` Step and web-search executor;
+the assessment decision is typed as `search`, not represented as a new Step.
+The backend validates the query, rejects repeats, and checks the resolved
+Execution Contract before running it. A recovery retrieval runs only that
+approved query, not the initial request batch or unrelated integrations.
+Assessment and recovery regeneration do not inherit a provider-native search
+hint; an earlier native search counts as repeated work only when the runtime
+reports that retrieval was actually used.
+
+Results and provenance from earlier retrievals remain in the named `evidence`
+Result, with follow-up results appended. The next generation and assessment
+receive the combined untrusted context. Traces distinguish sources returned by
+retrieval from citations emitted by the answer; neither a search result nor a
+citation alone proves that a source supports a claim. If the provider is
+unavailable, the request is cancelled, or a limit blocks recovery, the workflow
+keeps the last successful draft and records the reason.
+
+If the planner explicitly requests search but leaves the query blank or too
+long, the backend may repair it deterministically from the latest
+user-authored text. It does not call another model or infer search intent when
+the planner did not request it. The query source is recorded as `planner`,
+`backend_repair`, or `assessment` in private workflow lineage.
+
 ## Provider model
 
 Supported providers:
@@ -103,19 +130,25 @@ If a provider is in priority but missing credentials/config, it is skipped as
 
 ### Environment variables
 
-| Variable                                                   | What it controls                                                             | Typical value / notes                                                  |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `CHAT_CONTEXT_WEB_SEARCH_ENABLED`                          | Master on/off switch for `web_search` context-step execution.                | `true` (default). Set `false` to disable integration globally.         |
-| `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY`                | Ordered fallback list of providers.                                          | `searxng,brave,serpapi` (default).                                     |
-| `CHAT_CONTEXT_WEB_SEARCH_SEARXNG_BASE_URL`                 | Base URL for SearXNG API calls.                                              | Example: `https://searxng.example`                                     |
-| `CHAT_CONTEXT_WEB_SEARCH_BRAVE_API_KEY`                    | Brave Search API key.                                                        | Required only if `brave` is in priority and expected to run.           |
-| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_API_KEY`                  | SerpAPI key for web search provider.                                         | Required only if `serpapi` is in priority and expected to run.         |
-| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_ENGINE`                   | Optional SerpAPI engine override.                                            | Defaults to `google` if unset.                                         |
-| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_GL`                       | Optional SerpAPI country hint (`gl`).                                        | Example: `us`                                                          |
-| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_HL`                       | Optional SerpAPI language hint (`hl`).                                       | Example: `en`                                                          |
-| `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_TIMEOUT_MS`              | Timeout budget per provider attempt.                                         | `12000` (default). Lower for stricter latency, higher for resilience.  |
-| `CHAT_CONTEXT_WEB_SEARCH_MAX_RESULTS`                      | Max normalized results kept from a successful provider response.             | `6` (default). Keep small to avoid prompt bloat.                       |
-| `CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED` | Allows optional OpenAI-native follow-up search from generated `searchHints`. | `true` (default). Set `false` for stricter external-provider-only use. |
+| Variable                                                   | What it controls                                                                                                | Typical value / notes                                                  |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `CHAT_CONTEXT_WEB_SEARCH_ENABLED`                          | Master on/off switch for `web_search` context-step execution.                                                   | `true` (default). Set `false` to disable integration globally.         |
+| `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_PRIORITY`                | Ordered fallback list of providers.                                                                             | `searxng,brave,serpapi` (default).                                     |
+| `CHAT_CONTEXT_WEB_SEARCH_SEARXNG_BASE_URL`                 | Base URL for SearXNG API calls.                                                                                 | Example: `https://searxng.example`                                     |
+| `CHAT_CONTEXT_WEB_SEARCH_BRAVE_API_KEY`                    | Brave Search API key.                                                                                           | Required only if `brave` is in priority and expected to run.           |
+| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_API_KEY`                  | SerpAPI key for web search provider.                                                                            | Required only if `serpapi` is in priority and expected to run.         |
+| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_ENGINE`                   | Optional SerpAPI engine override.                                                                               | Defaults to `google` if unset.                                         |
+| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_GL`                       | Optional SerpAPI country hint (`gl`).                                                                           | Example: `us`                                                          |
+| `CHAT_CONTEXT_WEB_SEARCH_SERPAPI_HL`                       | Optional SerpAPI language hint (`hl`).                                                                          | Example: `en`                                                          |
+| `CHAT_CONTEXT_WEB_SEARCH_PROVIDER_TIMEOUT_MS`              | Timeout budget per provider attempt.                                                                            | `12000` (default). Lower for stricter latency, higher for resilience.  |
+| `CHAT_CONTEXT_WEB_SEARCH_MAX_RESULTS`                      | Max normalized results kept from a successful provider response.                                                | `6` (default). Keep small to avoid prompt bloat.                       |
+| `CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED` | Allows optional OpenAI-native follow-up search from generated `searchHints`.                                    | `true` (default). Set `false` for stricter external-provider-only use. |
+| `CHAT_WORKFLOW_MAX_SEARCH_RECOVERY_CYCLES`                 | Maximum assessment-triggered search recoveries; clamped by the resolved workflow and Execution Contract limits. | `0` to `2`; mode defaults are Express `0`, Balanced `1`, Grounded `1`. |
+
+The same value can be set in canonical `footnote.yaml` as
+`chat-workflow.max-search-recovery-cycles`. There is no separate enable switch
+or recovery-specific UI. Configuring `2` only permits two cycles when the
+resolved step, tool, review, and deliberation budgets also leave room for them.
 
 ### Recommended setups
 
@@ -138,3 +171,5 @@ provider attempt, not block the request.
   `CHAT_CONTEXT_WEB_SEARCH_*` variable.
 - Keep provider outcomes visible via attempt metadata and reason codes.
 - Keep provider output bounded and serializable for trace/provenance surfaces.
+- Treat recovered search results as untrusted discovery context, not verified
+  support; keep query and source detail behind existing trace privacy rules.

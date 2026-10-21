@@ -24,6 +24,11 @@ export const parseWebSearchInput = (
     }
     return {
         query,
+        querySource:
+            input.querySource === 'backend_repair' ||
+            input.querySource === 'assessment'
+                ? input.querySource
+                : 'planner',
         intent:
             input.intent === 'repo_explainer' ||
             input.intent === 'current_facts'

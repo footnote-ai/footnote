@@ -1388,6 +1388,8 @@ const StepRecordSchema = z
             assessSignals !== undefined
                 ? assessSignals.revisionInstruction
                 : undefined;
+        const searchQuery =
+            assessSignals !== undefined ? assessSignals.searchQuery : undefined;
 
         if (
             typeof reviewDecision !== 'string' ||
@@ -1399,7 +1401,7 @@ const StepRecordSchema = z
                 code: z.ZodIssueCode.custom,
                 path: ['outcome', 'signals', 'reviewDecision'],
                 message:
-                    'executed assess steps must include reviewDecision: "finalize" | "revise".',
+                    'executed assess steps must include reviewDecision: "finalize" | "revise" | "search".',
             });
         }
 
@@ -1425,6 +1427,20 @@ const StepRecordSchema = z
                 path: ['outcome', 'signals', 'revisionInstruction'],
                 message:
                     'executed assess steps must include non-empty revisionInstruction when reviewDecision is "revise".',
+            });
+        }
+
+        if (
+            reviewDecision === 'search' &&
+            (typeof searchQuery !== 'string' ||
+                searchQuery.trim().length === 0 ||
+                searchQuery.length > 512)
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['outcome', 'signals', 'searchQuery'],
+                message:
+                    'executed assess steps must include a bounded non-empty searchQuery when reviewDecision is "search".',
             });
         }
 
@@ -1555,6 +1571,12 @@ const WorkflowRecordSchema = z
         stepCount: z.number().int().nonnegative(),
         maxSteps: z.number().int().positive(),
         maxDurationMs: z.number().int().positive().optional(),
+        maxSearchRecoveryCycles: z
+            .number()
+            .int()
+            .nonnegative()
+            .max(2)
+            .optional(),
         effectiveLimits: z
             .array(
                 z

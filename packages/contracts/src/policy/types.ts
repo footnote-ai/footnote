@@ -693,6 +693,10 @@ export const WORKFLOW_TERMINATION_REASONS = [
     'transition_blocked_by_policy',
     'max_tool_calls_reached',
     'max_deliberation_calls_reached',
+    'max_search_recovery_cycles_reached',
+    'search_query_repeated',
+    'search_recovery_unavailable',
+    'search_recovery_no_results',
     'executor_error_fail_open',
     'provider_cancelled',
     'provider_incomplete',
@@ -918,7 +922,11 @@ export type WorkflowReviewParseFailureSignals = StepSignals & {
  * Canonical assess-step decisions emitted by Reviewed profiles.
  * These are advisory outputs used by workflow transitions, not policy authority.
  */
-export const BOUNDED_REVIEW_ASSESS_DECISIONS = ['finalize', 'revise'] as const;
+export const BOUNDED_REVIEW_ASSESS_DECISIONS = [
+    'finalize',
+    'revise',
+    'search',
+] as const;
 
 export type BoundedReviewAssessDecision =
     (typeof BOUNDED_REVIEW_ASSESS_DECISIONS)[number];
@@ -933,6 +941,9 @@ export type BoundedReviewAssessCoreSignals = {
     reviewDecision: BoundedReviewAssessDecision;
     reviewReason: string;
     revisionInstruction?: string;
+    searchQuery?: string;
+    searchDeficitsCsv?: string;
+    searchRecoveryOutcome?: string;
     refinementRequested?: boolean;
     moduleHintCount?: number;
     moduleHintIdsCsv?: string;
@@ -1182,6 +1193,8 @@ export type WorkflowRecord = {
     maxSteps: number;
     /** Omitted when the workflow does not have a configured wall-clock limit. */
     maxDurationMs?: number;
+    /** Effective assessment-triggered retrieval allowance after all runtime limits are resolved. */
+    maxSearchRecoveryCycles?: number;
     effectiveLimits?: WorkflowEffectiveLimit[];
     limitStop?: WorkflowLimitStop;
     results?: WorkflowResultRecord[];
@@ -1252,6 +1265,7 @@ export type WorkflowModeBehavior = {
     maxPlanCycles?: number;
     maxReviewCycles?: number;
     maxDeliberationCalls: number;
+    maxSearchRecoveryCycles?: number;
 };
 
 export type WorkflowModeDecision = {

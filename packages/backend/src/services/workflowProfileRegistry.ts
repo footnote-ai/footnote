@@ -142,6 +142,7 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         maxPlanCycles: 1,
         maxReviewCycles: 0,
         maxDeliberationCalls: 1,
+        maxSearchRecoveryCycles: 0,
     },
     balanced: {
         executionContractPresetId: 'balanced',
@@ -151,10 +152,11 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         reviewPass: 'included',
         reviseStep: 'allowed',
         evidencePosture: 'balanced',
-        maxWorkflowSteps: 4,
+        maxWorkflowSteps: 7,
         maxPlanCycles: 1,
-        maxReviewCycles: 1,
-        maxDeliberationCalls: 2,
+        maxReviewCycles: 2,
+        maxDeliberationCalls: 3,
+        maxSearchRecoveryCycles: 1,
     },
     grounded: {
         executionContractPresetId: 'quality-grounded',
@@ -164,10 +166,11 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         reviewPass: 'included',
         reviseStep: 'allowed',
         evidencePosture: 'strict',
-        maxWorkflowSteps: 8,
+        maxWorkflowSteps: 10,
         maxPlanCycles: 1,
         maxReviewCycles: 3,
         maxDeliberationCalls: 4,
+        maxSearchRecoveryCycles: 1,
     },
 };
 
@@ -521,7 +524,10 @@ const resolveWorkflowDeliberationLimits = (
     return {
         maxPlanCycles: planCycles,
         maxReviewCycles: reviewCycles,
-        maxDeliberationCalls: planCycles + reviewCycles,
+        maxDeliberationCalls: hasTotalOverride
+            ? planCycles + reviewCycles
+            : (input.executionContractMaxDeliberationCalls ??
+              planCycles + reviewCycles),
     };
 };
 
@@ -599,6 +605,7 @@ export type ResolvedWorkflowRuntimeConfig = {
     profileContract: WorkflowProfileContract;
     workflowExecutionEnabled: boolean;
     workflowExecutionLimits: WorkflowProfileRuntime['defaultLimits'];
+    maxSearchRecoveryCycles: number;
 };
 
 /**
@@ -624,6 +631,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
     maxWorkflowStepsOverride?: number;
     maxToolCallsOverride?: number;
     maxDeliberationCallsOverride?: number;
+    maxSearchRecoveryCycles?: number;
     maxTokensTotalOverride?: number;
     maxDurationMsOverride?: number;
     requestMaxReviewCycles?: number;
@@ -683,7 +691,8 @@ export const resolveWorkflowRuntimeConfig = (input: {
         modeMaxPlanCycles,
         modeMaxReviewCycles,
         executionContractMaxDeliberationCalls:
-            executionContract?.limits.maxDeliberationCalls,
+            executionContract?.limits.maxDeliberationCalls ??
+            modeDecision.behavior.maxDeliberationCalls,
         maxDeliberationCallsOverride: input.maxDeliberationCallsOverride,
         assessmentEnabled: workflowProfile.policy.enableAssessment !== false,
         maxIterations: input.maxIterations,
@@ -728,6 +737,21 @@ export const resolveWorkflowRuntimeConfig = (input: {
         ),
     };
 
+    const maxSearchRecoveryCycles = Math.min(
+        sanitizeNonNegativeInteger(
+            input.maxSearchRecoveryCycles ??
+                modeDecision.behavior.maxSearchRecoveryCycles ??
+                0,
+            0
+        ),
+        Math.max(0, (workflowExecutionLimits.maxReviewCycles ?? 0) - 1),
+        Math.floor(
+            Math.max(0, workflowExecutionLimits.maxWorkflowSteps - 4) / 3
+        ),
+        workflowExecutionLimits.maxToolCalls,
+        Math.max(0, workflowExecutionLimits.maxDeliberationCalls - 2)
+    );
+
     return {
         requestedModeId:
             normalizeRequestedModeId(input.modeId) ?? DEFAULT_WORKFLOW_MODE_ID,
@@ -738,5 +762,6 @@ export const resolveWorkflowRuntimeConfig = (input: {
         profileContract: profileResolution.profileContract,
         workflowExecutionEnabled,
         workflowExecutionLimits,
+        maxSearchRecoveryCycles,
     };
 };

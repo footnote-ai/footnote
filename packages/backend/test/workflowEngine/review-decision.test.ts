@@ -16,12 +16,23 @@ import {
 } from '../../src/services/workflowEngine/reviewDecision.js';
 
 test('native review schema is strict and requires nullable optional fields', () => {
-    const schema = REVIEW_DECISION_STRUCTURED_OUTPUT.schema;
+    const schema = REVIEW_DECISION_STRUCTURED_OUTPUT.schema as {
+        additionalProperties?: boolean;
+        required?: string[];
+        properties?: Record<
+            string,
+            {
+                additionalProperties?: boolean;
+                required?: string[];
+            }
+        >;
+    };
     assert.equal(schema.additionalProperties, false);
     assert.deepEqual(schema.required, [
         'reviewDecision',
         'reviewReason',
         'revisionInstruction',
+        'search',
         'traceAlignment',
         'traceAlignmentReason',
         'finalTemperament',
@@ -30,10 +41,12 @@ test('native review schema is strict and requires nullable optional fields', () 
         'routingHints',
     ]);
 
-    const properties = schema.properties;
+    const properties = schema.properties ?? {};
     assert.deepEqual(properties.revisionInstruction, {
         type: ['string', 'null'],
     });
+    assert.equal(properties.search?.additionalProperties, false);
+    assert.deepEqual(properties.search?.required, ['query']);
     assert.equal(properties.finalTemperament?.additionalProperties, false);
     assert.equal(properties.concerns?.additionalProperties, false);
 });
@@ -61,6 +74,53 @@ test('parseReviewDecisionOutputResult parses revise decisions and trims instruct
     if (result.isOk()) {
         assert.equal(result.value.reviewDecision, 'revise');
         assert.equal(result.value.revisionInstruction, 'Tighten wording.');
+    }
+});
+
+test('parseReviewDecisionOutputResult parses a bounded search decision', () => {
+    const result = parseReviewDecisionOutputResult(
+        '{"reviewDecision":"search","reviewReason":"The available results are stale.","search":{"query":"current official Node.js release lines","deficits":["freshness","authority"]}}'
+    );
+
+    assert.equal(result.isOk(), true);
+    if (result.isOk()) {
+        assert.deepEqual(result.value, {
+            reviewDecision: 'search',
+            reviewReason: 'The available results are stale.',
+            search: {
+                query: 'current official Node.js release lines',
+                deficits: ['freshness', 'authority'],
+            },
+        });
+    }
+});
+
+test('parseReviewDecisionOutputResult permits omitted search deficit labels', () => {
+    const result = parseReviewDecisionOutputResult(
+        '{"reviewDecision":"search","reviewReason":"The available results are stale.","search":{"query":"current official Node.js release lines"}}'
+    );
+
+    assert.equal(result.isOk(), true);
+    if (result.isOk()) {
+        assert.deepEqual(result.value.search, {
+            query: 'current official Node.js release lines',
+        });
+    }
+});
+
+test('parseReviewDecisionOutputResult rejects unusable search queries', () => {
+    for (const query of ['', '   ', 'q'.repeat(513)]) {
+        const result = parseReviewDecisionOutputResult(
+            JSON.stringify({
+                reviewDecision: 'search',
+                reviewReason: 'The evidence is weak.',
+                search: { query },
+            })
+        );
+        assert.equal(result.isErr(), true);
+        if (result.isErr()) {
+            assert.equal(result.error.reason, 'schema_invalid');
+        }
     }
 });
 

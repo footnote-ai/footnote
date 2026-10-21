@@ -11,6 +11,7 @@ export type WebSearchProviderName = 'searxng' | 'brave' | 'serpapi';
 
 export type WebSearchInput = {
     query: string;
+    querySource?: 'planner' | 'backend_repair' | 'assessment';
     intent?: 'repo_explainer' | 'current_facts';
     contextSize?: 'low' | 'medium' | 'high';
     repoHints?: string[];
@@ -43,6 +44,8 @@ export type WebSearchProviderAttempt = {
 };
 
 export type WebSearchContextStepIntegrationPayload = {
+    query: string;
+    querySource: 'planner' | 'backend_repair' | 'assessment';
     attempts: WebSearchProviderAttempt[];
     searchHints: WebSearchHint[];
     repositoryScope?: {

@@ -37,6 +37,7 @@ const buildWebSearchToolIntent = (
                           : generation.search.query,
                   intent: generation.search.intent,
                   contextSize: generation.search.contextSize,
+                  querySource: generation.search.querySource ?? 'planner',
                   ...(generation.search.intent === 'repo_explainer' && {
                       repositoryScope: {
                           repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,

@@ -27,6 +27,13 @@ export const buildAssessSignals = (
             revisionInstruction: decision.revisionInstruction,
         }),
     }),
+    ...(decision.reviewDecision === 'search' &&
+        decision.search !== undefined && {
+            searchQuery: decision.search.query,
+            ...(decision.search.deficits === undefined
+                ? {}
+                : { searchDeficitsCsv: decision.search.deficits.join(',') }),
+        }),
     ...(decision.concerns?.length !== undefined && {
         lengthConcern: decision.concerns.length,
     }),
