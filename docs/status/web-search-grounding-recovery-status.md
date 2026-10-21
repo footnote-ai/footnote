@@ -1,6 +1,6 @@
 # Web Search Grounding Recovery Status
 
-Status: implemented and validated with deterministic fixtures; PR pending.
+Status: implemented and validated with deterministic fixtures; [PR #916](https://github.com/footnote-ai/footnote/pull/916) is open against `main`.
 
 Issue: [#451](https://github.com/footnote-ai/footnote/issues/451)
 
