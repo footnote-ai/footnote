@@ -1,6 +1,6 @@
 # Web Search Grounding Recovery Status
 
-Status: implemented and validated with deterministic fixtures; [PR #916](https://github.com/footnote-ai/footnote/pull/916) is open against `main`.
+Status: implemented, validated with deterministic fixtures, and demonstrated once with live recovery; [PR #916](https://github.com/footnote-ai/footnote/pull/916) is open against `main`.
 
 Issue: [#451](https://github.com/footnote-ai/footnote/issues/451)
 
@@ -33,6 +33,8 @@ admission checks. Elapsed time is admitted one step at a time because provider
 duration cannot be predicted. A retrieval may complete near the deadline and
 leave too little time for regeneration; then the last successful draft remains
 available and the recovery is recorded as incomplete.
+Assessment output is capped at 1,024 tokens, and that allowance is included in
+the existing cumulative reservation.
 
 Recovered results are appended to the same named `evidence` Result, preserving
 prior content and provenance. The following generation and assessment receive
@@ -102,12 +104,29 @@ and the reported zero is not evidence of free usage. Private prompts and
 response IDs are intentionally omitted. The deployed v545 image did not expose
 a source commit label, so its exact source revision remains unverified.
 
-These are live baseline observations, not recovery proof. A successful
-recovery adds one approved retrieval request and, when the remaining budget
-permits, one generation and one assessment; it does not call the planner again.
-Actual latency, provider fallback attempts, token usage, and backend-recorded
-cost remain provider- and response-dependent and must be measured separately
-before claiming a production improvement.
+The first cap-only deployment (v546) completed assessment on the same freshness
+prompt, but finalized even though its draft acknowledged that the current
+official schedule was not among the sources. This exposed an assessment-guidance
+gap in addition to the 512-token truncation. The default review prompt now says
+not to finalize when a key requested fact is missing, unverified, or inferred.
+
+After that change, one repeat request on Fly v547 completed the intended path:
+plan, initial retrieval, presentation, generation, assessment, recovery
+retrieval, regeneration, and reassessment. The Run completed with one recovery
+cycle allowed; its trace contains two `evidence` Results and no stopped
+Execution Contract limit. The configured DeepSeek V4 Flash profile was used.
+This is live evidence that the workflow can recover, not proof that the model
+will request recovery reliably for all weak-evidence answers.
+
+The pre-fix request took 45.9 seconds and the post-cap-only run took 52.8
+seconds without recovery. The recovery run took 70.3 seconds and recorded six
+model calls, two web-search calls, and 33,208 tokens. Against the same prompt's
+cap-only run (four model calls, one search, 22,969 tokens), that is an observed
+increase of 17.5 seconds, two model calls, one search, and 10,239 tokens. This
+is a small observational comparison, not a controlled provider benchmark.
+Per-call trace cost fields sum to `$0`; public traces do not expose cost
+completeness, so actual billed cost is unknown and the zero must not be read as
+free usage. Private prompts, search queries, and response IDs are omitted.
 
 ## Related documentation
 
