@@ -92,7 +92,7 @@ catalog:
     node-fetch: ^3.3.2
     nodemailer: ^10.1.0
     only: ^0.0.2
-    openai: ^7.32.0
+    openai: ^7.38.0
     openid-client: ^6.8.8
     opusscript: ^0.1.1
     postcss: ^8.5.28
