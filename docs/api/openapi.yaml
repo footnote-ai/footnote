@@ -3711,6 +3711,11 @@ components:
                 maxDurationMs:
                     type: integer
                     minimum: 1
+                maxSearchRecoveryCycles:
+                    type: integer
+                    minimum: 0
+                    maximum: 2
+                    description: Effective limit for assessment-triggered web-search recoveries.
                 effectiveLimits:
                     type: array
                     items:

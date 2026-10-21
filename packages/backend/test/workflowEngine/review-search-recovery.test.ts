@@ -20,6 +20,7 @@ import type {
     PresentationConfig,
     PresentationPersona,
 } from '../../src/services/presentation.js';
+import type { AppliedPlanState } from '../../src/services/plannerWorkflowSeams.js';
 import { parseReviewDecisionOutputResult } from '../../src/services/workflowEngine/reviewDecision.js';
 import {
     buildExecutedContextStepResult,
@@ -251,6 +252,7 @@ const runRecovery = async (input: {
     maxSearchRecoveryCycles: number;
     assessmentDecisions: string[];
     initialSearch?: boolean;
+    initialSearchEligible?: boolean;
     initialWeather?: boolean;
     initialQuery?: string;
     contextExecutor?: (
@@ -264,6 +266,7 @@ const runRecovery = async (input: {
     requests?: GenerationRequest[];
     tokensPerCall?: number;
     planning?: boolean;
+    planContinuationEnabled?: boolean;
     nativeSearchHint?: string;
     initialNativeSearchUsed?: boolean;
     initialNativeToolExecution?: GenerationResult['toolExecution'];
@@ -281,7 +284,7 @@ const runRecovery = async (input: {
                   {
                       integrationName: 'web_search' as const,
                       requested: true,
-                      eligible: true,
+                      eligible: input.initialSearchEligible ?? true,
                       input: {
                           query: initialQuery,
                           querySource: 'planner',
@@ -468,6 +471,50 @@ const runRecovery = async (input: {
                   },
               }
             : {}),
+        ...(input.planContinuationEnabled
+            ? {
+                  planContinuationBuilder: ({
+                      plannerStepResult,
+                      baseMessagesWithHints,
+                      baseGenerationRequest,
+                      contextEnvelope,
+                  }) => ({
+                      continuation: 'continue_message' as const,
+                      messagesWithHints: baseMessagesWithHints,
+                      generationRequest: baseGenerationRequest,
+                      conversationSnapshot: input.fixture.userRequest,
+                      contextEnvelope,
+                      contextStepRequests: [],
+                      plannerSummary: {
+                          executionPlan: plannerStepResult.plan,
+                          generationForExecution:
+                              plannerStepResult.plan.generation,
+                          selectedResponseProfile: {
+                              id: 'fixture-model',
+                              provider: 'openai',
+                              providerModel: 'fixture-model',
+                              capabilities: { canUseSearch: false },
+                          },
+                          originalSelectedProfileId: 'fixture-model',
+                          effectiveSelectedProfileId: 'fixture-model',
+                          toolRequestContext: {
+                              toolName: 'web_search',
+                              requested: false,
+                              eligible: false,
+                          },
+                          plannerDiagnostics: plannerStepResult.diagnostics,
+                          plannerApplyOutcome: 'applied',
+                          plannerMattered: false,
+                          plannerMatteredControlIds: [],
+                          fallbackReasons: [],
+                          fallbackRollupSelectionSource: 'default',
+                          modality: plannerStepResult.plan.modality,
+                          safetyTier: plannerStepResult.plan.safetyTier,
+                          searchRequested: false,
+                      } satisfies AppliedPlanState,
+                  }),
+              }
+            : {}),
         parseReviewDecision: parseReviewDecisionOutputResult,
         captureUsage: (generationResult) => ({
             model: generationResult.model ?? 'fixture-model',
@@ -554,6 +601,53 @@ test('missed initial search is recovered with merged evidence and linked lineage
         retrieval.inputRefs?.some((reference) => reference.name === 'review')
     );
     assert.equal(requests.length, 4);
+});
+
+test('an unexecuted initial query does not block the same assessment recovery query', async () => {
+    const query = fixtures.missedInitialSearch.followUpQuery;
+    const { result, executedQueries } = await runRecovery({
+        fixture: fixtures.missedInitialSearch,
+        maxSearchRecoveryCycles: 1,
+        assessmentDecisions: [
+            makeDecision('search', query),
+            makeDecision('finalize'),
+        ],
+        initialSearch: true,
+        initialSearchEligible: false,
+        initialQuery: query,
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.deepEqual(executedQueries, [query]);
+    assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
+});
+
+test('six workflow steps admit one recovery after planning skips initial retrieval', async () => {
+    const query = fixtures.missedInitialSearch.followUpQuery;
+    const { result, executedQueries } = await runRecovery({
+        fixture: fixtures.missedInitialSearch,
+        maxSearchRecoveryCycles: 1,
+        maxIterations: 1,
+        assessmentDecisions: [
+            makeDecision('search', query),
+            makeDecision('finalize'),
+        ],
+        planning: true,
+        planContinuationEnabled: true,
+        executionLimits: executionLimits({
+            maxWorkflowSteps: 6,
+            maxToolCalls: 1,
+            maxDeliberationCalls: 3,
+            maxReviewCycles: 2,
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.deepEqual(executedQueries, [query]);
+    assert.deepEqual(
+        result.workflowLineage.steps.map((step) => step.stepKind),
+        ['plan', 'generate', 'assess', 'tool', 'generate', 'assess']
+    );
 });
 
 test('Balanced allowances admit plan, initial retrieval, recovery, and reassessment', async () => {
@@ -725,6 +819,35 @@ test('recovery limits 0, 1, and 2 bound search cycles', async (t) => {
             );
         });
     }
+});
+
+test('effective recovery exhaustion takes precedence over later step exhaustion', async () => {
+    const { result, executedQueries } = await runRecovery({
+        fixture: fixtures.missedInitialSearch,
+        maxSearchRecoveryCycles: 2,
+        assessmentDecisions: [
+            makeDecision('search', 'first recovery query'),
+            makeDecision('search', 'second recovery query'),
+        ],
+        executionLimits: executionLimits({
+            maxWorkflowSteps: 5,
+            maxToolCalls: 2,
+            maxDeliberationCalls: 3,
+            maxReviewCycles: 2,
+        }),
+    });
+
+    assert.deepEqual(executedQueries, ['first recovery query']);
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'max_search_recovery_cycles_reached'
+    );
+    assert.equal(
+        result.workflowLineage.steps.findLast(
+            (step) => step.stepKind === 'assess'
+        )?.outcome.signals?.searchRecoveryOutcome,
+        'cycle_limit'
+    );
 });
 
 test('repeat recovery queries are rejected before retrieval and preserve the first draft', async () => {

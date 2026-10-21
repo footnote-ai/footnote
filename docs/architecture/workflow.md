@@ -295,9 +295,9 @@ latest user-authored conversation text. It does not add a model call or infer a
 search request when the planner did not make one.
 
 Operators can set `chat-workflow.max-search-recovery-cycles` in `footnote.yaml`
-or `CHAT_WORKFLOW_MAX_SEARCH_RECOVERY_CYCLES` to `0`, `1`, or `2`. The resolver
-clamps that value to the effective review, step, tool, and deliberation budgets;
-it also reserves token capacity for a recovery generation and its assessment
+to `0`, `1`, or `2`. The resolver clamps that value to the effective review,
+tool, and deliberation budgets; the workflow applies the topology-aware step
+limit and reserves token capacity for a recovery generation and its assessment
 before retrieval. Recovery capacity is additive to the mode's total review
 budget, while ordinary revise decisions remain capped by the mode's existing
 review allowance. Additional `chat-workflow` limit overrides are needed if the

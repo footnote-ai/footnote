@@ -257,7 +257,7 @@ export const REVIEW_DECISION_STRUCTURED_OUTPUT: GenerationStructuredOutput = {
                         maxItems: 4,
                     },
                 },
-                required: ['query'],
+                required: ['query', 'deficits'],
                 additionalProperties: false,
             },
             traceAlignment: {

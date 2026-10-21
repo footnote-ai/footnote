@@ -62,10 +62,10 @@ the failed search are unconfirmed.
 | Balanced |                       1 | 7 workflow steps, 2 tool calls, 3 deliberation calls  |
 | Grounded |                       1 | 10 workflow steps, 3 tool calls, 4 deliberation calls |
 
-Set `chat-workflow.max-search-recovery-cycles` in `footnote.yaml` or
-`CHAT_WORKFLOW_MAX_SEARCH_RECOVERY_CYCLES` to `0`, `1`, or `2`. The configured
-value is clamped to the resolved step, tool, review, and deliberation budgets;
-operators must raise the existing budget overrides as needed for two cycles.
+Set `chat-workflow.max-search-recovery-cycles` only in `footnote.yaml` to `0`,
+`1`, or `2`. The configured value is clamped to the resolved step, tool, review,
+and deliberation budgets; operators must raise the existing budget overrides
+as needed for two cycles.
 There is no separate recovery toggle or settings UI.
 
 ## Deterministic evidence and remaining evaluation

@@ -46,7 +46,7 @@ test('native review schema is strict and requires nullable optional fields', () 
         type: ['string', 'null'],
     });
     assert.equal(properties.search?.additionalProperties, false);
-    assert.deepEqual(properties.search?.required, ['query']);
+    assert.deepEqual(properties.search?.required, ['query', 'deficits']);
     assert.equal(properties.finalTemperament?.additionalProperties, false);
     assert.equal(properties.concerns?.additionalProperties, false);
 });

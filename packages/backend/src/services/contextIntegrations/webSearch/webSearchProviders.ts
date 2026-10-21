@@ -13,19 +13,24 @@ import type {
     WebSearchRecord,
 } from './webSearchTypes.js';
 
-const withTimeout = async (
+const withTimeout = async <T>(
     url: string,
     init: Parameters<typeof fetch>[1],
     timeoutMs: number,
-    signal?: AbortSignal
-): Promise<Response> => {
+    signal: AbortSignal | undefined,
+    parseResponse: (response: Response) => Promise<T>
+): Promise<T> => {
     const controller = new AbortController();
     const onAbort = (): void => controller.abort();
     if (signal?.aborted) controller.abort();
     else signal?.addEventListener('abort', onAbort, { once: true });
     const timeoutHandle = setTimeout(onAbort, timeoutMs);
     try {
-        return await fetch(url, { ...init, signal: controller.signal });
+        const response = await fetch(url, {
+            ...init,
+            signal: controller.signal,
+        });
+        return await parseResponse(response);
     } finally {
         clearTimeout(timeoutHandle);
         signal?.removeEventListener('abort', onAbort);
@@ -50,44 +55,51 @@ const runSearxng = async ({
     endpoint.searchParams.set('q', query);
     endpoint.searchParams.set('format', 'json');
     try {
-        const response = await withTimeout(
+        return await withTimeout(
             endpoint.toString(),
             { method: 'GET' },
             timeoutMs,
-            signal
+            signal,
+            async (response): Promise<WebSearchProviderResult> => {
+                if (!response.ok) {
+                    return { ok: false, reasonCode: 'tool_http_error' };
+                }
+                const json = (await response.json()) as {
+                    results?: unknown[];
+                };
+                const records: WebSearchRecord[] = [];
+                for (const rawEntry of json.results ?? []) {
+                    if (
+                        typeof rawEntry !== 'object' ||
+                        rawEntry === null ||
+                        Array.isArray(rawEntry)
+                    ) {
+                        continue;
+                    }
+                    const entry = rawEntry as Record<string, unknown>;
+                    const url = normalizeUrl(entry.url);
+                    if (!url) {
+                        continue;
+                    }
+                    records.push({
+                        title:
+                            typeof entry.title === 'string'
+                                ? entry.title
+                                : 'Source',
+                        url,
+                        snippet:
+                            typeof entry.content === 'string'
+                                ? entry.content
+                                : undefined,
+                        provider: 'searxng',
+                    });
+                    if (records.length >= maxResults) {
+                        break;
+                    }
+                }
+                return { ok: true, records };
+            }
         );
-        if (!response.ok) {
-            return { ok: false, reasonCode: 'tool_http_error' };
-        }
-        const json = (await response.json()) as { results?: unknown[] };
-        const records: WebSearchRecord[] = [];
-        for (const rawEntry of json.results ?? []) {
-            if (
-                typeof rawEntry !== 'object' ||
-                rawEntry === null ||
-                Array.isArray(rawEntry)
-            ) {
-                continue;
-            }
-            const entry = rawEntry as Record<string, unknown>;
-            const url = normalizeUrl(entry.url);
-            if (!url) {
-                continue;
-            }
-            records.push({
-                title: typeof entry.title === 'string' ? entry.title : 'Source',
-                url,
-                snippet:
-                    typeof entry.content === 'string'
-                        ? entry.content
-                        : undefined,
-                provider: 'searxng',
-            });
-            if (records.length >= maxResults) {
-                break;
-            }
-        }
-        return { ok: true, records };
     } catch (error) {
         const reasonCode =
             error instanceof Error && error.name === 'AbortError'
@@ -113,7 +125,7 @@ const runBrave = async ({
     const endpoint = new URL('https://api.search.brave.com/res/v1/web/search');
     endpoint.searchParams.set('q', query);
     try {
-        const response = await withTimeout(
+        return await withTimeout(
             endpoint.toString(),
             {
                 method: 'GET',
@@ -123,34 +135,39 @@ const runBrave = async ({
                 },
             },
             timeoutMs,
-            signal
+            signal,
+            async (response): Promise<WebSearchProviderResult> => {
+                if (!response.ok) {
+                    return { ok: false, reasonCode: 'tool_http_error' };
+                }
+                const json = (await response.json()) as {
+                    web?: { results?: Array<Record<string, unknown>> };
+                };
+                const records: WebSearchRecord[] = [];
+                for (const entry of json.web?.results ?? []) {
+                    const url = normalizeUrl(entry.url);
+                    if (!url) {
+                        continue;
+                    }
+                    records.push({
+                        title:
+                            typeof entry.title === 'string'
+                                ? entry.title
+                                : 'Source',
+                        url,
+                        snippet:
+                            typeof entry.description === 'string'
+                                ? entry.description
+                                : undefined,
+                        provider: 'brave',
+                    });
+                    if (records.length >= maxResults) {
+                        break;
+                    }
+                }
+                return { ok: true, records };
+            }
         );
-        if (!response.ok) {
-            return { ok: false, reasonCode: 'tool_http_error' };
-        }
-        const json = (await response.json()) as {
-            web?: { results?: Array<Record<string, unknown>> };
-        };
-        const records: WebSearchRecord[] = [];
-        for (const entry of json.web?.results ?? []) {
-            const url = normalizeUrl(entry.url);
-            if (!url) {
-                continue;
-            }
-            records.push({
-                title: typeof entry.title === 'string' ? entry.title : 'Source',
-                url,
-                snippet:
-                    typeof entry.description === 'string'
-                        ? entry.description
-                        : undefined,
-                provider: 'brave',
-            });
-            if (records.length >= maxResults) {
-                break;
-            }
-        }
-        return { ok: true, records };
     } catch (error) {
         const reasonCode =
             error instanceof Error && error.name === 'AbortError'
@@ -187,38 +204,43 @@ const runSerpApi = async ({
         hl,
     });
     try {
-        const response = await withTimeout(
+        return await withTimeout(
             endpoint,
             { method: 'GET' },
             timeoutMs,
-            signal
+            signal,
+            async (response): Promise<WebSearchProviderResult> => {
+                if (!response.ok) {
+                    return { ok: false, reasonCode: 'tool_http_error' };
+                }
+                const json = (await response.json()) as {
+                    organic_results?: Array<Record<string, unknown>>;
+                };
+                const records: WebSearchRecord[] = [];
+                for (const entry of json.organic_results ?? []) {
+                    const url = normalizeUrl(entry.link);
+                    if (!url) {
+                        continue;
+                    }
+                    records.push({
+                        title:
+                            typeof entry.title === 'string'
+                                ? entry.title
+                                : 'Source',
+                        url,
+                        snippet:
+                            typeof entry.snippet === 'string'
+                                ? entry.snippet
+                                : undefined,
+                        provider: 'serpapi',
+                    });
+                    if (records.length >= maxResults) {
+                        break;
+                    }
+                }
+                return { ok: true, records };
+            }
         );
-        if (!response.ok) {
-            return { ok: false, reasonCode: 'tool_http_error' };
-        }
-        const json = (await response.json()) as {
-            organic_results?: Array<Record<string, unknown>>;
-        };
-        const records: WebSearchRecord[] = [];
-        for (const entry of json.organic_results ?? []) {
-            const url = normalizeUrl(entry.link);
-            if (!url) {
-                continue;
-            }
-            records.push({
-                title: typeof entry.title === 'string' ? entry.title : 'Source',
-                url,
-                snippet:
-                    typeof entry.snippet === 'string'
-                        ? entry.snippet
-                        : undefined,
-                provider: 'serpapi',
-            });
-            if (records.length >= maxResults) {
-                break;
-            }
-        }
-        return { ok: true, records };
     } catch (error) {
         const reasonCode =
             error instanceof Error && error.name === 'AbortError'

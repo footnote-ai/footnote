@@ -523,12 +523,11 @@ const repairPlannerSearchQuery = (
         .find((message) => message.length > 0 && /[\p{L}\p{N}]/u.test(message));
     if (candidate === undefined) return undefined;
     if (candidate.length <= MAX_SEARCH_QUERY_LENGTH) return candidate;
-    return (
-        candidate
-            .slice(0, MAX_SEARCH_QUERY_LENGTH)
-            .replace(/\s+\S*$/u, '')
-            .trim() || candidate.slice(0, MAX_SEARCH_QUERY_LENGTH).trim()
-    );
+    const truncated = candidate.slice(0, MAX_SEARCH_QUERY_LENGTH);
+    const completePrefix = /\s/u.test(candidate[MAX_SEARCH_QUERY_LENGTH] ?? '')
+        ? truncated
+        : truncated.replace(/\S*$/u, '');
+    return completePrefix.trim() || undefined;
 };
 
 /**

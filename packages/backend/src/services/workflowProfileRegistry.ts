@@ -749,9 +749,6 @@ export const resolveWorkflowRuntimeConfig = (input: {
     const maxSearchRecoveryCycles = Math.min(
         requestedSearchRecoveryCycles,
         Math.max(0, (workflowExecutionLimits.maxReviewCycles ?? 0) - 1),
-        Math.floor(
-            Math.max(0, workflowExecutionLimits.maxWorkflowSteps - 4) / 3
-        ),
         workflowExecutionLimits.maxToolCalls,
         Math.max(0, workflowExecutionLimits.maxDeliberationCalls - 2)
     );

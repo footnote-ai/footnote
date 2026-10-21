@@ -386,7 +386,7 @@ Each YAML setting maps to exactly one existing Execution Contract allowance:
 | `chat-workflow.max-workflow-steps-override`     | `CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE`     | 1–12                   |
 | `chat-workflow.max-tool-calls-override`         | `CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE`         | 0–5                    |
 | `chat-workflow.max-deliberation-calls-override` | `CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE` | 0–6                    |
-| `chat-workflow.max-search-recovery-cycles`      | `CHAT_WORKFLOW_MAX_SEARCH_RECOVERY_CYCLES`      | 0–2                    |
+| `chat-workflow.max-search-recovery-cycles`      | `footnote.yaml only`                            | 0–2                    |
 | `chat-workflow.max-tokens-total-override`       | `CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE`       | 1–512,000              |
 | `chat-workflow.max-duration-ms-override`        | `CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE`        | 1–300,000 milliseconds |
 

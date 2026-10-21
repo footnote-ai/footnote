@@ -486,6 +486,30 @@ test('resolveWorkflowRuntimeConfig gives Balanced one recovery within the contra
     assert.equal(balanced.modeDecision.behavior.maxReviewCycles, 1);
 });
 
+test('Balanced keeps recovery capacity for a six-step no-initial-retrieval path', () => {
+    const contract = resolveExecutionContract({
+        presetId: 'balanced',
+    }).policyContract;
+    const balanced = resolveWorkflowRuntimeConfig({
+        modeId: 'balanced',
+        reviewLoopEnabled: true,
+        maxIterations: 5,
+        maxDurationMs: 90_000,
+        maxRequestReviewCycles: 7,
+        maxWorkflowStepsOverride: 6,
+        maxToolCallsOverride: 1,
+        ExecutionContract: {
+            response: contract.response,
+            limits: contract.limits,
+        },
+    });
+
+    assert.equal(balanced.workflowExecutionLimits.maxWorkflowSteps, 6);
+    assert.equal(balanced.workflowExecutionLimits.maxToolCalls, 1);
+    assert.equal(balanced.workflowExecutionLimits.maxReviewCycles, 2);
+    assert.equal(balanced.maxSearchRecoveryCycles, 1);
+});
+
 test('search-recovery settings default by mode and clamp to resolved capacities', () => {
     const resolve = (
         modeId: 'express' | 'balanced' | 'grounded',

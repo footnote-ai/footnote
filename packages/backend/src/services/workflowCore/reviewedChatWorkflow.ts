@@ -1615,7 +1615,7 @@ export const runBoundedReviewWorkflow = async (
         workflowPolicy.enableGeneration !== false;
     const baseWorkflowSteps =
         (hasPlannerStep ? 1 : 0) +
-        (initialToolRequests.length > 0 || hasPlannerContextExecutor ? 1 : 0) +
+        (initialToolRequests.length > 0 ? 1 : 0) +
         (hasPresentationStep ? 1 : 0) +
         (workflowPolicy.enableGeneration === false ? 0 : 2);
     const maxSearchRecoveryCycles = workflowPolicy.enableToolUse
@@ -1852,6 +1852,13 @@ export const runBoundedReviewWorkflow = async (
         return revision?.continuation ?? plan?.continuation;
     };
     const observedSearchQueries = new Set<string>();
+    const executedSearchQueries = (evidence: ModelInputEvidence): string[] => [
+        ...evidence.results.flatMap((result) => {
+            const query = readWebSearchQuery(result);
+            return query === undefined ? [] : [query];
+        }),
+        ...observedSearchQueries,
+    ];
     const messagesFor = (
         resultValues: Readonly<Record<string, Result>>
     ): {
@@ -2130,28 +2137,7 @@ export const runBoundedReviewWorkflow = async (
                   readContinuePlanContinuation(plan?.continuation)
                       ?.contextStepRequests
               ).filter((request) => request.requested && request.eligible);
-        const priorSearchQueries = [
-            ...initialContextRequests.flatMap((request) =>
-                request.integrationName === 'web_search' &&
-                typeof request.input?.query === 'string'
-                    ? [request.input.query]
-                    : []
-            ),
-            ...priorEvidence.results.flatMap((result) => {
-                const query = readWebSearchQuery(result);
-                return query === undefined ? [] : [query];
-            }),
-            ...observedSearchQueries,
-            ...(
-                readContinuePlanContinuation(plan?.continuation)
-                    ?.contextStepRequests ?? []
-            ).flatMap((request) =>
-                request.integrationName === 'web_search' &&
-                typeof request.input?.query === 'string'
-                    ? [request.input.query]
-                    : []
-            ),
-        ];
+        const priorSearchQueries = executedSearchQueries(priorEvidence);
         if (
             searchRecovery &&
             (recoveryQuery === undefined ||
@@ -3682,32 +3668,10 @@ export const runBoundedReviewWorkflow = async (
                 routingHintConflictResolved: hintDecision.conflictResolved,
             }),
         };
-        const priorPlan = readPlanEnvelope(handlerInput.results.plan);
         const priorEvidence = readEvidenceEnvelope(
             handlerInput.results.evidence
         );
-        const previousSearchQueries = [
-            ...initialContextRequests.flatMap((request) =>
-                request.integrationName === 'web_search' &&
-                typeof request.input?.query === 'string'
-                    ? [request.input.query]
-                    : []
-            ),
-            ...priorEvidence.results.flatMap((result) => {
-                const query = readWebSearchQuery(result);
-                return query === undefined ? [] : [query];
-            }),
-            ...observedSearchQueries,
-            ...(
-                readContinuePlanContinuation(priorPlan?.continuation)
-                    ?.contextStepRequests ?? []
-            ).flatMap((request) =>
-                request.integrationName === 'web_search' &&
-                typeof request.input?.query === 'string'
-                    ? [request.input.query]
-                    : []
-            ),
-        ];
+        const previousSearchQueries = executedSearchQueries(priorEvidence);
         const requestedSearchQuery = decision.search?.query;
         const completedSearchRecoveryCycles = priorEvidence.results.filter(
             (result) => readWebSearchQuerySource(result) === 'assessment'
@@ -3720,9 +3684,9 @@ export const runBoundedReviewWorkflow = async (
                     normalizeSearchQuery(query) ===
                     normalizeSearchQuery(requestedSearchQuery)
             );
-        const configuredCycleExhausted =
+        const searchRecoveryCyclesExhausted =
             decision.reviewDecision === 'search' &&
-            completedSearchRecoveryCycles >= configuredSearchRecoveryCycles;
+            completedSearchRecoveryCycles >= maxSearchRecoveryCycles;
         const recoveryTokenBudget =
             decision.reviewDecision === 'search'
                 ? reserveRecoveryGenerationOutputTokens({
@@ -3779,10 +3743,9 @@ export const runBoundedReviewWorkflow = async (
                   ? 'search_query_repeated'
                   : !workflowPolicy.enableToolUse || !hasToolStep
                     ? 'transition_blocked_by_policy'
-                    : (executionLimitReason ??
-                      (configuredCycleExhausted
-                          ? 'max_search_recovery_cycles_reached'
-                          : undefined));
+                    : searchRecoveryCyclesExhausted
+                      ? 'max_search_recovery_cycles_reached'
+                      : executionLimitReason;
         if (searchBlockedReason !== undefined) {
             signals.searchRecoveryOutcome =
                 searchBlockedReason === 'search_query_repeated'
