@@ -554,6 +554,7 @@ test('missed initial search is recovered with merged evidence and linked lineage
         requests,
     });
 
+    assert.equal(requests[1]?.maxOutputTokens, 1024);
     assert.equal(result.outcome, 'generated');
     assert.deepEqual(executedQueries, [
         fixtures.missedInitialSearch.followUpQuery,

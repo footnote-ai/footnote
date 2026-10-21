@@ -68,7 +68,7 @@ and deliberation budgets; operators must raise the existing budget overrides
 as needed for two cycles.
 There is no separate recovery toggle or settings UI.
 
-## Deterministic evidence and remaining evaluation
+## Deterministic and live evidence
 
 Sanitized, synthetic fixtures cover missed initial search, stale initial
 results, blank-query repair, stable no-search control, limits `0/1/2`, repeated
@@ -88,12 +88,26 @@ four-step/one-review limits with recovery-enabled defaults: both stop after two
 model calls and perform no retrieval. The recovery allowance does not enable
 extra revision work on that path.
 
-No live provider/model comparison or production latency/cost measurement was run.
-A successful recovery adds one approved retrieval request and, when the
-remaining budget permits, one generation and one assessment; it does not call
-the planner again. Actual latency, provider fallback attempts, token usage, and
-backend-recorded cost remain provider- and response-dependent and must be
-measured separately before claiming a production improvement.
+On 2026-10-21, a bounded pre-fix production baseline ran two requests against
+Fly v545 using the configured DeepSeek profile. The freshness request returned
+HTTP 200 in 45.9 seconds, but assessment failed after 21.6 seconds with
+`STRUCTURED_OUTPUT_NOT_GENERATED` at `response_parsing`; the provider reported
+`finishReason=length`. No typed search decision or recovery retrieval followed.
+Successful calls before the failed assessment used 13,234 tokens; assessment
+usage was unavailable. The stable control finalized in 11.6 seconds and used
+12,917 total tokens, including 5,524 for assessment. The planner still chose an
+initial retrieval for that control. Both runs reported cost `0` with
+`costCompleteness=unknown` and `unpriced_model`, so actual spend is unavailable
+and the reported zero is not evidence of free usage. Private prompts and
+response IDs are intentionally omitted. The deployed v545 image did not expose
+a source commit label, so its exact source revision remains unverified.
+
+These are live baseline observations, not recovery proof. A successful
+recovery adds one approved retrieval request and, when the remaining budget
+permits, one generation and one assessment; it does not call the planner again.
+Actual latency, provider fallback attempts, token usage, and backend-recorded
+cost remain provider- and response-dependent and must be measured separately
+before claiming a production improvement.
 
 ## Related documentation
 

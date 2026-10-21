@@ -67,6 +67,8 @@ retrieval from citations emitted by the answer; neither a search result nor a
 citation alone proves that a source supports a claim. If the provider is
 unavailable, the request is cancelled, or a limit blocks recovery, the workflow
 keeps the last successful draft and records the reason.
+Assessment output is capped at 1,024 tokens; the existing cumulative token
+reservation accounts for that allowance before recovery retrieval.
 
 If the planner explicitly requests search but leaves the query blank or too
 long, the backend may repair it deterministically from the latest
