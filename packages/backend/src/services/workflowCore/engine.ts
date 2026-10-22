@@ -547,6 +547,7 @@ export const executeWorkflow = async <TContext>(
                 stepId: currentStepId,
                 context: input.context,
                 results: collected.results,
+                run: { steps },
                 execution: executionLimitStateFor(run),
                 iteration: stepRunNumber,
                 attempt: attemptNumber,
@@ -644,7 +645,7 @@ export const executeWorkflow = async <TContext>(
                         stepId: currentStepId,
                         attempt: attemptNumber,
                     },
-                    () => handler(handlerInput)
+                    () => handler({ ...handlerInput, attemptStartedAtMs })
                 );
                 if (!isValidHandlerResult(rawAttemptResult)) {
                     const attemptFinishedAtMs = now();

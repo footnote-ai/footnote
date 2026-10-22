@@ -134,6 +134,7 @@ import type {
     AttemptResult,
     ExecuteInput,
     Result,
+    Run,
     StepHandlerInput,
     Workflow,
 } from './types.js';
@@ -1478,6 +1479,18 @@ const reserveRecoveryGenerationOutputTokens = (input: {
         assessmentOutputTokens: DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
     });
 
+const maximumObservedAttemptDurationMs = (
+    run: Readonly<Pick<Run, 'steps'>>,
+    stepId: string
+): number =>
+    Math.max(
+        0,
+        ...run.steps
+            .filter((step) => step.stepId === stepId)
+            .flatMap((step) => step.attempts)
+            .map((attempt) => attempt.finishedAtMs - attempt.startedAtMs)
+    );
+
 /** Executes the production reviewed-chat topology through `executeWorkflow`. */
 export const runBoundedReviewWorkflow = async (
     input: RunBoundedReviewWorkflowInput
@@ -1613,28 +1626,8 @@ export const runBoundedReviewWorkflow = async (
     const hasPresentationStep =
         presentation?.config.enabled === true &&
         workflowPolicy.enableGeneration !== false;
-    const baseWorkflowSteps =
-        (hasPlannerStep ? 1 : 0) +
-        (initialToolRequests.length > 0 ? 1 : 0) +
-        (hasPresentationStep ? 1 : 0) +
-        (workflowPolicy.enableGeneration === false ? 0 : 2);
     const maxSearchRecoveryCycles = workflowPolicy.enableToolUse
-        ? Math.min(
-              configuredSearchRecoveryCycles,
-              Math.max(0, (executionLimits.maxReviewCycles ?? 0) - 1),
-              Math.max(
-                  0,
-                  executionLimits.maxDeliberationCalls -
-                      (hasPlannerStep ? 1 : 0) -
-                      1
-              ),
-              Math.floor(
-                  Math.max(
-                      0,
-                      executionLimits.maxWorkflowSteps - baseWorkflowSteps
-                  ) / 3
-              )
-          )
+        ? configuredSearchRecoveryCycles
         : 0;
     // `maxIterations` retains the ordinary mode cap; recovery capacity is added separately below.
     const regularMaxIterations = Math.max(
@@ -3687,6 +3680,23 @@ export const runBoundedReviewWorkflow = async (
         const searchRecoveryCyclesExhausted =
             decision.reviewDecision === 'search' &&
             completedSearchRecoveryCycles >= maxSearchRecoveryCycles;
+        // Missing timing history fails open; observed estimates never replace hard Attempt admission.
+        const recoveryAdmissionNowMs = Date.now();
+        const currentAssessmentDurationMs = Math.max(
+            0,
+            recoveryAdmissionNowMs -
+                (handlerInput.attemptStartedAtMs ?? recoveryAdmissionNowMs)
+        );
+        const estimatedRecoveryDurationMs =
+            maximumObservedAttemptDurationMs(handlerInput.run, 'retrieve') +
+            maximumObservedAttemptDurationMs(handlerInput.run, 'generate') +
+            Math.max(
+                currentAssessmentDurationMs,
+                maximumObservedAttemptDurationMs(handlerInput.run, 'assess')
+            );
+        const remainingDurationMs =
+            executionLimits.maxDurationMs -
+            (recoveryAdmissionNowMs - handlerInput.execution.startedAtMs);
         const recoveryTokenBudget =
             decision.reviewDecision === 'search'
                 ? reserveRecoveryGenerationOutputTokens({
@@ -3718,24 +3728,34 @@ export const runBoundedReviewWorkflow = async (
                       maxTokensTotal: executionLimits.maxTokensTotal,
                   })
                 : 0;
-        const executionLimitReason =
-            decision.reviewDecision !== 'search' || repeatedSearchQuery
-                ? undefined
-                : handlerInput.execution.stepCount + 4 >
-                    executionLimits.maxWorkflowSteps
-                  ? 'budget_exhausted_steps'
-                  : handlerInput.execution.toolCallCount + 1 >
-                      executionLimits.maxToolCalls
-                    ? 'max_tool_calls_reached'
-                    : recoveryTokenBudget === undefined
-                      ? 'budget_exhausted_tokens'
-                      : handlerInput.execution.deliberationCallCount + 2 >
-                              executionLimits.maxDeliberationCalls ||
-                          handlerInput.execution.reviewCallCount + 2 >
-                              (executionLimits.maxReviewCycles ??
-                                  executionLimits.maxDeliberationCalls)
-                        ? 'max_deliberation_calls_reached'
-                        : undefined;
+        let executionLimitReason: WorkflowTerminationReason | undefined;
+        if (decision.reviewDecision === 'search' && !repeatedSearchQuery) {
+            if (handlerInput.iteration >= effectiveMaxIterations) {
+                executionLimitReason = 'budget_exhausted_steps';
+            } else if (
+                handlerInput.execution.stepCount + 4 >
+                executionLimits.maxWorkflowSteps
+            ) {
+                executionLimitReason = 'budget_exhausted_steps';
+            } else if (
+                handlerInput.execution.toolCallCount + 1 >
+                executionLimits.maxToolCalls
+            ) {
+                executionLimitReason = 'max_tool_calls_reached';
+            } else if (recoveryTokenBudget === undefined) {
+                executionLimitReason = 'budget_exhausted_tokens';
+            } else if (
+                handlerInput.execution.deliberationCallCount + 2 >
+                    executionLimits.maxDeliberationCalls ||
+                handlerInput.execution.reviewCallCount + 2 >
+                    (executionLimits.maxReviewCycles ??
+                        executionLimits.maxDeliberationCalls)
+            ) {
+                executionLimitReason = 'max_deliberation_calls_reached';
+            } else if (remainingDurationMs <= estimatedRecoveryDurationMs) {
+                executionLimitReason = 'budget_exhausted_time';
+            }
+        }
         const searchBlockedReason =
             decision.reviewDecision !== 'search'
                 ? undefined

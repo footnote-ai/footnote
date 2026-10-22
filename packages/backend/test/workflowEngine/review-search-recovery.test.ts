@@ -76,6 +76,22 @@ const makeDecision = (
             : {}),
     });
 
+const withFakeClock = async <T>(
+    startedAtMs: number,
+    run: (advanceByMs: (durationMs: number) => void) => Promise<T>
+): Promise<T> => {
+    const originalNow = Date.now;
+    let nowMs = startedAtMs;
+    Date.now = () => nowMs;
+    try {
+        return await run((durationMs) => {
+            nowMs += durationMs;
+        });
+    } finally {
+        Date.now = originalNow;
+    }
+};
+
 const executionLimits = (
     input: {
         maxWorkflowSteps?: number;
@@ -131,6 +147,9 @@ const createRuntime = (input: {
     initialNativeSearchUsed?: boolean;
     initialNativeToolExecution?: GenerationResult['toolExecution'];
     presentationEnabled?: boolean;
+    clockAdvanceMs?: number;
+    clockAdvancesMs?: number[];
+    advanceClock?: (durationMs: number) => void;
 }): GenerationRuntime => {
     let callCount = 0;
     let assessmentCount = 0;
@@ -139,6 +158,11 @@ const createRuntime = (input: {
         async generate(request) {
             callCount += 1;
             input.onRequest?.(request);
+            const clockAdvanceMs =
+                input.clockAdvancesMs?.[callCount - 1] ?? input.clockAdvanceMs;
+            if (clockAdvanceMs !== undefined) {
+                input.advanceClock?.(clockAdvanceMs);
+            }
             const assessmentCall = input.presentationEnabled
                 ? callCount > 1 && callCount % 2 === 1
                 : callCount % 2 === 0;
@@ -271,6 +295,10 @@ const runRecovery = async (input: {
     initialNativeSearchUsed?: boolean;
     initialNativeToolExecution?: GenerationResult['toolExecution'];
     presentationEnabled?: boolean;
+    clockAdvanceMs?: number;
+    clockAdvancesMs?: number[];
+    advanceClock?: (durationMs: number) => void;
+    planContinuationAddsRetrieval?: boolean;
     maxIterations?: number;
     generationStartedAtMs?: number;
 }) => {
@@ -317,6 +345,9 @@ const runRecovery = async (input: {
             initialNativeSearchUsed: input.initialNativeSearchUsed,
             initialNativeToolExecution: input.initialNativeToolExecution,
             presentationEnabled: input.presentationEnabled,
+            clockAdvanceMs: input.clockAdvanceMs,
+            clockAdvancesMs: input.clockAdvancesMs,
+            advanceClock: input.advanceClock,
         }),
         generationRequest: {
             model: 'fixture-model',
@@ -484,7 +515,23 @@ const runRecovery = async (input: {
                       generationRequest: baseGenerationRequest,
                       conversationSnapshot: input.fixture.userRequest,
                       contextEnvelope,
-                      contextStepRequests: [],
+                      contextStepRequests: input.planContinuationAddsRetrieval
+                          ? [
+                                {
+                                    integrationName: 'web_search' as const,
+                                    requested: true,
+                                    eligible: true,
+                                    input: {
+                                        query:
+                                            input.fixture.initialQuery ??
+                                            'planner-selected context query',
+                                        querySource: 'planner',
+                                        intent: 'current_facts',
+                                        contextSize: 'medium',
+                                    },
+                                },
+                            ]
+                          : [],
                       plannerSummary: {
                           executionPlan: plannerStepResult.plan,
                           generationForExecution:
@@ -604,6 +651,45 @@ test('missed initial search is recovered with merged evidence and linked lineage
     assert.equal(requests.length, 4);
 });
 
+test('declines recovery when the current assessment has no reassessment iteration left', async () => {
+    const requests: GenerationRequest[] = [];
+    const { result, executedQueries } = await runRecovery({
+        fixture: fixtures.missedInitialSearch,
+        maxSearchRecoveryCycles: 1,
+        maxIterations: 2,
+        assessmentDecisions: [
+            makeDecision('revise'),
+            makeDecision('search', fixtures.missedInitialSearch.followUpQuery),
+        ],
+        executionLimits: executionLimits({
+            maxWorkflowSteps: 9,
+            maxToolCalls: 2,
+            maxDeliberationCalls: 4,
+            maxReviewCycles: 4,
+        }),
+        requests,
+    });
+
+    assert.deepEqual(executedQueries, []);
+    assert.equal(requests.length, 4);
+    assert.equal(
+        generatedText(result),
+        'Updated draft based on the returned discovery context.'
+    );
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_steps'
+    );
+    const finalAssessment = result.workflowLineage.steps.findLast(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.equal(finalAssessment?.outcome.signals?.reviewDecision, 'search');
+    assert.equal(
+        finalAssessment?.outcome.signals?.searchRecoveryOutcome,
+        'execution_limit'
+    );
+});
+
 test('an unexecuted initial query does not block the same assessment recovery query', async () => {
     const query = fixtures.missedInitialSearch.followUpQuery;
     const { result, executedQueries } = await runRecovery({
@@ -648,6 +734,281 @@ test('six workflow steps admit one recovery after planning skips initial retriev
     assert.deepEqual(
         result.workflowLineage.steps.map((step) => step.stepKind),
         ['plan', 'generate', 'assess', 'tool', 'generate', 'assess']
+    );
+});
+
+test('search recovery uses the Run allowance left by optional presentation', async (t) => {
+    for (const presentationEnabled of [false, true]) {
+        const requiredSteps = presentationEnabled ? 8 : 7;
+        const label = presentationEnabled
+            ? 'with presentation'
+            : 'without presentation';
+        await t.test(`${label} admits at ${requiredSteps} steps`, async () => {
+            const { result, executedQueries } = await runRecovery({
+                fixture: fixtures.staleInitialResults,
+                maxSearchRecoveryCycles: 1,
+                maxIterations: 1,
+                assessmentDecisions: [
+                    makeDecision(
+                        'search',
+                        fixtures.staleInitialResults.followUpQuery
+                    ),
+                    makeDecision('finalize'),
+                ],
+                initialSearch: true,
+                planning: true,
+                presentationEnabled,
+                executionLimits: executionLimits({
+                    maxWorkflowSteps: requiredSteps,
+                    maxToolCalls: 2,
+                    maxDeliberationCalls: 3,
+                    maxReviewCycles: 2,
+                }),
+            });
+
+            assert.equal(result.outcome, 'generated');
+            assert.deepEqual(executedQueries, [
+                fixtures.staleInitialResults.initialQuery,
+                fixtures.staleInitialResults.followUpQuery,
+            ]);
+            assert.equal(result.workflowLineage.steps.length, requiredSteps);
+        });
+
+        await t.test(
+            `${label} declines before recovery at ${requiredSteps - 1} steps`,
+            async () => {
+                const { result, executedQueries } = await runRecovery({
+                    fixture: fixtures.staleInitialResults,
+                    maxSearchRecoveryCycles: 1,
+                    maxIterations: 1,
+                    assessmentDecisions: [
+                        makeDecision(
+                            'search',
+                            fixtures.staleInitialResults.followUpQuery
+                        ),
+                    ],
+                    initialSearch: true,
+                    planning: true,
+                    presentationEnabled,
+                    executionLimits: executionLimits({
+                        maxWorkflowSteps: requiredSteps - 1,
+                        maxToolCalls: 2,
+                        maxDeliberationCalls: 3,
+                        maxReviewCycles: 2,
+                    }),
+                });
+
+                assert.deepEqual(executedQueries, [
+                    fixtures.staleInitialResults.initialQuery,
+                ]);
+                assert.equal(
+                    result.workflowLineage.terminationReason,
+                    'budget_exhausted_steps'
+                );
+                assert.equal(
+                    result.workflowLineage.steps.find(
+                        (step) => step.stepKind === 'assess'
+                    )?.outcome.signals?.searchRecoveryOutcome,
+                    'execution_limit'
+                );
+                assert.equal(
+                    generatedText(result),
+                    'Initial draft with an unsupported current claim.'
+                );
+            }
+        );
+    }
+});
+
+test('late planner-selected retrieval is charged before recovery admission', async () => {
+    const { result, executedQueries } = await runRecovery({
+        fixture: fixtures.staleInitialResults,
+        maxSearchRecoveryCycles: 1,
+        maxIterations: 1,
+        assessmentDecisions: [
+            makeDecision('search', fixtures.staleInitialResults.followUpQuery),
+            makeDecision('finalize'),
+        ],
+        planning: true,
+        planContinuationEnabled: true,
+        planContinuationAddsRetrieval: true,
+        executionLimits: executionLimits({
+            maxWorkflowSteps: 7,
+            maxToolCalls: 2,
+            maxDeliberationCalls: 3,
+            maxReviewCycles: 2,
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.deepEqual(executedQueries, [
+        fixtures.staleInitialResults.initialQuery,
+        fixtures.staleInitialResults.followUpQuery,
+    ]);
+    assert.deepEqual(
+        result.workflowLineage.steps.map((step) => step.stepKind),
+        ['plan', 'tool', 'generate', 'assess', 'tool', 'generate', 'assess']
+    );
+});
+
+test('reports live deliberation limits instead of the recovery-cycle cap', async (t) => {
+    for (const limits of [
+        {
+            name: 'deliberation-call allowance',
+            maxDeliberationCalls: 1,
+            maxReviewCycles: 3,
+        },
+        {
+            name: 'review-cycle allowance',
+            maxDeliberationCalls: 3,
+            maxReviewCycles: 1,
+        },
+    ]) {
+        await t.test(limits.name, async () => {
+            const { result, executedQueries } = await runRecovery({
+                fixture: fixtures.staleInitialResults,
+                maxSearchRecoveryCycles: 1,
+                assessmentDecisions: [
+                    makeDecision(
+                        'search',
+                        fixtures.staleInitialResults.followUpQuery
+                    ),
+                ],
+                initialSearch: true,
+                executionLimits: executionLimits({
+                    maxWorkflowSteps: 6,
+                    maxToolCalls: 2,
+                    maxDeliberationCalls: limits.maxDeliberationCalls,
+                    maxReviewCycles: limits.maxReviewCycles,
+                }),
+            });
+
+            assert.deepEqual(executedQueries, [
+                fixtures.staleInitialResults.initialQuery,
+            ]);
+            assert.equal(
+                result.workflowLineage.terminationReason,
+                'max_deliberation_calls_reached'
+            );
+            assert.equal(
+                result.workflowLineage.steps.find(
+                    (step) => step.stepKind === 'assess'
+                )?.outcome.signals?.searchRecoveryOutcome,
+                'execution_limit'
+            );
+            assert.equal(
+                generatedText(result),
+                'Initial draft with an unsupported current claim.'
+            );
+        });
+    }
+});
+
+test('declines recovery when observed continuation time no longer fits', async () => {
+    const startedAtMs = 1_000;
+    const { result, executedQueries } = await withFakeClock(
+        startedAtMs,
+        (advanceClock) =>
+            runRecovery({
+                fixture: fixtures.staleInitialResults,
+                maxSearchRecoveryCycles: 1,
+                maxIterations: 3,
+                assessmentDecisions: [
+                    makeDecision('revise'),
+                    makeDecision(
+                        'search',
+                        fixtures.staleInitialResults.followUpQuery
+                    ),
+                    makeDecision('finalize'),
+                ],
+                initialSearch: true,
+                clockAdvanceMs: 250,
+                advanceClock,
+                generationStartedAtMs: startedAtMs,
+                contextExecutor: async (query, querySource) => {
+                    advanceClock(250);
+                    return createSearchResult({
+                        query,
+                        querySource:
+                            querySource === 'assessment'
+                                ? 'assessment'
+                                : 'planner',
+                        title: 'Measured fixture result',
+                        content: 'Evidence with a controlled test clock.',
+                    });
+                },
+                executionLimits: executionLimits({
+                    maxWorkflowSteps: 9,
+                    maxToolCalls: 2,
+                    maxDeliberationCalls: 4,
+                    maxReviewCycles: 3,
+                    maxDurationMs: 1900,
+                }),
+            })
+    );
+
+    assert.deepEqual(executedQueries, [
+        fixtures.staleInitialResults.initialQuery,
+    ]);
+    assert.equal(
+        generatedText(result),
+        'Updated draft based on the returned discovery context.'
+    );
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_time'
+    );
+    assert.equal(
+        result.workflowLineage.steps.findLast(
+            (step) => step.stepKind === 'assess'
+        )?.outcome.signals?.searchRecoveryOutcome,
+        'execution_limit'
+    );
+});
+
+test('uses the slowest observed assessment to estimate recovery reassessment', async () => {
+    const startedAtMs = 1_000;
+    const { result, executedQueries } = await withFakeClock(
+        startedAtMs,
+        (advanceClock) =>
+            runRecovery({
+                fixture: fixtures.staleInitialResults,
+                maxSearchRecoveryCycles: 1,
+                maxIterations: 3,
+                assessmentDecisions: [
+                    makeDecision('revise'),
+                    makeDecision(
+                        'search',
+                        fixtures.staleInitialResults.followUpQuery
+                    ),
+                    makeDecision('finalize'),
+                ],
+                clockAdvancesMs: [0, 1_200, 0, 100],
+                advanceClock,
+                generationStartedAtMs: startedAtMs,
+                executionLimits: executionLimits({
+                    maxWorkflowSteps: 9,
+                    maxDeliberationCalls: 4,
+                    maxReviewCycles: 4,
+                    maxDurationMs: 1_500,
+                }),
+            })
+    );
+
+    assert.deepEqual(executedQueries, []);
+    assert.equal(
+        generatedText(result),
+        'Updated draft based on the returned discovery context.'
+    );
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_time'
+    );
+    assert.equal(
+        result.workflowLineage.steps.findLast(
+            (step) => step.stepKind === 'assess'
+        )?.outcome.signals?.searchRecoveryOutcome,
+        'execution_limit'
     );
 });
 
@@ -822,7 +1183,7 @@ test('recovery limits 0, 1, and 2 bound search cycles', async (t) => {
     }
 });
 
-test('effective recovery exhaustion takes precedence over later step exhaustion', async () => {
+test('live step exhaustion blocks a recovery that cannot fit within the Run', async () => {
     const { result, executedQueries } = await runRecovery({
         fixture: fixtures.missedInitialSearch,
         maxSearchRecoveryCycles: 2,
@@ -841,13 +1202,13 @@ test('effective recovery exhaustion takes precedence over later step exhaustion'
     assert.deepEqual(executedQueries, ['first recovery query']);
     assert.equal(
         result.workflowLineage.terminationReason,
-        'max_search_recovery_cycles_reached'
+        'budget_exhausted_steps'
     );
     assert.equal(
         result.workflowLineage.steps.findLast(
             (step) => step.stepKind === 'assess'
         )?.outcome.signals?.searchRecoveryOutcome,
-        'cycle_limit'
+        'execution_limit'
     );
 });
 

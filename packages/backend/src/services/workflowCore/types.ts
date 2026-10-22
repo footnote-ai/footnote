@@ -53,8 +53,12 @@ export type StepHandlerInput<TContext = unknown> = {
     stepId: string;
     context: TContext;
     results: Readonly<Record<string, Result>>;
+    /** Prior completed work from the canonical Run, for bounded estimates. */
+    run: Readonly<Pick<Run, 'steps'>>;
     /** Canonical cumulative Execution Contract facts before this Attempt. */
     execution: ExecutionLimitState;
+    /** Start time of this Attempt; only set when the handler begins. */
+    attemptStartedAtMs?: number;
     /** How many times this Step has run, starting at 1. */
     iteration: number;
     /** This Step's current Attempt, starting at 1. */
