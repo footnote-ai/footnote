@@ -59,7 +59,21 @@ const createTtsResponse = (
         mimeType: 'audio/mpeg',
         model: 'speech-model',
         voice: 'alloy',
-        speechSelection: {},
+        speechSelection: {
+            profileId: 'test-profile',
+            modality: 'tts',
+            provider: 'test-provider',
+            model: 'speech-model',
+            voice: 'alloy',
+            delivery: null,
+            requestedVoice: null,
+            selectionSource: {
+                model: 'deployment_fallback',
+                voice: 'deployment_fallback',
+                delivery: 'deployment_fallback',
+            },
+            fallbackReason: null,
+        },
         usage: {
             billingUnit: 'characters',
             inputQuantity: text.length,
