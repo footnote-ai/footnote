@@ -76,6 +76,22 @@ const makeDecision = (
             : {}),
     });
 
+const withFakeClock = async <T>(
+    startedAtMs: number,
+    run: (advanceByMs: (durationMs: number) => void) => Promise<T>
+): Promise<T> => {
+    const originalNow = Date.now;
+    let nowMs = startedAtMs;
+    Date.now = () => nowMs;
+    try {
+        return await run((durationMs) => {
+            nowMs += durationMs;
+        });
+    } finally {
+        Date.now = originalNow;
+    }
+};
+
 const executionLimits = (
     input: {
         maxWorkflowSteps?: number;
@@ -131,7 +147,8 @@ const createRuntime = (input: {
     initialNativeSearchUsed?: boolean;
     initialNativeToolExecution?: GenerationResult['toolExecution'];
     presentationEnabled?: boolean;
-    delayMs?: number;
+    clockAdvanceMs?: number;
+    advanceClock?: (durationMs: number) => void;
 }): GenerationRuntime => {
     let callCount = 0;
     let assessmentCount = 0;
@@ -140,10 +157,8 @@ const createRuntime = (input: {
         async generate(request) {
             callCount += 1;
             input.onRequest?.(request);
-            if (input.delayMs !== undefined) {
-                await new Promise<void>((resolve) =>
-                    setTimeout(resolve, input.delayMs)
-                );
+            if (input.clockAdvanceMs !== undefined) {
+                input.advanceClock?.(input.clockAdvanceMs);
             }
             const assessmentCall = input.presentationEnabled
                 ? callCount > 1 && callCount % 2 === 1
@@ -277,7 +292,8 @@ const runRecovery = async (input: {
     initialNativeSearchUsed?: boolean;
     initialNativeToolExecution?: GenerationResult['toolExecution'];
     presentationEnabled?: boolean;
-    runtimeDelayMs?: number;
+    clockAdvanceMs?: number;
+    advanceClock?: (durationMs: number) => void;
     planContinuationAddsRetrieval?: boolean;
     maxIterations?: number;
     generationStartedAtMs?: number;
@@ -325,7 +341,8 @@ const runRecovery = async (input: {
             initialNativeSearchUsed: input.initialNativeSearchUsed,
             initialNativeToolExecution: input.initialNativeToolExecution,
             presentationEnabled: input.presentationEnabled,
-            delayMs: input.runtimeDelayMs,
+            clockAdvanceMs: input.clockAdvanceMs,
+            advanceClock: input.advanceClock,
         }),
         generationRequest: {
             model: 'fixture-model',
@@ -844,35 +861,47 @@ test('reports live deliberation limits instead of the recovery-cycle cap', async
 });
 
 test('declines recovery when observed continuation time no longer fits', async () => {
-    const { result, executedQueries } = await runRecovery({
-        fixture: fixtures.staleInitialResults,
-        maxSearchRecoveryCycles: 1,
-        maxIterations: 3,
-        assessmentDecisions: [
-            makeDecision('revise'),
-            makeDecision('search', fixtures.staleInitialResults.followUpQuery),
-            makeDecision('finalize'),
-        ],
-        initialSearch: true,
-        runtimeDelayMs: 250,
-        contextExecutor: async (query, querySource) => {
-            await new Promise<void>((resolve) => setTimeout(resolve, 250));
-            return createSearchResult({
-                query,
-                querySource:
-                    querySource === 'assessment' ? 'assessment' : 'planner',
-                title: 'Measured fixture result',
-                content: 'Evidence with a bounded test delay.',
-            });
-        },
-        executionLimits: executionLimits({
-            maxWorkflowSteps: 9,
-            maxToolCalls: 2,
-            maxDeliberationCalls: 4,
-            maxReviewCycles: 3,
-            maxDurationMs: 1900,
-        }),
-    });
+    const startedAtMs = 1_000;
+    const { result, executedQueries } = await withFakeClock(
+        startedAtMs,
+        (advanceClock) =>
+            runRecovery({
+                fixture: fixtures.staleInitialResults,
+                maxSearchRecoveryCycles: 1,
+                maxIterations: 3,
+                assessmentDecisions: [
+                    makeDecision('revise'),
+                    makeDecision(
+                        'search',
+                        fixtures.staleInitialResults.followUpQuery
+                    ),
+                    makeDecision('finalize'),
+                ],
+                initialSearch: true,
+                clockAdvanceMs: 250,
+                advanceClock,
+                generationStartedAtMs: startedAtMs,
+                contextExecutor: async (query, querySource) => {
+                    advanceClock(250);
+                    return createSearchResult({
+                        query,
+                        querySource:
+                            querySource === 'assessment'
+                                ? 'assessment'
+                                : 'planner',
+                        title: 'Measured fixture result',
+                        content: 'Evidence with a controlled test clock.',
+                    });
+                },
+                executionLimits: executionLimits({
+                    maxWorkflowSteps: 9,
+                    maxToolCalls: 2,
+                    maxDeliberationCalls: 4,
+                    maxReviewCycles: 3,
+                    maxDurationMs: 1900,
+                }),
+            })
+    );
 
     assert.deepEqual(executedQueries, [
         fixtures.staleInitialResults.initialQuery,

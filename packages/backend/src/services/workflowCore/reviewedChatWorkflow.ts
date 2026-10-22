@@ -3724,26 +3724,32 @@ export const runBoundedReviewWorkflow = async (
                       maxTokensTotal: executionLimits.maxTokensTotal,
                   })
                 : 0;
-        const executionLimitReason =
-            decision.reviewDecision !== 'search' || repeatedSearchQuery
-                ? undefined
-                : handlerInput.execution.stepCount + 4 >
-                    executionLimits.maxWorkflowSteps
-                  ? 'budget_exhausted_steps'
-                  : handlerInput.execution.toolCallCount + 1 >
-                      executionLimits.maxToolCalls
-                    ? 'max_tool_calls_reached'
-                    : recoveryTokenBudget === undefined
-                      ? 'budget_exhausted_tokens'
-                      : handlerInput.execution.deliberationCallCount + 2 >
-                              executionLimits.maxDeliberationCalls ||
-                          handlerInput.execution.reviewCallCount + 2 >
-                              (executionLimits.maxReviewCycles ??
-                                  executionLimits.maxDeliberationCalls)
-                        ? 'max_deliberation_calls_reached'
-                        : remainingDurationMs <= estimatedRecoveryDurationMs
-                          ? 'budget_exhausted_time'
-                          : undefined;
+        let executionLimitReason: WorkflowTerminationReason | undefined;
+        if (decision.reviewDecision === 'search' && !repeatedSearchQuery) {
+            if (
+                handlerInput.execution.stepCount + 4 >
+                executionLimits.maxWorkflowSteps
+            ) {
+                executionLimitReason = 'budget_exhausted_steps';
+            } else if (
+                handlerInput.execution.toolCallCount + 1 >
+                executionLimits.maxToolCalls
+            ) {
+                executionLimitReason = 'max_tool_calls_reached';
+            } else if (recoveryTokenBudget === undefined) {
+                executionLimitReason = 'budget_exhausted_tokens';
+            } else if (
+                handlerInput.execution.deliberationCallCount + 2 >
+                    executionLimits.maxDeliberationCalls ||
+                handlerInput.execution.reviewCallCount + 2 >
+                    (executionLimits.maxReviewCycles ??
+                        executionLimits.maxDeliberationCalls)
+            ) {
+                executionLimitReason = 'max_deliberation_calls_reached';
+            } else if (remainingDurationMs <= estimatedRecoveryDurationMs) {
+                executionLimitReason = 'budget_exhausted_time';
+            }
+        }
         const searchBlockedReason =
             decision.reviewDecision !== 'search'
                 ? undefined
