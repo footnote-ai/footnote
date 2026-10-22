@@ -38,6 +38,13 @@ primary_region = 'ord'
     soft_limit = 20
     type = 'connections'
 
+  [[services.http_checks]]
+    interval = '15s'
+    timeout = '2s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/healthz'
+
 [[mounts]]
   source = 'footnote_data'
   destination = '/data'

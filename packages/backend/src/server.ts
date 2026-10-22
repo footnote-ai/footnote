@@ -114,7 +114,7 @@ const VOLTAGENT_LOG_DIR = path.join(
 
 // --- Storage and asset helpers ---
 const { resolveAsset, mimeMap } = createAssetResolver(DIST_DIR, {
-    spaFallbackExemptPrefixes: ['wiki'],
+    spaFallbackExemptPrefixes: ['wiki', 'healthz'],
 });
 
 // --- Service state ---

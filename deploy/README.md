@@ -71,6 +71,14 @@ normal `info` output stays easy to scan; warnings and errors remain visible.
 Use `footnote logs` or the deployment platform's log viewer to search for the
 event names when checking startup.
 
+## Fly HTTP Health Check
+
+The Fly service checks `GET /healthz` to confirm the backend HTTP server is
+serving requests; it does not depend on Discord, model providers, TrustGraph, or
+optional services. Inspect the deployed check with
+`fly checks list --app footnote`. Validate the local configuration with
+`fly config validate -c deploy/fly/server.toml`.
+
 ## First Setup
 
 Operators can use the web `/setup` page for the one-time repository-context flow:
