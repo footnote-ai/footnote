@@ -651,6 +651,45 @@ test('missed initial search is recovered with merged evidence and linked lineage
     assert.equal(requests.length, 4);
 });
 
+test('declines recovery when the current assessment has no reassessment iteration left', async () => {
+    const requests: GenerationRequest[] = [];
+    const { result, executedQueries } = await runRecovery({
+        fixture: fixtures.missedInitialSearch,
+        maxSearchRecoveryCycles: 1,
+        maxIterations: 2,
+        assessmentDecisions: [
+            makeDecision('revise'),
+            makeDecision('search', fixtures.missedInitialSearch.followUpQuery),
+        ],
+        executionLimits: executionLimits({
+            maxWorkflowSteps: 9,
+            maxToolCalls: 2,
+            maxDeliberationCalls: 4,
+            maxReviewCycles: 4,
+        }),
+        requests,
+    });
+
+    assert.deepEqual(executedQueries, []);
+    assert.equal(requests.length, 4);
+    assert.equal(
+        generatedText(result),
+        'Updated draft based on the returned discovery context.'
+    );
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_steps'
+    );
+    const finalAssessment = result.workflowLineage.steps.findLast(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.equal(finalAssessment?.outcome.signals?.reviewDecision, 'search');
+    assert.equal(
+        finalAssessment?.outcome.signals?.searchRecoveryOutcome,
+        'execution_limit'
+    );
+});
+
 test('an unexecuted initial query does not block the same assessment recovery query', async () => {
     const query = fixtures.missedInitialSearch.followUpQuery;
     const { result, executedQueries } = await runRecovery({

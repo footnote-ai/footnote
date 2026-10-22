@@ -3730,7 +3730,9 @@ export const runBoundedReviewWorkflow = async (
                 : 0;
         let executionLimitReason: WorkflowTerminationReason | undefined;
         if (decision.reviewDecision === 'search' && !repeatedSearchQuery) {
-            if (
+            if (handlerInput.iteration >= effectiveMaxIterations) {
+                executionLimitReason = 'budget_exhausted_steps';
+            } else if (
                 handlerInput.execution.stepCount + 4 >
                 executionLimits.maxWorkflowSteps
             ) {
