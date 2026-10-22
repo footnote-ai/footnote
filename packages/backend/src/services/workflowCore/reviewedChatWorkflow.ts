@@ -3682,13 +3682,17 @@ export const runBoundedReviewWorkflow = async (
             completedSearchRecoveryCycles >= maxSearchRecoveryCycles;
         // Missing timing history fails open; observed estimates never replace hard Attempt admission.
         const recoveryAdmissionNowMs = Date.now();
+        const currentAssessmentDurationMs = Math.max(
+            0,
+            recoveryAdmissionNowMs -
+                (handlerInput.attemptStartedAtMs ?? recoveryAdmissionNowMs)
+        );
         const estimatedRecoveryDurationMs =
             maximumObservedAttemptDurationMs(handlerInput.run, 'retrieve') +
             maximumObservedAttemptDurationMs(handlerInput.run, 'generate') +
             Math.max(
-                0,
-                recoveryAdmissionNowMs -
-                    (handlerInput.attemptStartedAtMs ?? recoveryAdmissionNowMs)
+                currentAssessmentDurationMs,
+                maximumObservedAttemptDurationMs(handlerInput.run, 'assess')
             );
         const remainingDurationMs =
             executionLimits.maxDurationMs -

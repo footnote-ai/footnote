@@ -148,6 +148,7 @@ const createRuntime = (input: {
     initialNativeToolExecution?: GenerationResult['toolExecution'];
     presentationEnabled?: boolean;
     clockAdvanceMs?: number;
+    clockAdvancesMs?: number[];
     advanceClock?: (durationMs: number) => void;
 }): GenerationRuntime => {
     let callCount = 0;
@@ -157,8 +158,10 @@ const createRuntime = (input: {
         async generate(request) {
             callCount += 1;
             input.onRequest?.(request);
-            if (input.clockAdvanceMs !== undefined) {
-                input.advanceClock?.(input.clockAdvanceMs);
+            const clockAdvanceMs =
+                input.clockAdvancesMs?.[callCount - 1] ?? input.clockAdvanceMs;
+            if (clockAdvanceMs !== undefined) {
+                input.advanceClock?.(clockAdvanceMs);
             }
             const assessmentCall = input.presentationEnabled
                 ? callCount > 1 && callCount % 2 === 1
@@ -293,6 +296,7 @@ const runRecovery = async (input: {
     initialNativeToolExecution?: GenerationResult['toolExecution'];
     presentationEnabled?: boolean;
     clockAdvanceMs?: number;
+    clockAdvancesMs?: number[];
     advanceClock?: (durationMs: number) => void;
     planContinuationAddsRetrieval?: boolean;
     maxIterations?: number;
@@ -342,6 +346,7 @@ const runRecovery = async (input: {
             initialNativeToolExecution: input.initialNativeToolExecution,
             presentationEnabled: input.presentationEnabled,
             clockAdvanceMs: input.clockAdvanceMs,
+            clockAdvancesMs: input.clockAdvancesMs,
             advanceClock: input.advanceClock,
         }),
         generationRequest: {
@@ -906,6 +911,52 @@ test('declines recovery when observed continuation time no longer fits', async (
     assert.deepEqual(executedQueries, [
         fixtures.staleInitialResults.initialQuery,
     ]);
+    assert.equal(
+        generatedText(result),
+        'Updated draft based on the returned discovery context.'
+    );
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_time'
+    );
+    assert.equal(
+        result.workflowLineage.steps.findLast(
+            (step) => step.stepKind === 'assess'
+        )?.outcome.signals?.searchRecoveryOutcome,
+        'execution_limit'
+    );
+});
+
+test('uses the slowest observed assessment to estimate recovery reassessment', async () => {
+    const startedAtMs = 1_000;
+    const { result, executedQueries } = await withFakeClock(
+        startedAtMs,
+        (advanceClock) =>
+            runRecovery({
+                fixture: fixtures.staleInitialResults,
+                maxSearchRecoveryCycles: 1,
+                maxIterations: 3,
+                assessmentDecisions: [
+                    makeDecision('revise'),
+                    makeDecision(
+                        'search',
+                        fixtures.staleInitialResults.followUpQuery
+                    ),
+                    makeDecision('finalize'),
+                ],
+                clockAdvancesMs: [0, 1_200, 0, 100],
+                advanceClock,
+                generationStartedAtMs: startedAtMs,
+                executionLimits: executionLimits({
+                    maxWorkflowSteps: 9,
+                    maxDeliberationCalls: 4,
+                    maxReviewCycles: 4,
+                    maxDurationMs: 1_500,
+                }),
+            })
+    );
+
+    assert.deepEqual(executedQueries, []);
     assert.equal(
         generatedText(result),
         'Updated draft based on the returned discovery context.'
