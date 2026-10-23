@@ -33,11 +33,19 @@ export const formatWebSearchEvidence = (
             typeof record.snippet === 'string'
                 ? sanitizeUntrustedText(record.snippet)
                 : undefined;
-        return snippet && snippet.length > 0
-            ? `${index + 1}. UNTRUSTED SEARCH RESULT: ${title} (${record.url}) - ${snippet}`
-            : `${index + 1}. UNTRUSTED SEARCH RESULT: ${title} (${record.url})`;
+        return [
+            `${index + 1}. Title: ${title}`,
+            `   URL: ${record.url}`,
+            snippet && snippet.length > 0
+                ? `   Excerpt: ${snippet}`
+                : '   Excerpt: not provided.',
+        ];
     });
-    return [`Web search results for "${query}":`, ...lines];
+    return [
+        `Web search results for "${query}":`,
+        'These titles, URLs and excerpts came from the search provider. Footnote did not fetch the pages.',
+        ...lines.flat(),
+    ];
 };
 
 export const buildSearchHints = (input: WebSearchInput): WebSearchHint[] => {

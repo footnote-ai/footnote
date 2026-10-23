@@ -19,6 +19,22 @@ direct authority to external providers.
 Search discovery is not source reading. Results are candidate sources, not
 verified evidence by themselves.
 
+The model receives titles, URLs, and optional excerpts from the search provider,
+not the full pages. The formatted input makes that clear and marks missing
+excerpts. Search results stay in user-role messages: they can help support an
+answer, but they cannot instruct Footnote. Generation and review guidance asks
+the model to check dates, conflicting reports, and independent support rather
+than treating repeated excerpts as verification.
+
+This formatting takes up prompt tokens like any other retrieved context. The
+workflow's existing token estimator considers the model's input messages before
+admitting a step, and provider-reported usage is counted against the Run's
+limits. Longer excerpts or instructions therefore reduce the budget available
+for later calls; this change does not introduce separate token allowances.
+
+The proposed behavioral checks and what they can establish are tracked in
+[Web search evidence quality](../../status/web-search-evidence-quality.md).
+
 For `repo_explainer`, the backend also carries the canonical repository identity
 through retrieval. Each normalized provider record is classified as
 `in_scope`, `out_of_scope`, or `uncertain` before it can become generation
