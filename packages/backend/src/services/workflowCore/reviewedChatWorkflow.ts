@@ -1221,7 +1221,8 @@ const makePlanDefault = (): PlannerStepResult => ({
 
 /** Combines every provider Attempt used while routing one logical generation. */
 const combineGenerationUsage = (
-    summaries: readonly ReviewWorkflowUsageSummary[]
+    summaries: readonly ReviewWorkflowUsageSummary[],
+    routingAttempts?: readonly RoutingChainAttemptLog[]
 ): ReviewWorkflowUsageSummary => {
     const last = summaries.at(-1);
     return {
@@ -1239,7 +1240,15 @@ const combineGenerationUsage = (
             0
         ),
         estimatedCost: combineBackendTextCostEstimates(
-            summaries.map((summary) => summary.estimatedCost)
+            routingAttempts === undefined
+                ? summaries.map((summary) => summary.estimatedCost)
+                : routingAttempts
+                      .filter(
+                          (attempt) =>
+                              attempt.status !== 'skipped_ineligible' &&
+                              attempt.status !== 'skipped_temporary_unavailable'
+                      )
+                      .map((attempt) => attempt.cost)
         ),
     };
 };
@@ -3073,7 +3082,8 @@ export const runBoundedReviewWorkflow = async (
         const usage = combineGenerationUsage(
             generationAttempts.map((attempt) =>
                 captureUsage(attempt, boundedRequest.model)
-            )
+            ),
+            routingAttempts
         );
         const retrievedSourceCount = readEvidenceEnvelope(
             handlerInput.results.evidence
@@ -3421,7 +3431,8 @@ export const runBoundedReviewWorkflow = async (
             combineGenerationUsage(
                 reviewAttempts.map((attempt) =>
                     captureUsage(attempt, bounded.model)
-                )
+                ),
+                routingAttempts
             );
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
