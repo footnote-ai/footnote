@@ -854,10 +854,36 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
 
     assert.equal(result.outcome, 'generated');
     assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
+    assert.deepEqual(
+        result.workflowLineage.steps.map((step) => [
+            step.stepId,
+            step.stepKind,
+        ]),
+        [
+            ['step_1', 'generate'],
+            ['step_2', 'assess'],
+        ]
+    );
+    const generateStep = result.workflowLineage.steps[0];
+    assert.ok(generateStep);
+    assert.equal(generateStep.attempts?.[0]?.requestedModel, 'gpt-5-mini');
+    assert.equal(generateStep.attempts?.[0]?.usage?.totalTokens, 30);
+    assert.deepEqual(generateStep.resultRefs, [
+        {
+            resultId: `${result.workflowLineage.runId}:step_1:draft`,
+            name: 'draft',
+        },
+    ]);
     const assessStep = result.workflowLineage.steps.find(
         (step) => step.stepKind === 'assess'
     );
     assert.ok(assessStep);
+    assert.equal(assessStep.parentStepId, generateStep.stepId);
+    assert.equal(
+        assessStep.inputRefs?.find((reference) => reference.name === 'draft')
+            ?.resultId,
+        `${result.workflowLineage.runId}:step_1:draft`
+    );
     assert.equal(assessStep.outcome.status, 'executed');
     assert.equal(assessStep.outcome.signals?.reviewDecision, 'finalize');
     assert.equal(
@@ -867,6 +893,18 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
     assert.equal(assessStep.outcome.signals?.traceAlignment, 'aligned');
     assert.equal(assessSafetyIdentifier, 'derived-safety-id');
     assert.equal(generationCalls, 2);
+    assert.deepEqual(
+        result.workflowLineage.results?.map((record) => [
+            record.name,
+            record.status,
+            record.producedByStepId,
+            record.producedByAttempt,
+        ]),
+        [
+            ['draft', 'produced', 'step_1', 1],
+            ['review', 'produced', 'step_2', 1],
+        ]
+    );
 });
 
 test('runBoundedReviewWorkflow executes engine-bounded refinement path without revise step kind', async () => {
