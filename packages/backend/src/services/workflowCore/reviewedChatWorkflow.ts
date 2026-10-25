@@ -168,7 +168,7 @@ export type ReviewWorkflowUsageSummary = {
     model: string;
     promptTokens: number;
     completionTokens: number;
-    totalTokens: number;
+    totalTokens?: number;
     estimatedCost: BackendTextCostEstimate;
 };
 
@@ -1222,7 +1222,8 @@ const makePlanDefault = (): PlannerStepResult => ({
 /** Combines every provider Attempt used while routing one logical generation. */
 const combineGenerationUsage = (
     summaries: readonly ReviewWorkflowUsageSummary[],
-    routingAttempts?: readonly RoutingChainAttemptLog[]
+    routingAttempts?: readonly RoutingChainAttemptLog[],
+    results: readonly GenerationResult[] = []
 ): ReviewWorkflowUsageSummary => {
     const last = summaries.at(-1);
     return {
@@ -1235,10 +1236,8 @@ const combineGenerationUsage = (
             (total, summary) => total + summary.completionTokens,
             0
         ),
-        totalTokens: summaries.reduce(
-            (total, summary) => total + summary.totalTokens,
-            0
-        ),
+        totalTokens: combineGenerationResultUsage(results, routingAttempts)
+            ?.totalTokens,
         estimatedCost: combineBackendTextCostEstimates(
             routingAttempts === undefined
                 ? summaries.map((summary) => summary.estimatedCost)
@@ -1257,7 +1256,13 @@ const combineGenerationResultUsage = (
     results: readonly GenerationResult[],
     routingAttempts?: readonly RoutingChainAttemptLog[]
 ): GenerationUsage | undefined => {
-    const usages = (routingAttempts ?? results)
+    const attempts =
+        routingAttempts?.filter(
+            (attempt) =>
+                attempt.status !== 'skipped_ineligible' &&
+                attempt.status !== 'skipped_temporary_unavailable'
+        ) ?? results;
+    const usages = attempts
         .map((attempt) => attempt.usage)
         .filter((usage): usage is GenerationUsage => usage !== undefined);
     if (usages.length === 0) {
@@ -1275,13 +1280,23 @@ const combineGenerationResultUsage = (
             : values.reduce((total, value) => total + value, 0);
     };
 
+    const totalTokens = usages.reduce<number | undefined>((total, usage) => {
+        const reported =
+            usage.totalTokens ??
+            (usage.promptTokens !== undefined ||
+            usage.completionTokens !== undefined
+                ? (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0)
+                : undefined);
+        return reported === undefined ? total : (total ?? 0) + reported;
+    }, undefined);
+
     return {
         promptTokens: sum((value) => value.promptTokens),
         cachedInputTokens: sum((value) => value.cachedInputTokens),
         cacheWriteTokens: sum((value) => value.cacheWriteTokens),
         completionTokens: sum((value) => value.completionTokens),
         reasoningTokens: sum((value) => value.reasoningTokens),
-        totalTokens: sum((value) => value.totalTokens),
+        totalTokens,
     };
 };
 
@@ -3019,20 +3034,24 @@ export const runBoundedReviewWorkflow = async (
                 );
                 const lastAttempt = generationAttempts.at(-1);
                 if (lastAttempt === undefined) {
+                    const usage = combineGenerationResultUsage(
+                        generationAttempts,
+                        routingAttempts
+                    );
                     return {
                         status: 'failed',
                         errorCode: routed.error.reasonCode,
                         retryable: false,
+                        ...(usage?.totalTokens === undefined
+                            ? {}
+                            : { usage: { totalTokens: usage.totalTokens } }),
                         metadata: encodeMetadata({
                             status: 'failed',
                             summary:
                                 'Generation routing failed; workflow returned the latest valid draft when available.',
                             reasonCode: routed.error.reasonCode,
                             terminationReason: 'executor_error_fail_open',
-                            usage: combineGenerationResultUsage(
-                                generationAttempts,
-                                routingAttempts
-                            ),
+                            usage,
                             estimatedCost: combineGenerationUsage(
                                 [],
                                 routingAttempts
@@ -3089,7 +3108,8 @@ export const runBoundedReviewWorkflow = async (
             generationAttempts.map((attempt) =>
                 captureUsage(attempt, boundedRequest.model)
             ),
-            routingAttempts
+            routingAttempts,
+            generationAttempts
         );
         const retrievedSourceCount = readEvidenceEnvelope(
             handlerInput.results.evidence
@@ -3213,7 +3233,9 @@ export const runBoundedReviewWorkflow = async (
                 status: 'failed',
                 errorCode: generationAdmission.reasonCode,
                 retryable: false,
-                usage: { totalTokens: usage.totalTokens },
+                ...(usage.totalTokens === undefined
+                    ? {}
+                    : { usage: { totalTokens: usage.totalTokens } }),
                 metadata,
             };
         }
@@ -3221,7 +3243,9 @@ export const runBoundedReviewWorkflow = async (
             status: 'succeeded',
             outcome: 'generated',
             result: toSerializable(generationResult),
-            usage: { totalTokens: usage.totalTokens },
+            ...(usage.totalTokens === undefined
+                ? {}
+                : { usage: { totalTokens: usage.totalTokens } }),
             metadata,
         };
     };
@@ -3441,7 +3465,8 @@ export const runBoundedReviewWorkflow = async (
                 reviewAttempts.map((attempt) =>
                     captureUsage(attempt, bounded.model)
                 ),
-                routingAttempts
+                routingAttempts,
+                reviewAttempts
             );
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
@@ -3529,7 +3554,9 @@ export const runBoundedReviewWorkflow = async (
                     status: 'failed',
                     errorCode: routed.error.reasonCode,
                     retryable: false,
-                    usage: { totalTokens: usage.totalTokens },
+                    ...(usage.totalTokens === undefined
+                        ? {}
+                        : { usage: { totalTokens: usage.totalTokens } }),
                     metadata: encodeMetadata({
                         status: 'failed',
                         summary:
@@ -3586,6 +3613,9 @@ export const runBoundedReviewWorkflow = async (
                 errorMessage:
                     error instanceof Error ? error.message : String(error),
                 retryable: false,
+                ...(usage.totalTokens === undefined
+                    ? {}
+                    : { usage: { totalTokens: usage.totalTokens } }),
                 metadata: encodeMetadata({
                     status: 'failed',
                     summary:
@@ -3648,7 +3678,9 @@ export const runBoundedReviewWorkflow = async (
                             ? 'review_refusal_output'
                             : 'review_parse_error',
                 retryable: false,
-                usage: { totalTokens: usage.totalTokens },
+                ...(usage.totalTokens === undefined
+                    ? {}
+                    : { usage: { totalTokens: usage.totalTokens } }),
                 metadata: encodeMetadata({
                     status: 'failed',
                     summary:
@@ -3752,7 +3784,7 @@ export const runBoundedReviewWorkflow = async (
                       ],
                       totalTokens:
                           handlerInput.execution.totalTokens +
-                          usage.totalTokens,
+                          (usage.totalTokens ?? 0),
                       maxTokensTotal: executionLimits.maxTokensTotal,
                   })
                 : 0;
@@ -3821,7 +3853,9 @@ export const runBoundedReviewWorkflow = async (
             status: 'succeeded',
             outcome,
             result: toSerializable({ decision }),
-            usage: { totalTokens: usage.totalTokens },
+            ...(usage.totalTokens === undefined
+                ? {}
+                : { usage: { totalTokens: usage.totalTokens } }),
             metadata: encodeMetadata({
                 status: 'executed',
                 summary:
