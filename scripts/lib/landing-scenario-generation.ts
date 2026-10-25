@@ -97,7 +97,7 @@ export const LANDING_SCENARIO_PROMPTS = [
         id: 'inspect-an-answer',
         question: 'How does Footnote show its work?',
         submittedPrompt:
-            "How does Footnote show its work? Answer in one short paragraph of three sentences, under 80 words. Explain what readers can inspect and why that doesn't guarantee an answer is correct.",
+            "How does Footnote show its work? Briefly explain what readers can inspect and its limitations, using and citing Footnote's documentation.",
     },
     {
         id: 'unconfirmed-claims',

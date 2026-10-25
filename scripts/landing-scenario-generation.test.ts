@@ -314,10 +314,10 @@ test('buildChatRequest emits the landing capture payload shape', () => {
 test('introduction capture records its submitted prompt separately from the displayed question', () => {
     const scenario = LANDING_SCENARIO_PROMPTS[0];
     const submittedPrompt =
-        "How does Footnote show its work? Answer in one short paragraph of three sentences, under 80 words. Explain what readers can inspect and why that doesn't guarantee an answer is correct.";
+        "How does Footnote show its work? Briefly explain what readers can inspect and its limitations, using and citing Footnote's documentation.";
     const request = buildChatRequest(scenario, {
         backendBaseUrl: 'http://localhost:3000',
-        modeId: 'express',
+        modeId: 'balanced',
     });
     const response = createMessageResponse('A captured answer');
     const fixture = buildLandingScenarioFixture({
@@ -327,10 +327,11 @@ test('introduction capture records its submitted prompt separately from the disp
         capturedChainHash: '0123456789abcdef',
         capturedAt: '2026-06-11T00:34:07.189Z',
         backendBaseUrl: 'http://localhost:3000',
-        workflowModeId: 'express',
+        workflowModeId: 'balanced',
     });
 
     assert.equal(scenario.question, 'How does Footnote show its work?');
+    assert.equal(scenario.submittedPrompt, submittedPrompt);
     assert.equal(request.latestUserInput, submittedPrompt);
     assert.deepEqual(PostChatRequestSchema.parse(request), request);
     assert.deepEqual(request.conversation, [
@@ -370,7 +371,7 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
             capturedResponseId: 'AbCdEf12',
             capturedChainHash: '0123456789abcdef',
             capturedQuestion:
-                "How does Footnote show its work? Answer in one short paragraph of three sentences, under 80 words. Explain what readers can inspect and why that doesn't guarantee an answer is correct.",
+                "How does Footnote show its work? Briefly explain what readers can inspect and its limitations, using and citing Footnote's documentation.",
         },
     });
     assert.deepEqual(fixture.capture, {
@@ -380,7 +381,7 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
         capturedResponseId: 'AbCdEf12',
         capturedChainHash: '0123456789abcdef',
         capturedQuestion:
-            "How does Footnote show its work? Answer in one short paragraph of three sentences, under 80 words. Explain what readers can inspect and why that doesn't guarantee an answer is correct.",
+            "How does Footnote show its work? Briefly explain what readers can inspect and its limitations, using and citing Footnote's documentation.",
     });
 });
 
@@ -392,7 +393,7 @@ test('assertScenarioId enforces kebab-case ids', () => {
     );
 });
 
-test('introduction capture keeps the requested word range advisory', () => {
+test('introduction capture keeps the 40–70-word target advisory with a 100-word maximum', () => {
     for (const wordCount of [35, 40, 70, 71, 79, 80, 100]) {
         assert.equal(
             assertConciseIntroductionResponse('word '.repeat(wordCount)),

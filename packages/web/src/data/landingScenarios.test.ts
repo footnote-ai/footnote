@@ -339,9 +339,10 @@ test('landing scenario capture blocks are compact and aligned', () => {
         assert.equal(fixture.capture.capturedChainHash.trim().length > 0, true);
         if (fixture.id === 'inspect-an-answer') {
             assert.equal(fixture.question, 'How does Footnote show its work?');
+            assert.equal(fixture.capture.workflowModeId, 'balanced');
             assert.equal(
                 fixture.capture.capturedQuestion,
-                "How does Footnote show its work? Answer in one short paragraph of three sentences, under 80 words. Explain what readers can inspect and why that doesn't guarantee an answer is correct."
+                "How does Footnote show its work? Briefly explain what readers can inspect and its limitations, using and citing Footnote's documentation."
             );
         }
     }
