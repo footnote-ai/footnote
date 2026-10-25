@@ -81,6 +81,8 @@ Do NOT close or modify any parent issue.
 
 </local-ticket-template>
 
+This status line is only for local ticket files. Do not copy it to Footnote's GitHub labels; it records local workflow and does not authorize unattended execution.
+
 <issue-template>
 
 ## Parent

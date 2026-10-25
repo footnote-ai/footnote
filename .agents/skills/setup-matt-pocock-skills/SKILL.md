@@ -46,9 +46,9 @@ Default posture: these skills were designed for GitHub. If a `git remote` points
 - **Local markdown**: issues live as files under `.scratch/<feature>/` in this repo (good for solo projects or repos without a remote)
 - **Other** (Jira, Linear, etc.): ask the user to describe the workflow in one paragraph; the skill will record it as freeform prose
 
-Record the choice in `docs/agents/issue-tracker.md`. The GitHub and GitLab templates carry a "PRs as a request surface" flag, defaulted **off**. Leave it off and don't raise it: a user who wants external PRs in the triage queue can flip the flag in the file later.
+Record the choice in `docs/agents/issue-tracker.md`, including the "PRs as a request surface" flag. The GitHub and GitLab templates default it **off**. For Footnote, keep it `no`; do not remove the flag while simplifying the PR instructions. A user who wants external PRs in the triage queue can change it to `yes` later.
 
-**Section B: Triage label vocabulary.** For Footnote's GitHub tracker, skip this section: workflow status comes from the Footnote Project and labels classify areas or concerns. For other trackers, skip it if the `triage` skill isn't installed; otherwise ask:
+**Section B: Triage label vocabulary.** For Footnote's GitHub tracker, skip this section: workflow status comes from the Footnote Project and labels classify areas or concerns. Do not copy the generic five-label template into Footnote's `docs/agents/triage-labels.md`. For other trackers, skip it if the `triage` skill isn't installed; otherwise ask:
 
 If it is installed, ask exactly one question:
 

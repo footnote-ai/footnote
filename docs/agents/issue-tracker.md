@@ -26,6 +26,10 @@ Infer the repo from `git remote -v`; `gh` does this automatically when run insid
 
 ## Pull requests
 
+**PRs as a request surface: no.** Keep external PRs out of general `/triage`
+discovery unless a maintainer changes this setting to `yes`. An explicitly
+named PR can still be triaged when the maintainer asks.
+
 Pull requests carry review state, requested reviewers, checks, changed files,
 and useful area or concern labels. Link a PR to the issue it completes; do not
 copy issue type, planning fields, or Project status into PR labels.

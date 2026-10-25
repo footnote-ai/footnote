@@ -41,12 +41,12 @@ State what is out of scope. This prevents the agent from gold-plating or making 
 ```markdown
 ## Agent Brief
 
-**Category:** bug / enhancement
+**Issue type:** Feature / Bug / Task
 **Summary:** one-line description of what needs to happen
 
 **Current behavior:**
 Describe what happens now. For bugs, this is the broken behavior.
-For enhancements, this is the status quo the feature builds on.
+For features, this is the status quo the feature builds on.
 
 **Desired behavior:**
 Describe what should happen after the agent's work is complete.
@@ -77,7 +77,7 @@ Be specific about edge cases and error conditions.
 ```markdown
 ## Agent Brief
 
-**Category:** bug
+**Issue type:** Bug
 **Summary:** Skill description truncation drops mid-word, producing broken output
 
 **Current behavior:**
@@ -110,12 +110,12 @@ and append "..." to indicate truncation.
 - Multi-line description support
 ```
 
-### Good agent brief (enhancement)
+### Good agent brief (feature)
 
 ```markdown
 ## Agent Brief
 
-**Category:** enhancement
+**Issue type:** Feature
 **Summary:** Add `.out-of-scope/` directory support for tracking rejected feature requests
 
 **Current behavior:**
@@ -151,7 +151,7 @@ checked for matches.
 
 - Automated matching (human confirms the match)
 - Reopening previously rejected features
-- Bug reports (only enhancement rejections go to `.out-of-scope/`)
+- Bug reports (only rejected Features go to `.out-of-scope/`)
 ```
 
 ### Good agent brief (PR)
@@ -161,7 +161,7 @@ For a PR, "Current behavior" describes the state of the diff, and the brief asks
 ```markdown
 ## Agent Brief
 
-**Category:** enhancement
+**Issue type:** Feature
 **Summary:** Finish the contributor's `--json` output flag for `triage list`
 
 **Current behavior:**
@@ -213,7 +213,7 @@ The function around line 150 has the issue.
 
 This is bad because:
 
-- No category
+- No issue type
 - Vague description ("the triage thing is broken")
 - References file paths and line numbers that will go stale
 - No acceptance criteria
