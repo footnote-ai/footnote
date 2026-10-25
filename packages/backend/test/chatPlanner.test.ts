@@ -638,6 +638,46 @@ test('chatPlanner records unavailable usage when text execution fails', async ()
     }
 });
 
+test('chatPlanner skips accounting only for marked pre-provider-call failures', async () => {
+    for (const structured of [false, true]) {
+        for (const causeWrapped of [false, true]) {
+            const records: BackendLLMCostRecord[] = [];
+            const preProviderError = Object.assign(
+                new Error('queued generation aborted'),
+                { preProviderCallFailure: true }
+            );
+            const error = causeWrapped
+                ? new Error('planner executor wrapped the failure', {
+                      cause: preProviderError,
+                  })
+                : preProviderError;
+            const planner = createChatPlanner({
+                ...(structured
+                    ? {
+                          executePlannerStructured: async () => {
+                              throw error;
+                          },
+                      }
+                    : {
+                          executePlanner: async () => {
+                              throw error;
+                          },
+                      }),
+                recordUsage: (record) => records.push(record),
+            });
+            const { execution } = await planFromWorkflow(
+                planner,
+                createChatRequest()
+            );
+
+            assert.equal(execution.status, 'failed');
+            assert.deepEqual(records, []);
+            assert.equal(execution.usage, undefined);
+            assert.equal(execution.cost, undefined);
+        }
+    }
+});
+
 test('chatPlanner preserves usage from a failed structured attempt before fallback', async () => {
     const decision = {
         action: 'message',

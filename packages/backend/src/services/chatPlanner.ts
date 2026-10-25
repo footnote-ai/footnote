@@ -271,6 +271,27 @@ const readPlannerFailureUsage = (
     };
 };
 
+const isPreProviderCallFailure = (error: unknown): boolean => {
+    const seen = new Set<object>();
+    let current = error;
+    while (
+        typeof current === 'object' &&
+        current !== null &&
+        !seen.has(current)
+    ) {
+        seen.add(current);
+        const candidate = current as {
+            preProviderCallFailure?: unknown;
+            cause?: unknown;
+        };
+        if (candidate.preProviderCallFailure === true) {
+            return true;
+        }
+        current = candidate.cause;
+    }
+    return false;
+};
+
 /**
  * Narrow planner-only execution input.
  * This stays backend-local so planner policy can evolve beyond current providers
@@ -2019,8 +2040,13 @@ export const createChatPlanner = ({
             try {
                 response = await executePlanner(payload);
             } catch (error) {
-                const failed = readPlannerFailureUsage(error, payload.model);
-                recordPlannerUsage(failed.model, failed.usage);
+                if (!isPreProviderCallFailure(error)) {
+                    const failed = readPlannerFailureUsage(
+                        error,
+                        payload.model
+                    );
+                    recordPlannerUsage(failed.model, failed.usage);
+                }
                 throw error;
             }
             recordPlannerUsage(response.model || payload.model, response.usage);
@@ -2201,14 +2227,16 @@ export const createChatPlanner = ({
                         signal: structuredAbortContext.signal,
                     });
                 } catch (structuredError) {
-                    const failedStructuredUsage = readPlannerFailureUsage(
-                        structuredError,
-                        requestPayload.model
-                    );
-                    recordPlannerUsage(
-                        failedStructuredUsage.model,
-                        failedStructuredUsage.usage
-                    );
+                    if (!isPreProviderCallFailure(structuredError)) {
+                        const failedStructuredUsage = readPlannerFailureUsage(
+                            structuredError,
+                            requestPayload.model
+                        );
+                        recordPlannerUsage(
+                            failedStructuredUsage.model,
+                            failedStructuredUsage.usage
+                        );
+                    }
                     if (
                         structuredError instanceof Error &&
                         structuredError.name === 'AbortError' &&

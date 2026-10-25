@@ -26,6 +26,8 @@ export class OllamaGenerationQueueFullError extends Error {
 
     readonly code = 'ollama_generation_queue_full';
 
+    readonly preProviderCallFailure = true;
+
     constructor(maxQueuedGenerations: number) {
         super(
             `Local Ollama generation queue is full (limit ${maxQueuedGenerations}).`
@@ -200,6 +202,7 @@ const createAbortError = (): Error => {
         'Local Ollama generation was cancelled while queued.'
     );
     error.name = 'AbortError';
+    Object.assign(error, { preProviderCallFailure: true });
     return error;
 };
 
