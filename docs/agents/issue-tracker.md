@@ -5,7 +5,7 @@ Issues and specs for this repo live as GitHub issues in `footnote-ai/footnote`. 
 ## Footnote conventions
 
 - **Issue types**: use the org types `Feature`, `Bug`, and `Task` (set via the GraphQL `updateIssue` `issueTypeId`). Do not recreate types as labels.
-- **Labels**: `area:*` labels for areas, concern labels (`provenance`, `context`, etc.), and the five triage state labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). Labels do not carry priority, effort, or dates.
+- **Labels**: short area names (`backend`, `web`, `ci`, `discord`, `runtime`, `launcher`, `deployment`, `docs`) and concern labels (`provenance`, `context`, etc.). Labels do not carry issue type, workflow status, ownership, priority, effort, or dates.
 - **Fields**: org issue fields hold priority, effort, start date, and target date. Set dates only when work is scheduled.
 - **Project**: the Footnote org Project holds workflow status. Do not duplicate it in labels.
 - **Linking**: link a PR to the issue it closes; sub-issues decompose; `blocked by` expresses hard ordering.
@@ -24,11 +24,15 @@ See `docs/ai/github-work-management.md` for the full working model.
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
-## Pull requests as a triage surface
+## Pull requests
 
-**PRs as a request surface: no.**
+**PRs as a request surface: no.** Keep external PRs out of general `/triage`
+discovery unless a maintainer changes this setting to `yes`. An explicitly
+named PR can still be triaged when the maintainer asks.
 
-When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
+Pull requests carry review state, requested reviewers, checks, changed files,
+and useful area or concern labels. Link a PR to the issue it completes; do not
+copy issue type, planning fields, or Project status into PR labels.
 
 - **Read a PR**: `gh pr view <number> --comments` and `gh pr diff <number>` for the diff.
 - **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
@@ -54,3 +58,4 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (`issue_dependencies_summary.blocked_by > 0`, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+

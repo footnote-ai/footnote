@@ -47,7 +47,7 @@ updates:
             update-types: ['version-update:semver-major']
       labels:
           - 'dependencies'
-          - 'area: deployment'
+          - 'deployment'
 
     # ─── GitHub Actions ─────────────────────────────────────────────────────────
     - package-ecosystem: 'github-actions'
@@ -60,4 +60,5 @@ updates:
                   - 'github/codeql-action/*'
       labels:
           - 'dependencies'
-          - 'area: ci'
+          - 'ci'
+

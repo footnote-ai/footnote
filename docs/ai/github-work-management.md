@@ -44,15 +44,14 @@ have a better native field.
 
 Areas:
 
-- `area: backend`
-- `area: web`
-- `area: discord`
-- `area: runtime`
-- `area: launcher`
-- `area: shared`
-- `area: deployment`
-- `area: ci`
-- `area: docs`
+- `backend`
+- `web`
+- `discord`
+- `runtime`
+- `launcher`
+- `deployment`
+- `ci`
+- `docs`
 
 Footnote concerns:
 
@@ -69,11 +68,12 @@ Contribution and automation:
 - `good first issue`
 - `help wanted`
 - `dependencies`
-- `duplicate`
 
-Do not add labels for priority, effort, dates, workflow status, issue type, or a
-milestone. Close work as `not planned` through GitHub's issue state rather than
-keeping separate `invalid` and `wontfix` labels.
+Do not use labels for priority, effort, dates, workflow status, ownership, issue
+type, or milestones. Use GitHub's native duplicate action and close rejected work
+with the `not planned` reason. Do not use readiness or authorization labels:
+Project readiness describes work status, while authority to execute a task must
+come from a separate, explicit instruction.
 
 ## Issue Fields And The Project
 
@@ -133,3 +133,4 @@ files, and any useful area or concern labels.
 
 Do not recreate issue metadata on a linked pull request merely to make the two
 items look symmetrical.
+
