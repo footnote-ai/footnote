@@ -22,6 +22,7 @@ import {
 } from '../src/services/internalText.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 import { hmacId } from '../src/utils/pseudonymization.js';
+import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 
 type TestServer = {
     url: string;
@@ -576,6 +577,30 @@ test('internal news task service records usage even when structured parsing fail
     );
 
     assert.equal(recordedUsageCount, 1);
+});
+
+test('internal news task preserves missing usage in its cost estimate', async () => {
+    const records: BackendLLMCostRecord[] = [];
+    const service = createInternalNewsTaskService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                return {
+                    text: JSON.stringify({ news: [], summary: 'No news.' }),
+                    model: 'gpt-5-mini',
+                };
+            },
+        },
+        defaultProfile: defaultNewsProfile,
+        recordUsage: (record) => records.push(record),
+    });
+    await service.runNewsTask({ task: 'news' });
+    assert.equal(records.length, 1);
+    assert.equal(records[0].totalCostUsd, 0);
+    assert.equal(records[0].costCompleteness, 'partial');
+    assert.deepEqual(records[0].costIncompleteReasons, [
+        'provider_usage_unavailable',
+    ]);
 });
 
 test('internal news task forwards only a backend-derived safety identifier', async () => {

@@ -267,7 +267,15 @@ export const attachGenerationAttemptEvidence = (
         if (attempt.status === 'failed_transport_fallback') {
             return attempt;
         }
-        const result = resultsByAttemptIndex.get(attempt.index);
+        const result =
+            resultsByAttemptIndex.get(attempt.index) ??
+            (attempt.usage === undefined
+                ? undefined
+                : {
+                      text: '',
+                      model: attempt.actualModel,
+                      usage: attempt.usage,
+                  });
         if (result === undefined) {
             return attempt;
         }

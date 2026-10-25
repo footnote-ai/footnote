@@ -1221,7 +1221,8 @@ const makePlanDefault = (): PlannerStepResult => ({
 
 /** Combines every provider Attempt used while routing one logical generation. */
 const combineGenerationUsage = (
-    summaries: readonly ReviewWorkflowUsageSummary[]
+    summaries: readonly ReviewWorkflowUsageSummary[],
+    routingAttempts?: readonly RoutingChainAttemptLog[]
 ): ReviewWorkflowUsageSummary => {
     const last = summaries.at(-1);
     return {
@@ -1239,25 +1240,35 @@ const combineGenerationUsage = (
             0
         ),
         estimatedCost: combineBackendTextCostEstimates(
-            summaries.map((summary) => summary.estimatedCost)
+            routingAttempts === undefined
+                ? summaries.map((summary) => summary.estimatedCost)
+                : routingAttempts
+                      .filter(
+                          (attempt) =>
+                              attempt.status !== 'skipped_ineligible' &&
+                              attempt.status !== 'skipped_temporary_unavailable'
+                      )
+                      .map((attempt) => attempt.cost)
         ),
     };
 };
 
 const combineGenerationResultUsage = (
-    results: readonly GenerationResult[]
+    results: readonly GenerationResult[],
+    routingAttempts?: readonly RoutingChainAttemptLog[]
 ): GenerationUsage | undefined => {
-    if (!results.some((result) => result.usage !== undefined)) {
+    const usages = (routingAttempts ?? results)
+        .map((attempt) => attempt.usage)
+        .filter((usage): usage is GenerationUsage => usage !== undefined);
+    if (usages.length === 0) {
         return undefined;
     }
 
     const sum = (
         selector: (usage: GenerationUsage) => number | undefined
     ): number | undefined => {
-        const values = results
-            .map((result) =>
-                result.usage === undefined ? undefined : selector(result.usage)
-            )
+        const values = usages
+            .map(selector)
             .filter((value): value is number => value !== undefined);
         return values.length === 0
             ? undefined
@@ -3001,6 +3012,11 @@ export const runBoundedReviewWorkflow = async (
                     ? undefined
                     : toRoutingChainResult(chainResult);
             if (routed?.isErr()) {
+                routingAttempts = attachGenerationAttemptEvidence(
+                    routed.error.attempts,
+                    generationAttemptsByIndex,
+                    { captureCost: estimateAttemptCost }
+                );
                 const lastAttempt = generationAttempts.at(-1);
                 if (lastAttempt === undefined) {
                     return {
@@ -3013,9 +3029,15 @@ export const runBoundedReviewWorkflow = async (
                                 'Generation routing failed; workflow returned the latest valid draft when available.',
                             reasonCode: routed.error.reasonCode,
                             terminationReason: 'executor_error_fail_open',
-                            ...withWorkflowRoutingAttempts(
-                                routed.error.attempts
+                            usage: combineGenerationResultUsage(
+                                generationAttempts,
+                                routingAttempts
                             ),
+                            estimatedCost: combineGenerationUsage(
+                                [],
+                                routingAttempts
+                            ).estimatedCost,
+                            ...withWorkflowRoutingAttempts(routingAttempts),
                             signals: {
                                 ...refinementStepSignals(),
                             },
@@ -3023,13 +3045,6 @@ export const runBoundedReviewWorkflow = async (
                     };
                 }
                 generationResult = lastAttempt;
-                routingAttempts = attachGenerationAttemptEvidence(
-                    routed.error.attempts,
-                    generationAttemptsByIndex,
-                    {
-                        captureCost: estimateAttemptCost,
-                    }
-                );
             } else if (routed?.isOk()) {
                 generationResult = routed.value.value;
                 routingAttempts = attachGenerationAttemptEvidence(
@@ -3073,7 +3088,8 @@ export const runBoundedReviewWorkflow = async (
         const usage = combineGenerationUsage(
             generationAttempts.map((attempt) =>
                 captureUsage(attempt, boundedRequest.model)
-            )
+            ),
+            routingAttempts
         );
         const retrievedSourceCount = readEvidenceEnvelope(
             handlerInput.results.evidence
@@ -3160,7 +3176,10 @@ export const runBoundedReviewWorkflow = async (
             ...(selectedCapabilityFacts === undefined
                 ? {}
                 : { capabilities: selectedCapabilityFacts }),
-            usage: combineGenerationResultUsage(generationAttempts),
+            usage: combineGenerationResultUsage(
+                generationAttempts,
+                routingAttempts
+            ),
             estimatedCost: usage.estimatedCost,
             candidateId,
             ...withWorkflowRoutingAttempts(routingAttempts),
@@ -3421,7 +3440,8 @@ export const runBoundedReviewWorkflow = async (
             combineGenerationUsage(
                 reviewAttempts.map((attempt) =>
                     captureUsage(attempt, bounded.model)
-                )
+                ),
+                routingAttempts
             );
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
@@ -3517,7 +3537,10 @@ export const runBoundedReviewWorkflow = async (
                         reasonCode: routed.error.reasonCode,
                         terminationReason: 'executor_error_fail_open',
                         model: usage.model,
-                        usage: combineGenerationResultUsage(reviewAttempts),
+                        usage: combineGenerationResultUsage(
+                            reviewAttempts,
+                            routingAttempts
+                        ),
                         estimatedCost: usage.estimatedCost,
                         ...withWorkflowRoutingAttempts(routingAttempts),
                     }),
@@ -3569,7 +3592,10 @@ export const runBoundedReviewWorkflow = async (
                         'Assessment failed; the latest valid draft was preserved.',
                     reasonCode: 'generation_runtime_error',
                     model: usage.model,
-                    usage: combineGenerationResultUsage(reviewAttempts),
+                    usage: combineGenerationResultUsage(
+                        reviewAttempts,
+                        routingAttempts
+                    ),
                     estimatedCost: usage.estimatedCost,
                     terminationReason: 'executor_error_fail_open',
                     ...withWorkflowRoutingAttempts(routingAttempts),
@@ -3577,8 +3603,10 @@ export const runBoundedReviewWorkflow = async (
             };
         }
         const usage = reviewUsage();
-        const combinedResultUsage =
-            combineGenerationResultUsage(reviewAttempts);
+        const combinedResultUsage = combineGenerationResultUsage(
+            reviewAttempts,
+            routingAttempts
+        );
         const attemptSettings = toWorkflowAttemptSettings(
             selectedSettings,
             reviewResult.providerObservedSettings,

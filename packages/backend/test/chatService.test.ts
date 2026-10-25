@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Cost accounting is part of responsible backend AI operation.
  */
 import test from 'node:test';
+import { textUsageCostCases } from './fixtures/textUsageCostCases.js';
 import assert from 'node:assert/strict';
 
 import type {
@@ -155,6 +156,168 @@ test('createChatService records backend token usage and estimated cost', async (
     assert.equal(usageRecords[0].inputCostUsd, 0.00003);
     assert.equal(usageRecords[0].outputCostUsd, 0.00016);
     assert.equal(usageRecords[0].totalCostUsd, 0.00019);
+});
+
+test('chat generation records incomplete usage without claiming a complete zero estimate', async () => {
+    for (const reviewed of [false, true]) {
+        for (const [
+            usage,
+            model,
+            completeness,
+            expectedCost,
+        ] of textUsageCostCases) {
+            const records: BackendLLMCostRecord[] = [];
+            const response = await createChatService({
+                generationRuntime: createRuntime({ usage, model }),
+                defaultModel: model,
+                storeTrace: async () => undefined,
+                buildResponseMetadata,
+                recordUsage: (record) => records.push(record),
+                chatWorkflowConfig: {
+                    modeId: reviewed ? 'balanced' : 'express',
+                    reviewLoopEnabled: reviewed,
+                    maxIterations: 0,
+                    maxDurationMs: 15_000,
+                },
+                runReviewWorkflow: (input) =>
+                    runBoundedReviewWorkflow({
+                        ...input,
+                        workflowPolicy: {
+                            ...input.workflowPolicy,
+                            enableAssessment: false,
+                        },
+                        stepRoutingChainSet: undefined,
+                    }),
+            }).runChat({ question: 'What changed?' });
+
+            assert.equal(response.action, 'message');
+            assert.equal(records.length, 1);
+            assert.equal(records[0].totalCostUsd, expectedCost);
+            assert.equal(records[0].costCompleteness, completeness);
+            assert.deepEqual(
+                records[0].costIncompleteReasons,
+                completeness === 'complete'
+                    ? []
+                    : [
+                          completeness === 'unknown'
+                              ? 'unpriced_model'
+                              : 'provider_usage_unavailable',
+                      ]
+            );
+            if (reviewed && response.action === 'message') {
+                const step = response.metadata.workflow?.steps.find(
+                    (step) => step.stepKind === 'generate'
+                );
+                assert.equal(step?.cost?.costCompleteness, completeness);
+                assert.equal(
+                    step?.attempts?.[0]?.cost?.costCompleteness,
+                    completeness
+                );
+                assert.equal(step?.cost?.totalCostUsd, expectedCost);
+            }
+        }
+    }
+});
+
+test('routed generation keeps missing usage partial through fallback without double counting', async () => {
+    const profiles: ModelProfile[] = ['gpt-5-mini', 'gpt-5.6-terra'].map(
+        (model) => ({
+            id: model,
+            description: model,
+            provider: 'openai',
+            providerModel: model,
+            enabled: true,
+            tierBindings: [],
+            maxOutputTokens: 2000,
+            capabilities: {
+                canUseSearch: false,
+                supportedReasoningEfforts: ['none'],
+            },
+        })
+    );
+    const records: BackendLLMCostRecord[] = [];
+    let calls = 0;
+    const response = await createChatService({
+        defaultModel: 'gpt-5-mini',
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                calls += 1;
+                return calls === 1
+                    ? {
+                          text: '',
+                          model: request.model,
+                          completion: {
+                              status: 'incomplete',
+                              reason: 'max_output_tokens',
+                              visibleTextLength: 0,
+                          },
+                      }
+                    : {
+                          text: 'A complete answer.',
+                          model: request.model,
+                          usage: {
+                              promptTokens: 2000,
+                              cachedInputTokens: 1000,
+                              cacheWriteTokens: 0,
+                              completionTokens: 100,
+                              reasoningTokens: 64,
+                              totalTokens: 2100,
+                          },
+                          upstreamAttribution: {
+                              upstreamReportedCostUsd: 0.42,
+                          },
+                      };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        recordUsage: (record) => records.push(record),
+        chatWorkflowConfig: {
+            modeId: 'balanced',
+            reviewLoopEnabled: true,
+            maxIterations: 0,
+            maxDurationMs: 15_000,
+        },
+        runReviewWorkflow: (input) =>
+            runBoundedReviewWorkflow({
+                ...input,
+                workflowPolicy: {
+                    ...input.workflowPolicy,
+                    enableAssessment: false,
+                },
+                stepRoutingChainSet: {
+                    enabledProfilesById: new Map(
+                        profiles.map((profile) => [profile.id, profile])
+                    ),
+                    generateCandidates: profiles.map((profile) => ({
+                        profileId: profile.id,
+                        chooseOneUsed: false,
+                    })),
+                    assessCandidates: [],
+                },
+            }),
+    }).runChat({ question: 'Reply briefly.' });
+    assert.equal(response.action, 'message');
+    if (response.action !== 'message') return;
+    assert.equal(response.message, 'A complete answer.');
+    assert.equal(calls, 2);
+    assert.equal(records.length, 2);
+    assert.equal(records[0].costCompleteness, 'partial');
+    assert.equal(records[1].costCompleteness, 'complete');
+    assert.equal(records[1].cachedInputTokens, 1000);
+    assert.equal(records[1].cacheWriteTokens, 0);
+    const step = response.metadata.workflow?.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+    assert.equal(step?.cost?.costCompleteness, 'partial');
+    assert.ok(Math.abs((step?.cost?.totalCostUsd ?? 0) - 0.0017) < 1e-12);
+    const attempts = step?.attempts?.[0]?.routingAttempts;
+    assert.equal(attempts?.length, 2);
+    assert.equal(attempts?.[0].cost?.costCompleteness, 'partial');
+    assert.equal(attempts?.[0].usage, undefined);
+    assert.equal(attempts?.[1].cost?.costCompleteness, 'complete');
+    assert.equal(attempts?.[1].usage?.reasoningTokens, 64);
 });
 
 test('web chat issues a publication capability bound to the delivered answer', async () => {

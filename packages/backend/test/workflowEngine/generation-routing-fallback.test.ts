@@ -22,6 +22,7 @@ import {
 import type { ConversationContextEnvelope } from '../../src/services/conversationContextService.js';
 import { createProviderAvailabilityStore } from '../../src/services/providerAvailability.js';
 import type { ProviderAvailabilityStore } from '../../src/services/providerAvailability.js';
+import { estimateBackendTextCost } from '../../src/services/llmCostRecorder.js';
 
 const contextEnvelope: ConversationContextEnvelope = {
     participants: [],
@@ -71,6 +72,17 @@ const usage = (
     };
 };
 
+const estimateUsageCost = (result: GenerationResult, requestedModel?: string) =>
+    estimateBackendTextCost(
+        result.model ?? requestedModel ?? 'unknown',
+        result.usage?.promptTokens,
+        result.usage?.completionTokens,
+        {
+            cachedInputTokens: result.usage?.cachedInputTokens,
+            cacheWriteTokens: result.usage?.cacheWriteTokens,
+        }
+    );
+
 const runGeneration = async (input: {
     runtime: GenerationRuntime;
     request: GenerationRequest;
@@ -80,6 +92,7 @@ const runGeneration = async (input: {
     providerAvailability?: ProviderAvailabilityStore;
     onUsage?: () => void;
     includeDetailedCost?: boolean;
+    useBackendPricing?: boolean;
     advisoryUserMemories?: string[];
 }) =>
     runBoundedReviewWorkflow({
@@ -115,30 +128,37 @@ const runGeneration = async (input: {
         },
         captureUsage: (result, requestedModel) => {
             input.onUsage?.();
-            return usage(result, requestedModel);
+            return {
+                ...usage(result, requestedModel),
+                ...(input.useBackendPricing && {
+                    estimatedCost: estimateUsageCost(result, requestedModel),
+                }),
+            };
         },
-        estimateCost: () =>
-            input.includeDetailedCost
-                ? Object.assign(
-                      {
-                          inputCostUsd: 0,
-                          outputCostUsd: 0,
-                          totalCostUsd: 0,
-                      },
-                      {
-                          costCompleteness: 'unknown' as const,
-                          costAppliedRules: [],
-                          costIncompleteReasons: ['unpriced_model' as const],
-                      }
-                  )
-                : {
-                      inputCostUsd: 0,
-                      outputCostUsd: 0,
-                      totalCostUsd: 0,
-                      costCompleteness: 'unknown' as const,
-                      costAppliedRules: [],
-                      costIncompleteReasons: ['unpriced_model' as const],
-                  },
+        estimateCost: (result, requestedModel) =>
+            input.useBackendPricing
+                ? estimateUsageCost(result, requestedModel)
+                : input.includeDetailedCost
+                  ? Object.assign(
+                        {
+                            inputCostUsd: 0,
+                            outputCostUsd: 0,
+                            totalCostUsd: 0,
+                        },
+                        {
+                            costCompleteness: 'unknown' as const,
+                            costAppliedRules: [],
+                            costIncompleteReasons: ['unpriced_model' as const],
+                        }
+                    )
+                  : {
+                        inputCostUsd: 0,
+                        outputCostUsd: 0,
+                        totalCostUsd: 0,
+                        costCompleteness: 'unknown' as const,
+                        costAppliedRules: [],
+                        costIncompleteReasons: ['unpriced_model' as const],
+                    },
         stepRoutingChainSet: {
             enabledProfilesById: new Map(
                 [...input.candidates, ...(input.assessCandidates ?? [])].map(
@@ -157,6 +177,190 @@ const runGeneration = async (input: {
             providerAvailability: input.providerAvailability,
         },
     });
+
+test('generation and assessment costs include thrown routes but exclude skipped routes', async () => {
+    for (const stepKind of ['generate', 'assess'] as const) {
+        for (const skipped of [false, true]) {
+            const first = { ...makeProfile('gpt-5-mini'), enabled: !skipped };
+            const second = makeProfile('gpt-5-nano');
+            let calls = 0;
+            let recorded = 0;
+            const result = await runGeneration({
+                useBackendPricing: true,
+                runtime: {
+                    kind: 'test-runtime',
+                    async generate(request) {
+                        calls += 1;
+                        if (
+                            !skipped &&
+                            calls === (stepKind === 'generate' ? 1 : 2)
+                        ) {
+                            throw new GenerationRuntimeError(
+                                'provider failed',
+                                { classification: 'transient' }
+                            );
+                        }
+                        const assessment = stepKind === 'assess' && calls > 1;
+                        return {
+                            text: assessment
+                                ? JSON.stringify({
+                                      reviewDecision: 'finalize',
+                                      reviewReason: 'The answer is ready.',
+                                  })
+                                : 'A complete answer.',
+                            model: request.model,
+                            usage: {
+                                promptTokens: 0,
+                                completionTokens: 0,
+                                totalTokens: 0,
+                            },
+                        };
+                    },
+                },
+                request: { messages: [{ role: 'user', content: 'Reply.' }] },
+                candidates:
+                    stepKind === 'generate' ? [first, second] : [second],
+                ...(stepKind === 'assess' && {
+                    assessCandidates: [first, second],
+                }),
+                onUsage: () => {
+                    recorded += 1;
+                },
+            });
+            assert.equal(result.outcome, 'generated');
+            const step = result.workflowLineage.steps.find(
+                (step) => step.stepKind === stepKind
+            );
+            assert.equal(step?.cost?.totalCostUsd, 0);
+            assert.equal(
+                step?.cost?.costCompleteness,
+                skipped ? 'complete' : 'unknown'
+            );
+            assert.equal(
+                step?.attempts?.[0]?.cost?.costCompleteness,
+                skipped ? 'complete' : 'unknown'
+            );
+            assert.equal(
+                step?.attempts?.[0]?.routingAttempts?.[0]?.status,
+                skipped ? 'skipped_ineligible' : 'failed_transient_advanced'
+            );
+            assert.equal(recorded, stepKind === 'generate' ? 1 : 2);
+        }
+    }
+});
+
+test('generation and assessment retain and price reported usage from failed routes once', async () => {
+    const completeUsage = {
+        promptTokens: 2000,
+        cachedInputTokens: 1000,
+        cacheWriteTokens: 0,
+        completionTokens: 100,
+        reasoningTokens: 64,
+        totalTokens: 2100,
+    };
+    for (const stepKind of ['generate', 'assess'] as const) {
+        for (const exhausted of [false, true]) {
+            for (const partial of [false, true]) {
+                const failedUsage = partial
+                    ? {
+                          promptTokens: 2000,
+                          cachedInputTokens: 1000,
+                          cacheWriteTokens: 0,
+                      }
+                    : completeUsage;
+                const first = makeProfile('gpt-5-mini');
+                const second = makeProfile('gpt-5-nano');
+                let calls = 0;
+                const result = await runGeneration({
+                    useBackendPricing: true,
+                    runtime: {
+                        kind: 'test-runtime',
+                        async generate(request) {
+                            calls += 1;
+                            const firstFailureCall =
+                                stepKind === 'generate' ? 1 : 2;
+                            if (
+                                calls === firstFailureCall ||
+                                (exhausted && calls > firstFailureCall)
+                            ) {
+                                throw new GenerationRuntimeError(
+                                    'provider failed after reporting usage',
+                                    { classification: 'transient' },
+                                    {
+                                        model: partial
+                                            ? undefined
+                                            : 'gpt-5.6-terra',
+                                        usage: failedUsage,
+                                    }
+                                );
+                            }
+                            return {
+                                text:
+                                    stepKind === 'assess' && calls > 1
+                                        ? JSON.stringify({
+                                              reviewDecision: 'finalize',
+                                              reviewReason:
+                                                  'The answer is ready.',
+                                          })
+                                        : 'A complete answer.',
+                                model: request.model,
+                                usage: {
+                                    promptTokens: 0,
+                                    completionTokens: 0,
+                                    totalTokens: 0,
+                                },
+                            };
+                        },
+                    },
+                    request: {
+                        messages: [{ role: 'user', content: 'Reply.' }],
+                    },
+                    candidates:
+                        stepKind === 'generate' ? [first, second] : [second],
+                    ...(stepKind === 'assess' && {
+                        assessCandidates: [first, second],
+                    }),
+                });
+                const step = result.workflowLineage.steps.find(
+                    (step) => step.stepKind === stepKind
+                );
+                const routes = step?.attempts?.[0]?.routingAttempts;
+                const count = exhausted ? 2 : 1;
+                const cost = partial
+                    ? 0.0005 + (exhausted ? 0.0001 : 0)
+                    : 0.0017 * count;
+                assert.equal(routes?.length, 2);
+                assert.deepEqual(routes?.[0]?.usage, failedUsage);
+                assert.equal(
+                    routes?.[0]?.actualModel,
+                    partial ? undefined : 'gpt-5.6-terra'
+                );
+                assert.equal(routes?.[0]?.requestedModel, 'gpt-5-mini');
+                assert.equal(
+                    routes?.[0]?.cost?.costCompleteness,
+                    partial ? 'partial' : 'complete'
+                );
+                assert.equal(
+                    step?.cost?.costCompleteness,
+                    partial ? 'partial' : 'complete'
+                );
+                assert.ok(
+                    Math.abs((step?.cost?.totalCostUsd ?? 0) - cost) < 1e-12
+                );
+                assert.ok(
+                    Math.abs(
+                        (step?.attempts?.[0]?.cost?.totalCostUsd ?? 0) - cost
+                    ) < 1e-12
+                );
+                assert.equal(step?.usage?.promptTokens, 2000 * count);
+                assert.equal(step?.usage?.cachedInputTokens, 1000 * count);
+                assert.equal(step?.usage?.cacheWriteTokens, 0);
+                if (!partial)
+                    assert.equal(step?.usage?.reasoningTokens, 64 * count);
+            }
+        }
+    }
+});
 
 test('gives a large-prompt generation useful output room and advances after incomplete provider output', async () => {
     const first = makeProfile('first-profile');

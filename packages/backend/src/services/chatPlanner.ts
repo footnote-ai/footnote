@@ -223,9 +223,9 @@ type CreateChatPlannerOptions = {
     signal?: AbortSignal;
 };
 
-type StructuredPlannerFailureUsage = {
+type PlannerFailureUsage = {
     model: string;
-    usage: GenerationUsage;
+    usage?: GenerationUsage;
 };
 
 const readStructuredPlannerFailureOutcome = (
@@ -250,25 +250,46 @@ const readStructuredPlannerFailureOutcome = (
     return undefined;
 };
 
-const readStructuredPlannerFailureUsage = (
-    error: unknown
-): StructuredPlannerFailureUsage | undefined => {
+const readPlannerFailureUsage = (
+    error: unknown,
+    requestedModel: string
+): PlannerFailureUsage => {
     if (typeof error !== 'object' || error === null || Array.isArray(error)) {
-        return undefined;
+        return { model: requestedModel };
     }
     const candidate = error as {
         plannerModel?: unknown;
         plannerUsage?: unknown;
     };
-    if (typeof candidate.plannerModel !== 'string') {
-        return undefined;
-    }
     const usage = normalizeGenerationUsage(candidate.plannerUsage);
-    if (usage === undefined) return undefined;
     return {
-        model: candidate.plannerModel,
+        model:
+            typeof candidate.plannerModel === 'string'
+                ? candidate.plannerModel
+                : requestedModel,
         usage,
     };
+};
+
+const isPreProviderCallFailure = (error: unknown): boolean => {
+    const seen = new Set<object>();
+    let current = error;
+    while (
+        typeof current === 'object' &&
+        current !== null &&
+        !seen.has(current)
+    ) {
+        seen.add(current);
+        const candidate = current as {
+            preProviderCallFailure?: unknown;
+            cause?: unknown;
+        };
+        if (candidate.preProviderCallFailure === true) {
+            return true;
+        }
+        current = candidate.cause;
+    }
+    return false;
 };
 
 /**
@@ -1932,6 +1953,8 @@ export const createChatPlanner = ({
                         reasoningTokens: plannerUsageTotals.reasoningTokens,
                     }),
                 },
+            }),
+            ...(plannerCostEstimates.length > 0 && {
                 cost: combineBackendTextCostEstimates(plannerCostEstimates),
             }),
         });
@@ -1947,8 +1970,8 @@ export const createChatPlanner = ({
                 normalizedUsage?.totalTokens ?? promptTokens + completionTokens;
             const estimatedCost = estimateBackendTextCost(
                 usageModel,
-                promptTokens,
-                completionTokens,
+                normalizedUsage?.promptTokens,
+                normalizedUsage?.completionTokens,
                 {
                     ...(normalizedUsage?.cachedInputTokens !== undefined && {
                         cachedInputTokens: normalizedUsage.cachedInputTokens,
@@ -1978,8 +2001,9 @@ export const createChatPlanner = ({
                         (plannerUsageTotals.reasoningTokens ?? 0) +
                         normalizedUsage.reasoningTokens;
                 }
-                plannerCostEstimates.push(estimatedCost);
             }
+            // A call with missing usage must still weaken the combined estimate.
+            plannerCostEstimates.push(estimatedCost);
             if (recordUsage) {
                 try {
                     recordUsage({
@@ -2007,6 +2031,28 @@ export const createChatPlanner = ({
             }
         };
 
+        // Account at the executor boundary so parsing failures cannot count a call twice.
+        const executeTextPlanner: ChatPlannerExecutor = async (payload) => {
+            if (!executePlanner) {
+                throw new Error('Text JSON planner executor is not available.');
+            }
+            let response: ChatPlannerExecutionResult;
+            try {
+                response = await executePlanner(payload);
+            } catch (error) {
+                if (!isPreProviderCallFailure(error)) {
+                    const failed = readPlannerFailureUsage(
+                        error,
+                        payload.model
+                    );
+                    recordPlannerUsage(failed.model, failed.usage);
+                }
+                throw error;
+            }
+            recordPlannerUsage(response.model || payload.model, response.usage);
+            return response;
+        };
+
         const runExpandedTextJsonAttempt = async (
             contextTier: PlannerContextTier
         ): Promise<PlannerNormalizationResult | null> => {
@@ -2018,7 +2064,7 @@ export const createChatPlanner = ({
                 'text_json',
                 contextTier
             );
-            const expandedResponse = await executePlanner(
+            const expandedResponse = await executeTextPlanner(
                 expandedRequestPayload
             );
             plannerResponseText = expandedResponse.text;
@@ -2028,10 +2074,6 @@ export const createChatPlanner = ({
             providerObservations = expandedResponse.providerObservations;
             plannerModel = expandedResponse.model;
             plannerProvider = expandedResponse.provider;
-            recordPlannerUsage(
-                expandedResponse.model || defaultModel,
-                expandedResponse.usage
-            );
             const expandedCandidate = parsePlannerCandidateFromTextJson(
                 expandedResponse.text
             );
@@ -2185,9 +2227,11 @@ export const createChatPlanner = ({
                         signal: structuredAbortContext.signal,
                     });
                 } catch (structuredError) {
-                    const failedStructuredUsage =
-                        readStructuredPlannerFailureUsage(structuredError);
-                    if (failedStructuredUsage !== undefined) {
+                    if (!isPreProviderCallFailure(structuredError)) {
+                        const failedStructuredUsage = readPlannerFailureUsage(
+                            structuredError,
+                            requestPayload.model
+                        );
                         recordPlannerUsage(
                             failedStructuredUsage.model,
                             failedStructuredUsage.usage
@@ -2255,7 +2299,7 @@ export const createChatPlanner = ({
             }
 
             plannerMode = 'text_json';
-            const plannerResponse = await executePlanner(requestPayload);
+            const plannerResponse = await executeTextPlanner(requestPayload);
             plannerResponseText = plannerResponse.text;
             upstreamAttribution = plannerResponse.upstreamAttribution;
             providerSettingResolution =
@@ -2263,10 +2307,6 @@ export const createChatPlanner = ({
             providerObservations = plannerResponse.providerObservations;
             plannerModel = plannerResponse.model;
             plannerProvider = plannerResponse.provider;
-            recordPlannerUsage(
-                plannerResponse.model || defaultModel,
-                plannerResponse.usage
-            );
             rejectInvalidPlannerTextJsonResult(plannerResponse);
             const parsed = parsePlannerCandidateFromTextJson(
                 plannerResponse.text
@@ -2367,7 +2407,7 @@ export const createChatPlanner = ({
                 );
                 try {
                     plannerMode = 'text_json';
-                    const textJsonResponse = await executePlanner({
+                    const textJsonResponse = await executeTextPlanner({
                         ...buildPlannerRequestPayload(
                             'text_json',
                             'current_window'
@@ -2384,10 +2424,6 @@ export const createChatPlanner = ({
                         textJsonResponse.providerObservations;
                     plannerModel = textJsonResponse.model;
                     plannerProvider = textJsonResponse.provider;
-                    recordPlannerUsage(
-                        textJsonResponse.model || defaultModel,
-                        textJsonResponse.usage
-                    );
                     rejectInvalidPlannerTextJsonResult(textJsonResponse);
                     const parsed = parsePlannerCandidateFromTextJson(
                         textJsonResponse.text
@@ -2423,14 +2459,6 @@ export const createChatPlanner = ({
                             : {}),
                     });
                 } catch (textJsonError) {
-                    const failedFallbackUsage =
-                        readStructuredPlannerFailureUsage(textJsonError);
-                    if (failedFallbackUsage !== undefined) {
-                        recordPlannerUsage(
-                            failedFallbackUsage.model,
-                            failedFallbackUsage.usage
-                        );
-                    }
                     resolvedError = textJsonError;
                 }
             }

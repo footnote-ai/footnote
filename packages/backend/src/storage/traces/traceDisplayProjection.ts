@@ -205,6 +205,23 @@ const projectPublicOutcome = (
     };
 };
 
+const projectPublicCost = (
+    cost: NonNullable<StepRecord['cost']>
+): NonNullable<StepRecord['cost']> => ({
+    inputCostUsd: cost.inputCostUsd,
+    outputCostUsd: cost.outputCostUsd,
+    totalCostUsd: cost.totalCostUsd,
+    ...(cost.costCompleteness !== undefined && {
+        costCompleteness: cost.costCompleteness,
+    }),
+    ...(cost.costAppliedRules !== undefined && {
+        costAppliedRules: cost.costAppliedRules,
+    }),
+    ...(cost.costIncompleteReasons !== undefined && {
+        costIncompleteReasons: cost.costIncompleteReasons,
+    }),
+});
+
 const projectPublicAttempt = (
     attempt: WorkflowAttemptRecord
 ): WorkflowAttemptRecord => ({
@@ -258,11 +275,7 @@ const projectPublicAttempt = (
         },
     }),
     ...(attempt.cost !== undefined && {
-        cost: {
-            inputCostUsd: attempt.cost.inputCostUsd,
-            outputCostUsd: attempt.cost.outputCostUsd,
-            totalCostUsd: attempt.cost.totalCostUsd,
-        },
+        cost: projectPublicCost(attempt.cost),
     }),
 });
 
@@ -316,11 +329,7 @@ const projectPublicStep = (step: StepRecord): StepRecord => ({
         },
     }),
     ...(step.cost !== undefined && {
-        cost: {
-            inputCostUsd: step.cost.inputCostUsd,
-            outputCostUsd: step.cost.outputCostUsd,
-            totalCostUsd: step.cost.totalCostUsd,
-        },
+        cost: projectPublicCost(step.cost),
     }),
     ...(step.inputRefs !== undefined && {
         inputRefs: step.inputRefs.map(projectPublicResultReference),

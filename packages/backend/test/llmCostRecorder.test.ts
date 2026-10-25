@@ -124,6 +124,45 @@ test('estimateBackendTextCost reports complete GPT-5.6 cache-aware pricing', () 
     assert.deepEqual(cost.costIncompleteReasons, []);
 });
 
+test('estimateBackendTextCost preserves missing and partial usage separately from measured zero', () => {
+    for (const [promptTokens, completionTokens, expectedCost] of [
+        [undefined, undefined, 0],
+        [120, undefined, 0.00003],
+        [undefined, 80, 0.00016],
+    ] as const) {
+        const cost = estimateBackendTextCost(
+            'gpt-5-mini',
+            promptTokens,
+            completionTokens
+        );
+        assert.equal(cost.totalCostUsd, expectedCost);
+        assert.equal(cost.costCompleteness, 'partial');
+        assert.deepEqual(cost.costIncompleteReasons, [
+            'provider_usage_unavailable',
+        ]);
+    }
+    const zero = estimateBackendTextCost('gpt-5-mini', 0, 0);
+    assert.equal(zero.totalCostUsd, 0);
+    assert.equal(zero.costCompleteness, 'complete');
+    assert.deepEqual(zero.costIncompleteReasons, []);
+
+    const unavailable = estimateBackendTextCost('gpt-5-mini', 0, 0, {
+        providerUsageAvailable: false,
+    });
+    assert.equal(unavailable.costCompleteness, 'partial');
+    assert.deepEqual(unavailable.costIncompleteReasons, [
+        'provider_usage_unavailable',
+    ]);
+
+    const unpriced = estimateBackendTextCost(
+        'unlisted-local-model',
+        undefined,
+        undefined
+    );
+    assert.equal(unpriced.costCompleteness, 'unknown');
+    assert.deepEqual(unpriced.costIncompleteReasons, ['unpriced_model']);
+});
+
 test('estimateBackendTextCost marks GPT-5.6 cost partial when cache details are missing', () => {
     const cost = estimateBackendTextCost('gpt-5.6-sol', 200_000, 100_000);
 

@@ -1225,8 +1225,8 @@ export const createChatService = ({
         const usageModel = result.model ?? requestedModel ?? defaultModel;
         return estimateBackendTextCost(
             usageModel,
-            result.usage?.promptTokens ?? 0,
-            result.usage?.completionTokens ?? 0,
+            result.usage?.promptTokens,
+            result.usage?.completionTokens,
             {
                 ...(result.usage?.cachedInputTokens !== undefined && {
                     cachedInputTokens: result.usage.cachedInputTokens,

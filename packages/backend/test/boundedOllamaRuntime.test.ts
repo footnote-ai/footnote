@@ -127,7 +127,9 @@ test('bounded local Ollama admission rejects work beyond the queue bound', async
             model: 'overflow',
             messages: [],
         }),
-        (error: unknown) => error instanceof OllamaGenerationQueueFullError
+        (error: unknown) =>
+            error instanceof OllamaGenerationQueueFullError &&
+            error.preProviderCallFailure
     );
 
     releaseFirst?.();
@@ -177,7 +179,10 @@ test('queued local Ollama work can be cancelled without holding a slot', async (
     await assert.rejects(
         queued,
         (error: unknown) =>
-            error instanceof Error && error.name === 'AbortError'
+            error instanceof Error &&
+            error.name === 'AbortError' &&
+            'preProviderCallFailure' in error &&
+            error.preProviderCallFailure === true
     );
     releaseFirst?.();
     await first;

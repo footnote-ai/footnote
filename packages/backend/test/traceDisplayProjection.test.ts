@@ -9,6 +9,7 @@ import test from 'node:test';
 import { strict as assert } from 'node:assert';
 import { TraceDisplayMetadataSchema } from '@footnote/contracts/web/schemas';
 import { projectTraceMetadataForDisplay } from '../src/storage/traces/traceDisplayProjection.js';
+import type { WorkflowRecord } from '@footnote/contracts/policy';
 
 const baseTrace = {
     responseId: 'trace_partial_583',
@@ -33,6 +34,74 @@ const baseTrace = {
     trace_final_reason_code: 'runtime_posture_adjustment',
     secretPrompt: 'must not be returned',
 };
+
+test('public trace retains cost completeness for Steps and Attempts', () => {
+    for (const costCompleteness of [
+        'complete',
+        'partial',
+        'unknown',
+    ] as const) {
+        const cost = {
+            inputCostUsd: 0,
+            outputCostUsd: 0,
+            totalCostUsd: 0,
+            costCompleteness,
+            costAppliedRules: [],
+            costIncompleteReasons:
+                costCompleteness === 'partial'
+                    ? ['provider_usage_unavailable' as const]
+                    : costCompleteness === 'unknown'
+                      ? ['unpriced_model' as const]
+                      : [],
+        };
+        const workflow: WorkflowRecord = {
+            workflowId: 'workflow-cost',
+            workflowName: 'chat_orchestration',
+            status: 'completed',
+            terminationReason: 'goal_satisfied',
+            stepCount: 1,
+            maxSteps: 1,
+            maxDurationMs: 1000,
+            steps: [
+                {
+                    stepId: 'generate',
+                    stepKind: 'generate',
+                    attempt: 1,
+                    startedAt: '2026-10-01T00:00:00.000Z',
+                    finishedAt: '2026-10-01T00:00:00.001Z',
+                    durationMs: 1,
+                    cost,
+                    attempts: [
+                        {
+                            attempt: 1,
+                            status: 'succeeded',
+                            startedAt: '2026-10-01T00:00:00.000Z',
+                            finishedAt: '2026-10-01T00:00:00.001Z',
+                            durationMs: 1,
+                            cost,
+                        },
+                    ],
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Generated a response.',
+                    },
+                },
+            ],
+        };
+        const projected = projectTraceMetadataForDisplay(
+            { ...baseTrace, workflow },
+            baseTrace.responseId
+        );
+        assert.deepEqual(projected?.workflow?.steps[0].cost, cost);
+        assert.deepEqual(
+            projected?.workflow?.steps[0].attempts?.[0].cost,
+            cost
+        );
+        assert.ok(
+            projected && TraceDisplayMetadataSchema.safeParse(projected).success
+        );
+    }
+});
 
 test('trace display projection keeps valid fields and names unavailable fields', () => {
     const projected = projectTraceMetadataForDisplay(

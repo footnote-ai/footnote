@@ -9,6 +9,7 @@
 import type { ModelProfile } from '@footnote/contracts';
 import {
     isGenerationRuntimeError,
+    normalizeGenerationUsage,
     type GenerationResult,
     type ProviderTemporaryUnavailableReason,
 } from '@footnote/agent-runtime';
@@ -369,6 +370,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
             };
         } catch (error) {
             const finishedAtMs = Date.now();
+            const failedUsage = isGenerationRuntimeError(error)
+                ? normalizeGenerationUsage(error.usage)
+                : undefined;
             const temporaryUnavailableReason =
                 getTemporaryUnavailableReason(error);
             const transient =
@@ -394,6 +398,11 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 profileId: profile.id,
                 provider: profile.provider,
                 model: profile.providerModel,
+                ...(isGenerationRuntimeError(error) &&
+                    error.model !== undefined && {
+                        actualModel: error.model,
+                    }),
+                ...(failedUsage !== undefined && { usage: failedUsage }),
                 status: transient
                     ? 'failed_transient_advanced'
                     : 'failed_non_transient_stopped',
