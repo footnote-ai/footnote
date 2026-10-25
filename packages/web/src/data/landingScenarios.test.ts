@@ -126,7 +126,7 @@ test('landing scenarios contain the selected ordinary-use prompts in order', () 
     assert.deepEqual(
         landingScenarios.map((scenario) => scenario.question),
         [
-            'How does Footnote show its work?',
+            'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.',
             "What does Footnote do when it can't confirm a claim?",
             'Can I run Footnote locally instead of using a cloud model?',
             'What should I include in a simple weekly household checklist?',
@@ -145,13 +145,15 @@ test('landing scenario ids are unique stable kebab-case values', () => {
     }
 });
 
-test('intro stays within the capture safety limit while following examples keep their length, links, and varied TRACE scores', () => {
+test('existing intro retains its captured evidence while following examples keep their length, links, and varied TRACE scores', () => {
     const introduction = landingScenarios[0]!;
-    const introductionWordCount = introduction.response.message
-        .trim()
-        .split(/\s+/u)
-        .filter(Boolean).length;
-    assert.ok(introductionWordCount > 0 && introductionWordCount <= 100);
+    assert.equal(introduction.response.metadata.provenance, 'Retrieved');
+    assert.ok(introduction.response.metadata.citations.length >= 2);
+    assert.ok(
+        introduction.response.message.includes(
+            introduction.response.metadata.citations[0]!.url
+        )
+    );
 
     const newExamples = landingScenarios.slice(1, 3);
     const projectContextLength = landingScenarios[5].response.message.length;
@@ -322,7 +324,7 @@ test('landing scenario metadata carries required prepared fields', () => {
     }
 });
 
-test('landing scenario capture blocks are compact and aligned', () => {
+test('landing scenario capture blocks are aligned with their captured prompts', () => {
     const captureIds = landingScenarioFixtures.map(
         (fixture) => fixture.capture.capturedResponseId
     );
@@ -338,11 +340,14 @@ test('landing scenario capture blocks are compact and aligned', () => {
         );
         assert.equal(fixture.capture.capturedChainHash.trim().length > 0, true);
         if (fixture.id === 'inspect-an-answer') {
-            assert.equal(fixture.question, 'How does Footnote show its work?');
+            assert.equal(
+                fixture.question,
+                'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.'
+            );
             assert.equal(fixture.capture.workflowModeId, 'balanced');
             assert.equal(
                 fixture.capture.capturedQuestion,
-                "How does Footnote show its work? Briefly explain what readers can inspect and its limitations, using and citing Footnote's documentation."
+                'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.'
             );
         }
     }

@@ -314,7 +314,7 @@ test('buildChatRequest emits the landing capture payload shape', () => {
 test('introduction capture records its submitted prompt separately from the displayed question', () => {
     const scenario = LANDING_SCENARIO_PROMPTS[0];
     const submittedPrompt =
-        "How does Footnote show its work? Briefly explain what readers can inspect and its limitations, using and citing Footnote's documentation.";
+        'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.';
     const request = buildChatRequest(scenario, {
         backendBaseUrl: 'http://localhost:3000',
         modeId: 'balanced',
@@ -330,7 +330,10 @@ test('introduction capture records its submitted prompt separately from the disp
         workflowModeId: 'balanced',
     });
 
-    assert.equal(scenario.question, 'How does Footnote show its work?');
+    assert.equal(
+        scenario.question,
+        'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.'
+    );
     assert.equal(scenario.submittedPrompt, submittedPrompt);
     assert.equal(request.latestUserInput, submittedPrompt);
     assert.deepEqual(PostChatRequestSchema.parse(request), request);
@@ -371,7 +374,7 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
             capturedResponseId: 'AbCdEf12',
             capturedChainHash: '0123456789abcdef',
             capturedQuestion:
-                "How does Footnote show its work? Briefly explain what readers can inspect and its limitations, using and citing Footnote's documentation.",
+                'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.',
         },
     });
     assert.deepEqual(fixture.capture, {
@@ -381,7 +384,7 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
         capturedResponseId: 'AbCdEf12',
         capturedChainHash: '0123456789abcdef',
         capturedQuestion:
-            "How does Footnote show its work? Briefly explain what readers can inspect and its limitations, using and citing Footnote's documentation.",
+            'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.',
     });
 });
 

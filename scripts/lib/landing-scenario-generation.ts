@@ -95,9 +95,10 @@ const SCENARIO_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const LANDING_SCENARIO_PROMPTS = [
     {
         id: 'inspect-an-answer',
-        question: 'How does Footnote show its work?',
+        question:
+            'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.',
         submittedPrompt:
-            "How does Footnote show its work? Briefly explain what readers can inspect and its limitations, using and citing Footnote's documentation.",
+            'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.',
     },
     {
         id: 'unconfirmed-claims',
