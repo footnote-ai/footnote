@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChatMessageActionResponse } from '@footnote/contracts/web';
+import { PostChatRequestSchema } from '@footnote/contracts/web/schemas';
 import type {
     ExecutionEvent,
     ProvenanceAssessment,
@@ -310,6 +311,35 @@ test('buildChatRequest emits the landing capture payload shape', () => {
     });
 });
 
+test('introduction capture records its submitted prompt separately from the displayed question', () => {
+    const scenario = LANDING_SCENARIO_PROMPTS[0];
+    const submittedPrompt =
+        'How does Footnote show its work? Write a concise, plain-language introduction explaining how the response footnote lets readers inspect supporting evidence and provenance. Aim for 40–70 words, but treat that as a soft editorial target: do not pad an already complete shorter answer or cut a complete explanation just to hit 70. Keep the response to no more than 100 words. Do not browse or invent sources.';
+    const request = buildChatRequest(scenario, {
+        backendBaseUrl: 'http://localhost:3000',
+        modeId: 'express',
+    });
+    const response = createMessageResponse('A captured answer');
+    const fixture = buildLandingScenarioFixture({
+        scenario,
+        response,
+        capturedResponseId: 'AbCdEf12',
+        capturedChainHash: '0123456789abcdef',
+        capturedAt: '2026-06-11T00:34:07.189Z',
+        backendBaseUrl: 'http://localhost:3000',
+        workflowModeId: 'express',
+    });
+
+    assert.equal(scenario.question, 'How does Footnote show its work?');
+    assert.equal(request.latestUserInput, submittedPrompt);
+    assert.deepEqual(PostChatRequestSchema.parse(request), request);
+    assert.deepEqual(request.conversation, [
+        { role: 'user', content: submittedPrompt },
+    ]);
+    assert.equal(fixture.question, scenario.question);
+    assert.equal(fixture.capture.capturedQuestion, submittedPrompt);
+});
+
 test('buildLandingScenarioFixture merges the capture block into each scenario', () => {
     const scenario = LANDING_SCENARIO_PROMPTS[0];
     const response = createMessageResponse('A prepared answer');
@@ -339,7 +369,7 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
             workflowModeId: 'balanced',
             capturedResponseId: 'AbCdEf12',
             capturedChainHash: '0123456789abcdef',
-            capturedQuestion: scenario.question,
+            capturedQuestion: scenario.submittedPrompt,
         },
     });
     assert.deepEqual(fixture.capture, {
@@ -348,7 +378,7 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
         workflowModeId: 'balanced',
         capturedResponseId: 'AbCdEf12',
         capturedChainHash: '0123456789abcdef',
-        capturedQuestion: scenario.question,
+        capturedQuestion: scenario.submittedPrompt,
     });
 });
 
@@ -360,20 +390,20 @@ test('assertScenarioId enforces kebab-case ids', () => {
     );
 });
 
-test('introduction capture accepts only 40 to 70 words', () => {
-    assert.doesNotThrow(() =>
-        assertConciseIntroductionResponse('word '.repeat(40))
-    );
-    assert.doesNotThrow(() =>
-        assertConciseIntroductionResponse('word '.repeat(70))
+test('introduction capture treats 40 to 70 words as an editorial target', () => {
+    for (const wordCount of [35, 40, 70, 71, 100]) {
+        assert.equal(
+            assertConciseIntroductionResponse('word '.repeat(wordCount)),
+            wordCount
+        );
+    }
+    assert.throws(
+        () => assertConciseIntroductionResponse('   '),
+        /Expected the landing introduction to be non-empty/
     );
     assert.throws(
-        () => assertConciseIntroductionResponse('word '.repeat(39)),
-        /Expected the landing introduction to contain 40–70 words/
-    );
-    assert.throws(
-        () => assertConciseIntroductionResponse('word '.repeat(71)),
-        /Expected the landing introduction to contain 40–70 words/
+        () => assertConciseIntroductionResponse('word '.repeat(101)),
+        /Expected the landing introduction to contain no more than 100 words/
     );
 });
 

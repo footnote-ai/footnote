@@ -20,6 +20,7 @@ import type {
 export type LandingScenarioPromptConfig = {
     id: string;
     question: string;
+    submittedPrompt?: string;
 };
 
 export type LandingScenarioMetadata = Pick<
@@ -95,6 +96,8 @@ export const LANDING_SCENARIO_PROMPTS = [
     {
         id: 'inspect-an-answer',
         question: 'How does Footnote show its work?',
+        submittedPrompt:
+            'How does Footnote show its work? Write a concise, plain-language introduction explaining how the response footnote lets readers inspect supporting evidence and provenance. Aim for 40–70 words, but treat that as a soft editorial target: do not pad an already complete shorter answer or cut a complete explanation just to hit 70. Keep the response to no more than 100 words. Do not browse or invent sources.',
     },
     {
         id: 'unconfirmed-claims',
@@ -199,13 +202,17 @@ export function assertScenarioId(value: string): void {
     }
 }
 
-export function assertConciseIntroductionResponse(message: string): void {
+export function assertConciseIntroductionResponse(message: string): number {
     const wordCount = message.trim().split(/\s+/u).filter(Boolean).length;
-    if (wordCount < 40 || wordCount > 70) {
+    if (wordCount === 0) {
+        throw new Error('Expected the landing introduction to be non-empty.');
+    }
+    if (wordCount > 100) {
         throw new Error(
-            `Expected the landing introduction to contain 40–70 words, received ${wordCount}.`
+            `Expected the landing introduction to contain no more than 100 words, received ${wordCount}.`
         );
     }
+    return wordCount;
 }
 
 /**
@@ -217,26 +224,30 @@ export function assertConciseIntroductionResponse(message: string): void {
 export const buildChatRequest = (
     scenario: LandingScenarioPromptConfig,
     options: LandingScenarioRequestOptions
-): PostChatRequest => ({
-    surface: 'web',
-    modeId: options.modeId,
-    trigger: { kind: 'submit' },
-    latestUserInput: scenario.question,
-    conversation: [
-        {
-            role: 'user',
-            content: scenario.question,
+): PostChatRequest => {
+    const submittedPrompt = scenario.submittedPrompt ?? scenario.question;
+
+    return {
+        surface: 'web',
+        modeId: options.modeId,
+        trigger: { kind: 'submit' },
+        latestUserInput: submittedPrompt,
+        conversation: [
+            {
+                role: 'user',
+                content: submittedPrompt,
+            },
+        ],
+        capabilities: {
+            canReact: false,
+            canGenerateImages: false,
+            canUseTts: false,
         },
-    ],
-    capabilities: {
-        canReact: false,
-        canGenerateImages: false,
-        canUseTts: false,
-    },
-    surfaceContext: {
-        requestHost: new URL(options.backendBaseUrl).host,
-    },
-});
+        surfaceContext: {
+            requestHost: new URL(options.backendBaseUrl).host,
+        },
+    };
+};
 
 /**
  * Converts a backend chat response into the public runtime fixture shape.
@@ -324,7 +335,9 @@ export const buildLandingScenarioFixture = (
         workflowModeId: input.workflowModeId,
         capturedResponseId: input.capturedResponseId,
         capturedChainHash: input.capturedChainHash,
-        capturedQuestion: input.scenario.question,
+        ...(input.scenario.submittedPrompt !== undefined && {
+            capturedQuestion: input.scenario.submittedPrompt,
+        }),
     },
 });
 

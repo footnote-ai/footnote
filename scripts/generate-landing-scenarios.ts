@@ -144,7 +144,15 @@ const captureScenario = async (
     }
 
     if (prompt.id === 'inspect-an-answer') {
-        assertConciseIntroductionResponse(parsed.data.message);
+        const wordCount = assertConciseIntroductionResponse(
+            parsed.data.message
+        );
+        if (wordCount < 40 || wordCount > 70) {
+            logger.warn(
+                `Landing introduction is outside its 40–70 word editorial target; preserving the ${wordCount}-word capture.`,
+                { scenarioId: prompt.id, wordCount }
+            );
+        }
     }
 
     const capturedAt = new Date().toISOString();

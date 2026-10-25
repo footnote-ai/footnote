@@ -145,13 +145,13 @@ test('landing scenario ids are unique stable kebab-case values', () => {
     }
 });
 
-test('intro stays concise while following examples keep their length, links, and varied TRACE scores', () => {
+test('intro stays within the capture safety limit while following examples keep their length, links, and varied TRACE scores', () => {
     const introduction = landingScenarios[0]!;
     const introductionWordCount = introduction.response.message
         .trim()
         .split(/\s+/u)
         .filter(Boolean).length;
-    assert.ok(introductionWordCount >= 40 && introductionWordCount <= 70);
+    assert.ok(introductionWordCount > 0 && introductionWordCount <= 100);
 
     const newExamples = landingScenarios.slice(1, 3);
     const projectContextLength = landingScenarios[5].response.message.length;
@@ -338,7 +338,11 @@ test('landing scenario capture blocks are compact and aligned', () => {
         );
         assert.equal(fixture.capture.capturedChainHash.trim().length > 0, true);
         if (fixture.id === 'inspect-an-answer') {
-            assert.equal(fixture.capture.capturedQuestion, fixture.question);
+            assert.equal(fixture.question, 'How does Footnote show its work?');
+            assert.equal(
+                fixture.capture.capturedQuestion,
+                'How does Footnote show its work? Write a concise, plain-language introduction explaining how the response footnote lets readers inspect supporting evidence and provenance. Aim for 40–70 words, but treat that as a soft editorial target: do not pad an already complete shorter answer or cut a complete explanation just to hit 70. Keep the response to no more than 100 words. Do not browse or invent sources.'
+            );
         }
     }
 });
