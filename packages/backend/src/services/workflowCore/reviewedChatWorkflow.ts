@@ -3613,6 +3613,9 @@ export const runBoundedReviewWorkflow = async (
                 errorMessage:
                     error instanceof Error ? error.message : String(error),
                 retryable: false,
+                ...(usage.totalTokens === undefined
+                    ? {}
+                    : { usage: { totalTokens: usage.totalTokens } }),
                 metadata: encodeMetadata({
                     status: 'failed',
                     summary:
