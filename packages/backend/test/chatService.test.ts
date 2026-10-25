@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Cost accounting is part of responsible backend AI operation.
  */
 import test from 'node:test';
+import { textUsageCostCases } from './fixtures/textUsageCostCases.js';
 import assert from 'node:assert/strict';
 
 import type {
@@ -159,25 +160,12 @@ test('createChatService records backend token usage and estimated cost', async (
 
 test('chat generation records incomplete usage without claiming a complete zero estimate', async () => {
     for (const reviewed of [false, true]) {
-        for (const [usage, model, completeness, expectedCost] of [
-            [undefined, 'gpt-5-mini', 'partial', 0],
-            [{}, 'gpt-5-mini', 'partial', 0],
-            [
-                { promptTokens: 0, completionTokens: 0 },
-                'gpt-5-mini',
-                'complete',
-                0,
-            ],
-            [{ promptTokens: 120 }, 'gpt-5-mini', 'partial', 0.00003],
-            [{ completionTokens: 80 }, 'gpt-5-mini', 'partial', 0.00016],
-            [{ totalTokens: 200 }, 'gpt-5-mini', 'partial', 0],
-            [
-                { promptTokens: 120, completionTokens: 80 },
-                'unlisted-model',
-                'unknown',
-                0,
-            ],
-        ] as const) {
+        for (const [
+            usage,
+            model,
+            completeness,
+            expectedCost,
+        ] of textUsageCostCases) {
             const records: BackendLLMCostRecord[] = [];
             const response = await createChatService({
                 generationRuntime: createRuntime({ usage, model }),

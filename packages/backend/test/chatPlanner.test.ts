@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Planner normalization affects retrieval quality and response appropriateness.
  */
 import test from 'node:test';
+import { textUsageCostCases } from './fixtures/textUsageCostCases.js';
 import assert from 'node:assert/strict';
 
 import type { PostChatRequest } from '@footnote/contracts/web';
@@ -487,25 +488,12 @@ test('chatPlanner keeps usage-less and partial calls in structured and text cost
         },
     };
     for (const structured of [true, false]) {
-        for (const [usage, model, completeness, expectedCost] of [
-            [undefined, 'gpt-5-mini', 'partial', 0],
-            [{}, 'gpt-5-mini', 'partial', 0],
-            [
-                { promptTokens: 0, completionTokens: 0 },
-                'gpt-5-mini',
-                'complete',
-                0,
-            ],
-            [{ promptTokens: 120 }, 'gpt-5-mini', 'partial', 0.00003],
-            [{ completionTokens: 80 }, 'gpt-5-mini', 'partial', 0.00016],
-            [{ totalTokens: 200 }, 'gpt-5-mini', 'partial', 0],
-            [
-                { promptTokens: 120, completionTokens: 80 },
-                'unlisted-model',
-                'unknown',
-                0,
-            ],
-        ] as const) {
+        for (const [
+            usage,
+            model,
+            completeness,
+            expectedCost,
+        ] of textUsageCostCases) {
             const records: BackendLLMCostRecord[] = [];
             const result = {
                 decision,
