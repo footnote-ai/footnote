@@ -19,6 +19,7 @@ import {
 import { assessPlannerOutputContract } from '../src/services/chatPlannerOutputContract.js';
 import { isWorkflowOwnedPlannerInvocation } from '../src/services/chatPlannerInvocation.js';
 import { logger } from '../src/utils/logger.js';
+import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 
 const createChatRequest = (
     overrides: Partial<PostChatRequest> = {}
@@ -436,7 +437,7 @@ test('chatPlanner preserves complete planner usage through accounting', async ()
                     },
                 },
             },
-            model: 'gpt-5-mini',
+            model: 'gpt-5.6-terra',
             usage: {
                 promptTokens: 2_400,
                 cachedInputTokens: 1_792,
@@ -459,6 +460,194 @@ test('chatPlanner preserves complete planner usage through accounting', async ()
         totalTokens: 2_664,
         reasoningTokens: 64,
     });
+    assert.equal(execution.cost?.costCompleteness, 'complete');
+    assert.deepEqual(execution.cost?.costAppliedRules, [
+        'prompt_cache_read_discount',
+        'prompt_cache_write_multiplier',
+    ]);
+});
+
+test('chatPlanner keeps usage-less and partial calls in structured and text cost estimates', async () => {
+    const decision = {
+        action: 'message',
+        modality: 'text',
+        safetyTier: 'Low',
+        reasoning: 'Reply with a message.',
+        requestedCapabilityProfile: 'balanced-general',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            temperament: {
+                tightness: 4,
+                rationale: 3,
+                attribution: 4,
+                caution: 3,
+                extent: 4,
+            },
+        },
+    };
+    for (const structured of [true, false]) {
+        for (const [usage, model, completeness, expectedCost] of [
+            [undefined, 'gpt-5-mini', 'partial', 0],
+            [{}, 'gpt-5-mini', 'partial', 0],
+            [
+                { promptTokens: 0, completionTokens: 0 },
+                'gpt-5-mini',
+                'complete',
+                0,
+            ],
+            [{ promptTokens: 120 }, 'gpt-5-mini', 'partial', 0.00003],
+            [{ completionTokens: 80 }, 'gpt-5-mini', 'partial', 0.00016],
+            [{ totalTokens: 200 }, 'gpt-5-mini', 'partial', 0],
+            [
+                { promptTokens: 120, completionTokens: 80 },
+                'unlisted-model',
+                'unknown',
+                0,
+            ],
+        ] as const) {
+            const records: BackendLLMCostRecord[] = [];
+            const result = {
+                decision,
+                text: JSON.stringify(decision),
+                model,
+                usage,
+            };
+            const planner = createChatPlanner({
+                ...(structured
+                    ? { executePlannerStructured: async () => result }
+                    : { executePlanner: async () => result }),
+                recordUsage: (record) => records.push(record),
+            });
+            const { execution } = await planFromWorkflow(
+                planner,
+                createChatRequest()
+            );
+            assert.equal(execution.status, 'executed');
+            assert.equal(records.length, 1);
+            assert.equal(records[0].totalCostUsd, expectedCost);
+            assert.equal(records[0].costCompleteness, completeness);
+            assert.equal(execution.cost?.totalCostUsd, expectedCost);
+            assert.equal(execution.cost?.costCompleteness, completeness);
+            assert.deepEqual(
+                execution.cost?.costIncompleteReasons,
+                completeness === 'complete'
+                    ? []
+                    : [
+                          completeness === 'unknown'
+                              ? 'unpriced_model'
+                              : 'provider_usage_unavailable',
+                      ]
+            );
+            if (usage === undefined || Object.keys(usage).length === 0) {
+                assert.equal(execution.usage, undefined);
+            }
+        }
+    }
+});
+
+test('chatPlanner cannot hide unavailable failed-attempt usage behind a complete fallback', async () => {
+    for (const plannerModel of ['gpt-5-nano', undefined]) {
+        for (const plannerUsage of [
+            undefined,
+            {},
+            { promptTokens: 10 },
+            {
+                promptTokens: Number.NaN,
+                completionTokens: -1,
+            },
+        ]) {
+            const records: BackendLLMCostRecord[] = [];
+            const planner = createChatPlanner({
+                defaultModel: 'gpt-5-mini',
+                executePlannerStructured: async () => {
+                    throw Object.assign(
+                        new SyntaxError('malformed planner payload'),
+                        {
+                            plannerModel,
+                            plannerUsage,
+                        }
+                    );
+                },
+                executePlanner: async () => ({
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        safetyTier: 'Low',
+                        reasoning: 'Reply with a message.',
+                        requestedCapabilityProfile: 'balanced-general',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                            temperament: {
+                                tightness: 4,
+                                rationale: 3,
+                                attribution: 4,
+                                caution: 3,
+                                extent: 4,
+                            },
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 3,
+                        completionTokens: 2,
+                        totalTokens: 5,
+                    },
+                }),
+                recordUsage: (record) => records.push(record),
+            });
+            const { execution } = await planFromWorkflow(
+                planner,
+                createChatRequest()
+            );
+            assert.equal(execution.status, 'executed');
+            assert.equal(records.length, 2);
+            assert.equal(
+                records[0].promptTokens,
+                plannerUsage?.promptTokens === 10 ? 10 : 0
+            );
+            assert.equal(records[0].costCompleteness, 'partial');
+            assert.equal(records[1].costCompleteness, 'complete');
+            assert.equal(execution.cost?.costCompleteness, 'partial');
+            assert.deepEqual(execution.cost?.costIncompleteReasons, [
+                'provider_usage_unavailable',
+            ]);
+            assert.equal(
+                execution.cost?.totalCostUsd,
+                records[0].totalCostUsd + records[1].totalCostUsd
+            );
+        }
+    }
+});
+
+test('chatPlanner records unavailable usage when text execution fails', async () => {
+    for (const structuredFallback of [false, true]) {
+        const records: BackendLLMCostRecord[] = [];
+        const planner = createChatPlanner({
+            defaultModel: 'gpt-5-mini',
+            ...(structuredFallback && {
+                executePlannerStructured: async () => {
+                    throw new SyntaxError('malformed structured output');
+                },
+            }),
+            executePlanner: async () => {
+                throw new Error('provider call failed');
+            },
+            recordUsage: (record) => records.push(record),
+        });
+        const { execution } = await planFromWorkflow(
+            planner,
+            createChatRequest()
+        );
+        assert.equal(execution.status, 'failed');
+        assert.equal(records.length, structuredFallback ? 2 : 1);
+        assert.equal(execution.usage, undefined);
+        assert.equal(execution.cost?.costCompleteness, 'partial');
+        assert.deepEqual(execution.cost?.costIncompleteReasons, [
+            'provider_usage_unavailable',
+        ]);
+    }
 });
 
 test('chatPlanner preserves usage from a failed structured attempt before fallback', async () => {

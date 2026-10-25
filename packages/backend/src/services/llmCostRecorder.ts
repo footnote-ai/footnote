@@ -125,10 +125,11 @@ const backendCostTotals: LLMCostTotals = {
     totalTokensOut: 0,
 };
 
+/** Preserves missing provider counts while keeping numeric estimates fail-open. */
 export const estimateBackendTextCost = (
     model: string,
-    promptTokens: number,
-    completionTokens: number,
+    promptTokens: number | undefined,
+    completionTokens: number | undefined,
     usageDetails: OpenAITextUsageDetails = {}
 ): BackendTextCostEstimate => {
     const pricingResolution = resolveOpenAITextPricingModel(model);
@@ -150,9 +151,15 @@ export const estimateBackendTextCost = (
 
     const estimatedCost = estimateOpenAITextCost(
         model,
-        promptTokens,
-        completionTokens,
-        usageDetails
+        promptTokens ?? 0,
+        completionTokens ?? 0,
+        {
+            ...usageDetails,
+            providerUsageAvailable:
+                promptTokens !== undefined &&
+                completionTokens !== undefined &&
+                usageDetails.providerUsageAvailable !== false,
+        }
     );
     return {
         inputCostUsd: estimatedCost.inputCost,

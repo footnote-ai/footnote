@@ -113,6 +113,31 @@ const createWorkflow = (): WorkflowRecord => ({
 const renderWorkflow = (workflow: WorkflowRecord | null): string =>
     renderToStaticMarkup(createElement(TraceWorkflowDetails, { workflow }));
 
+test('workflow costs distinguish complete zero from partial, unknown, and legacy estimates', () => {
+    for (const [costCompleteness, label] of [
+        ['complete', '$0.000000 · complete'],
+        ['partial', '$0.000000 · partial'],
+        ['unknown', 'Unavailable (unknown estimate)'],
+        [undefined, '$0.000000 · completeness unavailable'],
+    ] as const) {
+        const workflow = createWorkflow();
+        const step = workflow.steps[1];
+        const cost = {
+            inputCostUsd: 0,
+            outputCostUsd: 0,
+            totalCostUsd: 0,
+            ...(costCompleteness !== undefined && { costCompleteness }),
+        };
+        step.cost = cost;
+        assert.ok(step.attempts?.[0]);
+        step.attempts[0].cost = cost;
+        const html = renderWorkflow(workflow);
+        assert.equal(html.split(label).length - 1, 2);
+        if (costCompleteness === 'unknown')
+            assert.doesNotMatch(html, /\$0\.000000/u);
+    }
+});
+
 test('workflow page orders Steps and keeps Attempt history subordinate', () => {
     const html = renderWorkflow(createWorkflow());
 

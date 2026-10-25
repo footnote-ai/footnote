@@ -6,6 +6,7 @@
  * @footnote-ethics: high - Clear boundaries keep public explanations distinct from operator diagnostics.
  */
 import type {
+    StepRecord,
     WorkflowRecord,
     WorkflowStepKind,
 } from '@footnote/contracts/policy';
@@ -46,6 +47,13 @@ const RUN_STATUS_LABELS = {
 } as const;
 
 const PUBLIC_FALLBACK_ROUTE_REASON_CODE = 'search_rerouted_to_fallback_profile';
+
+const displayCost = (cost: StepRecord['cost']): string => {
+    if (cost === undefined) return 'Unavailable (not recorded)';
+    if (cost.costCompleteness === 'unknown')
+        return 'Unavailable (unknown estimate)';
+    return `$${cost.totalCostUsd.toFixed(6)} · ${cost.costCompleteness ?? 'completeness unavailable'}`;
+};
 
 const displayTokens = (usage: {
     promptTokens?: number;
@@ -187,9 +195,7 @@ const TraceWorkflowDetails = ({
                                             <div>
                                                 <dt>Recorded cost estimate</dt>
                                                 <dd>
-                                                    {step.cost === undefined
-                                                        ? 'Unavailable (not recorded)'
-                                                        : `$${step.cost.totalCostUsd.toFixed(6)}`}
+                                                    {displayCost(step.cost)}
                                                 </dd>
                                             </div>
                                         </dl>
@@ -330,10 +336,9 @@ const TraceWorkflowDetails = ({
                                                                             estimate
                                                                         </dt>
                                                                         <dd>
-                                                                            {attempt.cost ===
-                                                                            undefined
-                                                                                ? 'Unavailable (not recorded)'
-                                                                                : `$${attempt.cost.totalCostUsd.toFixed(6)}`}
+                                                                            {displayCost(
+                                                                                attempt.cost
+                                                                            )}
                                                                         </dd>
                                                                     </div>
                                                                 </dl>

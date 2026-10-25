@@ -395,8 +395,8 @@ export const createInternalNewsTaskService = ({
                 totalTokens,
                 ...estimateBackendTextCost(
                     usageModel,
-                    promptTokens,
-                    completionTokens,
+                    generationResult.usage?.promptTokens,
+                    generationResult.usage?.completionTokens,
                     {
                         ...(generationResult.usage?.cachedInputTokens !==
                             undefined && {
