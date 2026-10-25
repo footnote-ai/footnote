@@ -93,6 +93,8 @@ const runGeneration = async (input: {
     onUsage?: () => void;
     includeDetailedCost?: boolean;
     useBackendPricing?: boolean;
+    maxTokensTotal?: number;
+    enableRevision?: boolean;
     advisoryUserMemories?: string[];
 }) =>
     runBoundedReviewWorkflow({
@@ -104,17 +106,28 @@ const runGeneration = async (input: {
         generationStartedAtMs: Date.now(),
         workflowConfig: {
             workflowName: 'message_reviewed',
-            maxIterations: 1,
+            maxIterations: input.enableRevision ? 2 : 1,
             maxDurationMs: 10_000,
             executionLimits: {
-                maxWorkflowSteps: input.assessCandidates === undefined ? 2 : 4,
+                maxWorkflowSteps: input.enableRevision
+                    ? 10
+                    : input.assessCandidates === undefined
+                      ? 2
+                      : 4,
                 maxToolCalls: 0,
-                maxDeliberationCalls:
-                    input.assessCandidates === undefined ? 0 : 1,
-                maxReviewCycles: input.assessCandidates === undefined ? 0 : 1,
+                maxDeliberationCalls: input.enableRevision
+                    ? 2
+                    : input.assessCandidates === undefined
+                      ? 0
+                      : 1,
+                maxReviewCycles: input.enableRevision
+                    ? 2
+                    : input.assessCandidates === undefined
+                      ? 0
+                      : 1,
                 // Even the stale 96k live override leaves ample room for
                 // this large but ordinary prompt when admission is honest.
-                maxTokensTotal: 96_000,
+                maxTokensTotal: input.maxTokensTotal ?? 96_000,
                 maxDurationMs: 10_000,
             },
         },
@@ -124,7 +137,7 @@ const runGeneration = async (input: {
             enableReplanning: false,
             enableGeneration: true,
             enableAssessment: input.assessCandidates !== undefined,
-            enableRevision: false,
+            enableRevision: input.enableRevision ?? false,
         },
         captureUsage: (result, requestedModel) => {
             input.onUsage?.();
@@ -231,6 +244,7 @@ test('generation and assessment costs include thrown routes but exclude skipped 
             const step = result.workflowLineage.steps.find(
                 (step) => step.stepKind === stepKind
             );
+            const firstRoute = step?.attempts?.[0]?.routingAttempts?.[0];
             assert.equal(step?.cost?.totalCostUsd, 0);
             assert.equal(
                 step?.cost?.costCompleteness,
@@ -241,12 +255,62 @@ test('generation and assessment costs include thrown routes but exclude skipped 
                 skipped ? 'complete' : 'unknown'
             );
             assert.equal(
-                step?.attempts?.[0]?.routingAttempts?.[0]?.status,
+                firstRoute?.status,
                 skipped ? 'skipped_ineligible' : 'failed_transient_advanced'
             );
+            assert.equal(firstRoute?.usage, undefined);
             assert.equal(recorded, stepKind === 'generate' ? 1 : 2);
         }
     }
+});
+
+test('missing usage remains unmeasured across routed generation and assessment', async () => {
+    let calls = 0;
+    const result = await runGeneration({
+        runtime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                calls += 1;
+                if (calls === 1) {
+                    throw new GenerationRuntimeError(
+                        'provider failed without usage',
+                        { classification: 'transient' }
+                    );
+                }
+                return {
+                    text:
+                        calls === 3
+                            ? JSON.stringify({
+                                  reviewDecision: 'finalize',
+                                  reviewReason: 'The answer is ready.',
+                              })
+                            : 'A complete answer.',
+                    model: request.model,
+                };
+            },
+        },
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [makeProfile('gpt-5-mini'), makeProfile('gpt-5-nano')],
+        assessCandidates: [makeProfile('gpt-5-mini-assess')],
+    });
+    const generation = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+    const assessment = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+
+    assert.equal(generation?.usage, undefined);
+    assert.equal(assessment?.usage, undefined);
+    assert.equal(
+        generation?.attempts?.[0]?.routingAttempts?.[0]?.usage,
+        undefined
+    );
+    assert.equal(
+        calls,
+        3,
+        'missing usage must not fabricate budget consumption'
+    );
 });
 
 test('generation and assessment retain and price reported usage from failed routes once', async () => {
@@ -354,12 +418,321 @@ test('generation and assessment retain and price reported usage from failed rout
                 );
                 assert.equal(step?.usage?.promptTokens, 2000 * count);
                 assert.equal(step?.usage?.cachedInputTokens, 1000 * count);
+                assert.equal(
+                    step?.usage?.totalTokens,
+                    (partial ? 2000 : 2100) * count
+                );
                 assert.equal(step?.usage?.cacheWriteTokens, 0);
                 if (!partial)
                     assert.equal(step?.usage?.reasoningTokens, 64 * count);
             }
         }
     }
+});
+
+test('failed routed generation usage exhausts the Run budget before assessment', async () => {
+    let calls = 0;
+    const result = await runGeneration({
+        maxTokensTotal: 2_100,
+        runtime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                calls += 1;
+                if (calls === 1) {
+                    throw new GenerationRuntimeError(
+                        'provider failed after reporting usage',
+                        { classification: 'transient' },
+                        {
+                            model: request.model,
+                            usage: {
+                                promptTokens: 2_000,
+                                completionTokens: 100,
+                                totalTokens: 2_100,
+                            },
+                        }
+                    );
+                }
+                return {
+                    text: 'A complete answer.',
+                    model: request.model,
+                    usage: {
+                        promptTokens: 0,
+                        completionTokens: 0,
+                        totalTokens: 0,
+                    },
+                };
+            },
+        },
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [makeProfile('gpt-5-mini'), makeProfile('gpt-5-nano')],
+        assessCandidates: [
+            makeProfile('gpt-5-mini-assess'),
+            makeProfile('gpt-5-nano-assess'),
+        ],
+    });
+    const generation = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+
+    assert.equal(generation?.usage?.totalTokens, 2_100);
+    assert.equal(
+        result.workflowLineage.limitStop?.exhaustedLimitKey,
+        'maxTokensTotal'
+    );
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_tokens'
+    );
+    assert.equal(calls, 2, 'assessment must not run with the consumed budget');
+});
+
+test('prompt-only failed generation usage exhausts the Run budget', async () => {
+    let calls = 0;
+    const result = await runGeneration({
+        maxTokensTotal: 2_100,
+        runtime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                calls += 1;
+                if (calls === 1) {
+                    throw new GenerationRuntimeError(
+                        'provider failed after reporting partial usage',
+                        { classification: 'transient' },
+                        {
+                            model: request.model,
+                            usage: { promptTokens: 2_100 },
+                        }
+                    );
+                }
+                return {
+                    text: 'A complete answer.',
+                    model: request.model,
+                    usage: {
+                        promptTokens: 0,
+                        completionTokens: 0,
+                        totalTokens: 0,
+                    },
+                };
+            },
+        },
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [makeProfile('gpt-5-mini'), makeProfile('gpt-5-nano')],
+        assessCandidates: [makeProfile('gpt-5-mini-assess')],
+    });
+    const generation = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+
+    assert.equal(generation?.usage?.totalTokens, 2_100);
+    assert.equal(
+        result.workflowLineage.limitStop?.exhaustedLimitKey,
+        'maxTokensTotal'
+    );
+    assert.equal(
+        calls,
+        2,
+        'assessment must not run with the prompt-only usage'
+    );
+});
+
+test('all exhausted generation routes contribute usage to the Run budget', async () => {
+    let calls = 0;
+    const result = await runGeneration({
+        maxTokensTotal: 2_050,
+        runtime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                calls += 1;
+                throw new GenerationRuntimeError(
+                    'provider failed after reporting usage',
+                    { classification: 'transient' },
+                    {
+                        model: request.model,
+                        usage: {
+                            promptTokens: 2_000,
+                            completionTokens: 100,
+                            totalTokens: calls === 1 ? 2_100 : 0,
+                        },
+                    }
+                );
+            },
+        },
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [makeProfile('gpt-5-mini'), makeProfile('gpt-5-nano')],
+        assessCandidates: [makeProfile('gpt-5-mini-assess')],
+    });
+    const generation = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+
+    assert.equal(generation?.usage?.totalTokens, 2_100);
+    assert.equal(
+        result.workflowLineage.limitStop?.exhaustedLimitKey,
+        'maxTokensTotal'
+    );
+    assert.equal(calls, 2, 'assessment must not run after exhausted routes');
+});
+
+test('non-routed generation usage updates the Run budget once', async () => {
+    let calls = 0;
+    const result = await runGeneration({
+        maxTokensTotal: 2_100,
+        runtime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                calls += 1;
+                return {
+                    text: 'A complete answer.',
+                    model: request.model,
+                    usage: {
+                        promptTokens: 2_000,
+                        completionTokens: 100,
+                        totalTokens: 2_100,
+                    },
+                };
+            },
+        },
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [],
+        assessCandidates: [makeProfile('gpt-5-mini-assess')],
+    });
+    const generation = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+
+    assert.equal(generation?.usage?.totalTokens, 2_100);
+    assert.equal(
+        result.workflowLineage.limitStop?.exhaustedLimitKey,
+        'maxTokensTotal'
+    );
+    assert.equal(calls, 1, 'assessment must not run with the consumed budget');
+});
+
+test('failed routed assessment usage blocks a revision with its remaining Run budget', async () => {
+    let calls = 0;
+    const result = await runGeneration({
+        maxTokensTotal: 2_500,
+        enableRevision: true,
+        runtime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                calls += 1;
+                if (calls === 2) {
+                    throw new GenerationRuntimeError(
+                        'provider failed after reporting usage',
+                        { classification: 'transient' },
+                        {
+                            model: request.model,
+                            usage: {
+                                promptTokens: 2_000,
+                                completionTokens: 100,
+                                totalTokens: 2_100,
+                            },
+                        }
+                    );
+                }
+                if (calls === 1) {
+                    return {
+                        text: 'Initial answer.',
+                        model: request.model,
+                        usage: {
+                            promptTokens: 0,
+                            completionTokens: 0,
+                            totalTokens: 0,
+                        },
+                    };
+                }
+                if (calls === 3) {
+                    return {
+                        text: JSON.stringify({
+                            reviewDecision: 'revise',
+                            reviewReason: 'The answer needs revision.',
+                            revisionInstruction: 'Clarify the answer.',
+                        }),
+                        model: request.model,
+                        usage: {
+                            promptTokens: 0,
+                            completionTokens: 0,
+                            totalTokens: 0,
+                        },
+                    };
+                }
+                throw new Error('revision should not be admitted');
+            },
+        },
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [makeProfile('gpt-5-mini')],
+        assessCandidates: [
+            makeProfile('gpt-5-mini-assess'),
+            makeProfile('gpt-5-nano-assess'),
+        ],
+    });
+    const assessment = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+
+    assert.equal(assessment?.usage?.totalTokens, 2_100);
+    assert.equal(
+        result.workflowLineage.limitStop?.exhaustedLimitKey,
+        'maxTokensTotal'
+    );
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_tokens'
+    );
+    assert.equal(calls, 3, 'revision must not run with only 400 tokens left');
+});
+
+test('all exhausted assessment routes contribute usage to the Run budget', async () => {
+    let calls = 0;
+    const result = await runGeneration({
+        maxTokensTotal: 2_050,
+        runtime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                calls += 1;
+                if (calls === 1) {
+                    return {
+                        text: 'Initial answer.',
+                        model: request.model,
+                        usage: {
+                            promptTokens: 0,
+                            completionTokens: 0,
+                            totalTokens: 0,
+                        },
+                    };
+                }
+                throw new GenerationRuntimeError(
+                    'assessment provider failed after reporting usage',
+                    { classification: 'transient' },
+                    {
+                        model: request.model,
+                        usage: {
+                            promptTokens: 2_000,
+                            completionTokens: 100,
+                            totalTokens: calls === 2 ? 2_100 : 0,
+                        },
+                    }
+                );
+            },
+        },
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [makeProfile('gpt-5-mini')],
+        assessCandidates: [
+            makeProfile('gpt-5-mini-assess'),
+            makeProfile('gpt-5-nano-assess'),
+        ],
+    });
+    const assessment = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+
+    assert.equal(assessment?.usage?.totalTokens, 2_100);
+    assert.equal(
+        result.workflowLineage.limitStop?.exhaustedLimitKey,
+        'maxTokensTotal'
+    );
+    assert.equal(calls, 3);
 });
 
 test('gives a large-prompt generation useful output room and advances after incomplete provider output', async () => {
@@ -953,24 +1326,25 @@ test('uses JSON mode after an explicit native schema transport rejection', async
                     {
                         model: request.model,
                         usage: {
-                            promptTokens: 10,
-                            completionTokens: 5,
-                            totalTokens: 15,
+                            promptTokens: 2_000,
+                            completionTokens: 100,
+                            totalTokens: 2_100,
                         },
                     }
                 );
             }
             return {
                 text: JSON.stringify({
-                    reviewDecision: 'finalize',
-                    reviewReason: 'The draft is complete.',
+                    reviewDecision: 'revise',
+                    reviewReason: 'The draft needs clarification.',
+                    revisionInstruction: 'Clarify the answer.',
                 }),
                 model: request.model,
                 completion: { status: 'completed', visibleTextLength: 71 },
                 usage: {
-                    promptTokens: 20,
-                    completionTokens: 8,
-                    totalTokens: 28,
+                    promptTokens: 0,
+                    completionTokens: 0,
+                    totalTokens: 0,
                 },
                 provenance: 'Inferred' as const,
                 citations: [],
@@ -979,6 +1353,8 @@ test('uses JSON mode after an explicit native schema transport rejection', async
     };
 
     const result = await runGeneration({
+        maxTokensTotal: 2_115,
+        enableRevision: true,
         runtime,
         request: { messages: [{ role: 'user', content: 'Reply.' }] },
         candidates: [profile],
@@ -994,7 +1370,16 @@ test('uses JSON mode after an explicit native schema transport rejection', async
         (step) => step.stepKind === 'assess'
     );
     assert.ok(assessStep);
-    assert.equal(assessStep.usage?.totalTokens, 43);
+    assert.equal(assessStep.usage?.totalTokens, 2_100);
+    assert.equal(
+        result.workflowLineage.limitStop?.exhaustedLimitKey,
+        'maxTokensTotal'
+    );
+    assert.equal(
+        requests.length,
+        3,
+        'revision must be blocked after transport fallback usage'
+    );
     const attempts = assessStep.attempts?.[0]?.routingAttempts ?? [];
     assert.deepEqual(
         attempts.map((attempt) => attempt.status),
