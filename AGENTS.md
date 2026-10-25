@@ -12,9 +12,12 @@ Follow them unless they contradict a Non-Negotiable below.
 
 Issues and specs live as GitHub issues in `footnote-ai/footnote`, using the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
-### Triage labels
+### GitHub work management
 
-Five triage state labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) plus `area:*` and concern labels. See `docs/agents/triage-labels.md`.
+Use native issue types, Project statuses, assignees, reviewers, fields, milestones,
+and relationships for their respective jobs. Labels identify areas and concerns;
+they do not encode workflow, ownership, issue type, or execution authorization.
+See `docs/ai/github-work-management.md` and `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 
@@ -174,3 +177,4 @@ process commentary. Preserve technical precision and state uncertainty plainly.
   workflow/orchestrator/provider/provenance logic, fail-open behavior, and
   authority decisions.
 - Do not add comments that only restate obvious code.
+
