@@ -161,7 +161,6 @@ For a PR, "Current behavior" describes the state of the diff, and the brief asks
 ```markdown
 ## Agent Brief
 
-**Issue type:** Feature
 **Summary:** Finish the contributor's `--json` output flag for `triage list`
 
 **Current behavior:**
