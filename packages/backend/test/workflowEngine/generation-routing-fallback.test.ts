@@ -72,6 +72,17 @@ const usage = (
     };
 };
 
+const estimateUsageCost = (result: GenerationResult, requestedModel?: string) =>
+    estimateBackendTextCost(
+        result.model ?? requestedModel ?? 'unknown',
+        result.usage?.promptTokens,
+        result.usage?.completionTokens,
+        {
+            cachedInputTokens: result.usage?.cachedInputTokens,
+            cacheWriteTokens: result.usage?.cacheWriteTokens,
+        }
+    );
+
 const runGeneration = async (input: {
     runtime: GenerationRuntime;
     request: GenerationRequest;
@@ -120,21 +131,13 @@ const runGeneration = async (input: {
             return {
                 ...usage(result, requestedModel),
                 ...(input.useBackendPricing && {
-                    estimatedCost: estimateBackendTextCost(
-                        result.model ?? requestedModel ?? 'unknown',
-                        result.usage?.promptTokens,
-                        result.usage?.completionTokens
-                    ),
+                    estimatedCost: estimateUsageCost(result, requestedModel),
                 }),
             };
         },
         estimateCost: (result, requestedModel) =>
             input.useBackendPricing
-                ? estimateBackendTextCost(
-                      result.model ?? requestedModel ?? 'unknown',
-                      result.usage?.promptTokens,
-                      result.usage?.completionTokens
-                  )
+                ? estimateUsageCost(result, requestedModel)
                 : input.includeDetailedCost
                   ? Object.assign(
                         {
@@ -242,6 +245,119 @@ test('generation and assessment costs include thrown routes but exclude skipped 
                 skipped ? 'skipped_ineligible' : 'failed_transient_advanced'
             );
             assert.equal(recorded, stepKind === 'generate' ? 1 : 2);
+        }
+    }
+});
+
+test('generation and assessment retain and price reported usage from failed routes once', async () => {
+    const completeUsage = {
+        promptTokens: 2000,
+        cachedInputTokens: 1000,
+        cacheWriteTokens: 0,
+        completionTokens: 100,
+        reasoningTokens: 64,
+        totalTokens: 2100,
+    };
+    for (const stepKind of ['generate', 'assess'] as const) {
+        for (const exhausted of [false, true]) {
+            for (const partial of [false, true]) {
+                const failedUsage = partial
+                    ? {
+                          promptTokens: 2000,
+                          cachedInputTokens: 1000,
+                          cacheWriteTokens: 0,
+                      }
+                    : completeUsage;
+                const first = makeProfile('gpt-5-mini');
+                const second = makeProfile('gpt-5-nano');
+                let calls = 0;
+                const result = await runGeneration({
+                    useBackendPricing: true,
+                    runtime: {
+                        kind: 'test-runtime',
+                        async generate(request) {
+                            calls += 1;
+                            const firstFailureCall =
+                                stepKind === 'generate' ? 1 : 2;
+                            if (
+                                calls === firstFailureCall ||
+                                (exhausted && calls > firstFailureCall)
+                            ) {
+                                throw new GenerationRuntimeError(
+                                    'provider failed after reporting usage',
+                                    { classification: 'transient' },
+                                    {
+                                        model: partial
+                                            ? undefined
+                                            : 'gpt-5.6-terra',
+                                        usage: failedUsage,
+                                    }
+                                );
+                            }
+                            return {
+                                text:
+                                    stepKind === 'assess' && calls > 1
+                                        ? JSON.stringify({
+                                              reviewDecision: 'finalize',
+                                              reviewReason:
+                                                  'The answer is ready.',
+                                          })
+                                        : 'A complete answer.',
+                                model: request.model,
+                                usage: {
+                                    promptTokens: 0,
+                                    completionTokens: 0,
+                                    totalTokens: 0,
+                                },
+                            };
+                        },
+                    },
+                    request: {
+                        messages: [{ role: 'user', content: 'Reply.' }],
+                    },
+                    candidates:
+                        stepKind === 'generate' ? [first, second] : [second],
+                    ...(stepKind === 'assess' && {
+                        assessCandidates: [first, second],
+                    }),
+                });
+                const step = result.workflowLineage.steps.find(
+                    (step) => step.stepKind === stepKind
+                );
+                const routes = step?.attempts?.[0]?.routingAttempts;
+                const count = exhausted ? 2 : 1;
+                const cost = partial
+                    ? 0.0005 + (exhausted ? 0.0001 : 0)
+                    : 0.0017 * count;
+                assert.equal(routes?.length, 2);
+                assert.deepEqual(routes?.[0]?.usage, failedUsage);
+                assert.equal(
+                    routes?.[0]?.actualModel,
+                    partial ? undefined : 'gpt-5.6-terra'
+                );
+                assert.equal(routes?.[0]?.requestedModel, 'gpt-5-mini');
+                assert.equal(
+                    routes?.[0]?.cost?.costCompleteness,
+                    partial ? 'partial' : 'complete'
+                );
+                assert.equal(
+                    step?.cost?.costCompleteness,
+                    partial ? 'partial' : 'complete'
+                );
+                assert.ok(
+                    Math.abs((step?.cost?.totalCostUsd ?? 0) - cost) < 1e-12
+                );
+                assert.ok(
+                    Math.abs(
+                        (step?.attempts?.[0]?.cost?.totalCostUsd ?? 0) - cost
+                    ) < 1e-12
+                );
+                assert.equal(step?.usage?.promptTokens, 2000 * count);
+                assert.equal(step?.usage?.cachedInputTokens, 1000 * count);
+                assert.equal(step?.usage?.cacheWriteTokens, 0);
+                if (!partial)
+                    assert.equal(step?.usage?.reasoningTokens, 64 * count);
+            }
         }
     }
 });
