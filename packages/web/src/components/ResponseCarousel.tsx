@@ -20,6 +20,7 @@ type ResponseCarouselProps<T> = {
     dotClassName?: string;
     selectedDotClassName?: string;
     showPreviousNextControls?: boolean;
+    iconOnlyPreviousNextControls?: boolean;
     previousLabel?: string;
     nextLabel?: string;
     showPosition?: boolean;
@@ -45,6 +46,7 @@ const ResponseCarousel = <T,>({
     dotClassName = 'public-home__scenario-dot',
     selectedDotClassName = 'public-home__scenario-dot--selected',
     showPreviousNextControls = false,
+    iconOnlyPreviousNextControls = false,
     previousLabel = 'Show previous response version',
     nextLabel = 'Show next response version',
     showPosition = false,
@@ -105,7 +107,17 @@ const ResponseCarousel = <T,>({
                     aria-disabled={isTransitioning || activeIndex === 0}
                     onClick={() => selectIndex(activeIndex - 1)}
                 >
-                    Previous
+                    {iconOnlyPreviousNextControls ? (
+                        <svg
+                            aria-hidden="true"
+                            focusable="false"
+                            viewBox="0 0 16 16"
+                        >
+                            <path d="M10 3 5 8l5 5" />
+                        </svg>
+                    ) : (
+                        'Previous'
+                    )}
                 </button>
             )}
             {showPosition && (
@@ -142,7 +154,17 @@ const ResponseCarousel = <T,>({
                     }
                     onClick={() => selectIndex(activeIndex + 1)}
                 >
-                    Next
+                    {iconOnlyPreviousNextControls ? (
+                        <svg
+                            aria-hidden="true"
+                            focusable="false"
+                            viewBox="0 0 16 16"
+                        >
+                            <path d="m6 3 5 5-5 5" />
+                        </svg>
+                    ) : (
+                        'Next'
+                    )}
                 </button>
             )}
         </div>

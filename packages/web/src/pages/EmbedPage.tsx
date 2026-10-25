@@ -121,6 +121,7 @@ const EmbedPage = (): JSX.Element => {
                             `Show prepared response ${index + 1}: ${scenario.question}`
                         }
                         showPreviousNextControls
+                        iconOnlyPreviousNextControls
                         showPosition
                         previousLabel="Show previous example"
                         nextLabel="Show next example"
