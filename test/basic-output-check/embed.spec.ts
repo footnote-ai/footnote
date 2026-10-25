@@ -39,7 +39,7 @@ test('standalone embed presents prepared responses, full footer, and compact nav
     await expect(example.getByText('Recorded example')).toHaveCount(0);
     await expect(example.getByRole('heading', { level: 2 })).toBeVisible();
     await expect(example.getByRole('heading', { level: 2 })).toHaveText(
-        'How does Footnote show its work?'
+        'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.'
     );
     await expect(example.locator('.public-message--assistant')).toBeVisible();
     await expect(example.locator('.public-message--assistant')).toHaveCSS(

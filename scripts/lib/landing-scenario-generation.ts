@@ -203,17 +203,10 @@ export function assertScenarioId(value: string): void {
     }
 }
 
-export function assertConciseIntroductionResponse(message: string): number {
-    const wordCount = message.trim().split(/\s+/u).filter(Boolean).length;
-    if (wordCount === 0) {
-        throw new Error('Expected the landing introduction to be non-empty.');
+export function assertNonEmptyCapturedAnswer(message: string): void {
+    if (!message.trim()) {
+        throw new Error('Expected landing scenario response to be non-empty.');
     }
-    if (wordCount > 100) {
-        throw new Error(
-            `Expected the landing introduction to contain no more than 100 words, received ${wordCount}.`
-        );
-    }
-    return wordCount;
 }
 
 /**

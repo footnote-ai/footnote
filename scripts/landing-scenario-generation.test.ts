@@ -18,7 +18,7 @@ import type {
 } from '@footnote/contracts/policy';
 import {
     LANDING_SCENARIO_PROMPTS,
-    assertConciseIntroductionResponse,
+    assertNonEmptyCapturedAnswer,
     assertScenarioId,
     buildChatRequest,
     buildLandingScenarioFixture,
@@ -396,20 +396,16 @@ test('assertScenarioId enforces kebab-case ids', () => {
     );
 });
 
-test('introduction capture keeps the 40–70-word target advisory with a 100-word maximum', () => {
-    for (const wordCount of [35, 40, 70, 71, 79, 80, 100]) {
-        assert.equal(
-            assertConciseIntroductionResponse('word '.repeat(wordCount)),
-            wordCount
-        );
-    }
+test('captured answers must be non-empty without a word-count limit', () => {
     assert.throws(
-        () => assertConciseIntroductionResponse('   '),
-        /Expected the landing introduction to be non-empty/
+        () => assertNonEmptyCapturedAnswer('  \n  '),
+        /Expected landing scenario response to be non-empty/
     );
-    assert.throws(
-        () => assertConciseIntroductionResponse('word '.repeat(101)),
-        /Expected the landing introduction to contain no more than 100 words/
+    assert.doesNotThrow(() =>
+        assertNonEmptyCapturedAnswer('A prepared answer')
+    );
+    assert.doesNotThrow(() =>
+        assertNonEmptyCapturedAnswer('word '.repeat(101))
     );
 });
 

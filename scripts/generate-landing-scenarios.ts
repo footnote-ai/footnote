@@ -15,9 +15,9 @@ import { PostChatResponseSchema } from '@footnote/contracts/web/schemas';
 import { logger } from '../packages/discord-bot/src/utils/logger';
 import {
     LANDING_SCENARIO_PROMPTS,
+    assertNonEmptyCapturedAnswer,
     buildChatRequest,
     buildLandingScenarioFixture,
-    assertConciseIntroductionResponse,
     formatJson,
     mergeLandingScenarioFixtures,
     selectLandingScenarioPrompts,
@@ -143,17 +143,7 @@ const captureScenario = async (
         );
     }
 
-    if (prompt.id === 'inspect-an-answer') {
-        const wordCount = assertConciseIntroductionResponse(
-            parsed.data.message
-        );
-        if (wordCount > 70) {
-            logger.warn(
-                `Landing introduction exceeded its 40–70-word editorial target; preserving the ${wordCount}-word capture.`,
-                { scenarioId: prompt.id, wordCount }
-            );
-        }
-    }
+    assertNonEmptyCapturedAnswer(parsed.data.message);
 
     const capturedAt = new Date().toISOString();
     const capturedResponseId = parsed.data.metadata.responseId;

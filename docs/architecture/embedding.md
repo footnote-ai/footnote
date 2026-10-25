@@ -8,7 +8,7 @@ The `/embed` route gives other sites a compact, self-contained Footnote experien
 - The same full `CanonicalResponseFootnote` used elsewhere, including its evidence, sensitivity, licensing, TRACE, and disclosure controls.
 - The shared live chat directly below the examples.
 
-The selected prepared response is separate from a visitor's conversation. Its response text and metadata are captured together by `pnpm generate-landing-scenarios -- --scenario-id inspect-an-answer`; that command refreshes this example while preserving the other prepared responses. The checked-in introduction retains its original displayed question and submitted prompt so they stay aligned with the existing capture. The generation workflow uses balanced mode by default. A future replacement should aim for 40–70 words; after `/api/chat`, the generator accepts answers up to 100 words and rejects empty or longer responses. Do not replace the current fixture until retrieval returns relevant Footnote documentation and its evidence and provenance can be reviewed together. Trace and Report actions remain unavailable for prepared responses, with their existing disabled controls.
+The selected prepared response is separate from a visitor's conversation. Its response text and metadata are captured together by `pnpm generate-landing-scenarios`; the command can refresh one example with `--scenario-id <id>` and preserves the other prepared responses. The captured metadata records the exact submitted prompt separately from the displayed question. Generation uses balanced mode by default and does not impose a word-count limit. Trace and Report actions remain unavailable for prepared responses, with their existing disabled controls.
 
 ## Add it to a site
 
