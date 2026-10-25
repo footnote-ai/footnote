@@ -11,6 +11,7 @@ import CanonicalResponseFootnote from '@components/CanonicalResponseFootnote';
 import Chat from '@components/Chat';
 import MarkdownResponse from '@components/MarkdownResponse';
 import PublicHeader from '@components/PublicHeader';
+import ResponseCarousel from '@components/ResponseCarousel';
 import { landingScenarios } from '../data/landingScenarios';
 import {
     createEmbedHeightMessenger,
@@ -18,10 +19,9 @@ import {
 } from '../utils/embedHeight';
 
 const EmbedPage = (): JSX.Element => {
-    const containerRef = useRef<HTMLElement | null>(null);
-    const example = landingScenarios[0];
+    const containerRef = useRef<HTMLDivElement | null>(null);
 
-    if (!example) {
+    if (landingScenarios.length === 0) {
         throw new Error(
             'The public embed requires a prepared landing example.'
         );
@@ -89,10 +89,9 @@ const EmbedPage = (): JSX.Element => {
     }, []);
 
     return (
-        <div className="public-home public-home--embed">
-            <PublicHeader />
+        <div ref={containerRef} className="public-home public-home--embed">
+            <PublicHeader variant="embed" />
             <main
-                ref={containerRef}
                 id="main-content"
                 className="public-home__main public-home__main--embed"
             >
@@ -108,29 +107,49 @@ const EmbedPage = (): JSX.Element => {
                             <em>shows its work.</em>
                         </span>
                     </h1>
-                    <p>
-                        See how an answer was made, set your own rules, and run
-                        Footnote your way.
-                    </p>
                 </section>
 
                 <section
                     className="public-embed__example"
-                    aria-labelledby="embed-example-title"
+                    aria-label="Prepared responses"
                 >
-                    <h2 id="embed-example-title">{example.question}</h2>
-                    <article className="public-message public-message--assistant">
-                        <MarkdownResponse
-                            markdown={example.response.message}
-                            linksOpenInNewTab
-                        />
-                    </article>
-                    <CanonicalResponseFootnote
-                        metadata={example.response.metadata}
-                        artifacts={{
-                            trace: 'unavailable',
-                            report: 'unavailable',
-                        }}
+                    <ResponseCarousel
+                        items={landingScenarios}
+                        ariaLabel="Prepared responses"
+                        getKey={(scenario) => scenario.id}
+                        getDotLabel={(scenario, index) =>
+                            `Show prepared response ${index + 1}: ${scenario.question}`
+                        }
+                        showPreviousNextControls
+                        showPosition
+                        previousLabel="Show previous example"
+                        nextLabel="Show next example"
+                        className="public-home__response"
+                        dotsClassName="public-embed__scenario-dots"
+                        dotClassName="public-embed__scenario-dot"
+                        selectedDotClassName="public-embed__scenario-dot--selected"
+                        renderItem={(scenario) => (
+                            <h2 className="public-embed__question">
+                                {scenario.question}
+                            </h2>
+                        )}
+                        renderItemAfterNavigation={(scenario) => (
+                            <>
+                                <article className="public-message public-message--assistant">
+                                    <MarkdownResponse
+                                        markdown={scenario.response.message}
+                                        linksOpenInNewTab
+                                    />
+                                </article>
+                                <CanonicalResponseFootnote
+                                    metadata={scenario.response.metadata}
+                                    artifacts={{
+                                        trace: 'unavailable',
+                                        report: 'unavailable',
+                                    }}
+                                />
+                            </>
+                        )}
                     />
                 </section>
 
@@ -139,25 +158,6 @@ const EmbedPage = (): JSX.Element => {
                         <Chat placeholder="Ask a question…" />
                     </div>
                 </section>
-
-                <nav
-                    className="public-embed__links"
-                    aria-label="Footnote links"
-                >
-                    <a href="/" target="_blank" rel="noreferrer">
-                        Open Footnote
-                    </a>
-                    <a href="/wiki/" target="_blank" rel="noreferrer">
-                        Docs
-                    </a>
-                    <a
-                        href="https://github.com/footnote-ai/footnote"
-                        target="_blank"
-                        rel="noreferrer"
-                    >
-                        GitHub
-                    </a>
-                </nav>
             </main>
         </div>
     );

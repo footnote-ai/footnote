@@ -17,11 +17,14 @@ import type {
 } from '@footnote/contracts/policy';
 import {
     LANDING_SCENARIO_PROMPTS,
+    assertConciseIntroductionResponse,
     assertScenarioId,
     buildChatRequest,
     buildLandingScenarioFixture,
     canonicalLandingHash,
     formatJson,
+    mergeLandingScenarioFixtures,
+    selectLandingScenarioPrompts,
     sanitizeLandingScenarioResponse,
 } from './lib/landing-scenario-generation.js';
 import { landingScenarios } from '../packages/web/src/data/landingScenarios.js';
@@ -53,6 +56,51 @@ test('canonical hash matches the checked-in landing fixture', () => {
         canonicalLandingHash(scenario.question, scenario.response.message),
         scenario.response.metadata.chainHash
     );
+});
+
+test('scenario selection validates a known id before capture', () => {
+    assert.equal(selectLandingScenarioPrompts([]).length, 6);
+    assert.deepEqual(
+        selectLandingScenarioPrompts([
+            '--scenario-id',
+            LANDING_SCENARIO_PROMPTS[0].id,
+        ]),
+        [LANDING_SCENARIO_PROMPTS[0]]
+    );
+    assert.throws(
+        () => selectLandingScenarioPrompts(['--scenario-id', 'unknown']),
+        /Unknown landing scenario id/
+    );
+    assert.throws(
+        () => selectLandingScenarioPrompts(['--scenario-id']),
+        /Expected no arguments/
+    );
+});
+
+test('partial fixture update preserves every other captured scenario', () => {
+    const existing = landingScenarios.map((scenario) => ({
+        ...scenario,
+        capture: {
+            generatedAt: '2026-10-25T00:00:00.000Z',
+            backendBaseUrl: 'http://localhost:3000',
+            workflowModeId: 'balanced',
+            capturedResponseId: scenario.response.metadata.responseId,
+            capturedChainHash: scenario.response.metadata.chainHash,
+        },
+    }));
+    const replacement = {
+        ...existing[0]!,
+        response: {
+            ...existing[0]!.response,
+            message: 'Newly captured answer',
+        },
+    };
+
+    const merged = mergeLandingScenarioFixtures(existing, [replacement]);
+
+    assert.equal(merged.length, existing.length);
+    assert.deepEqual(merged[0], replacement);
+    assert.deepEqual(merged.slice(1), existing.slice(1));
 });
 
 test('sanitizeLandingScenarioResponse rewrites prepared metadata', () => {
@@ -291,6 +339,7 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
             workflowModeId: 'balanced',
             capturedResponseId: 'AbCdEf12',
             capturedChainHash: '0123456789abcdef',
+            capturedQuestion: scenario.question,
         },
     });
     assert.deepEqual(fixture.capture, {
@@ -299,6 +348,7 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
         workflowModeId: 'balanced',
         capturedResponseId: 'AbCdEf12',
         capturedChainHash: '0123456789abcdef',
+        capturedQuestion: scenario.question,
     });
 });
 
@@ -307,6 +357,23 @@ test('assertScenarioId enforces kebab-case ids', () => {
     assert.throws(
         () => assertScenarioId('what is footnote'),
         /Invalid landing scenario id/
+    );
+});
+
+test('introduction capture accepts only 40 to 70 words', () => {
+    assert.doesNotThrow(() =>
+        assertConciseIntroductionResponse('word '.repeat(40))
+    );
+    assert.doesNotThrow(() =>
+        assertConciseIntroductionResponse('word '.repeat(70))
+    );
+    assert.throws(
+        () => assertConciseIntroductionResponse('word '.repeat(39)),
+        /Expected the landing introduction to contain 40–70 words/
+    );
+    assert.throws(
+        () => assertConciseIntroductionResponse('word '.repeat(71)),
+        /Expected the landing introduction to contain 40–70 words/
     );
 });
 

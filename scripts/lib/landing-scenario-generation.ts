@@ -61,6 +61,7 @@ export type LandingScenarioCapture = {
     workflowModeId: string;
     capturedResponseId: string;
     capturedChainHash: string;
+    capturedQuestion?: string;
 };
 
 export type LandingScenarioFixture = LandingScenarioRuntimePayload & {
@@ -93,8 +94,7 @@ const SCENARIO_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const LANDING_SCENARIO_PROMPTS = [
     {
         id: 'inspect-an-answer',
-        question:
-            'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.',
+        question: 'How does Footnote show its work?',
     },
     {
         id: 'unconfirmed-claims',
@@ -121,6 +121,57 @@ export const LANDING_SCENARIO_PROMPTS = [
 ] as const satisfies readonly LandingScenarioPromptConfig[];
 
 /**
+ * Selects all landing prompts by default or one known prompt for a safe refresh.
+ */
+export const selectLandingScenarioPrompts = (
+    args: readonly string[]
+): readonly (typeof LANDING_SCENARIO_PROMPTS)[number][] => {
+    if (args.length === 0) return LANDING_SCENARIO_PROMPTS;
+    if (args.length !== 2 || args[0] !== '--scenario-id') {
+        throw new Error('Expected no arguments or --scenario-id <known-id>.');
+    }
+
+    const prompt = LANDING_SCENARIO_PROMPTS.find(
+        (candidate) => candidate.id === args[1]
+    );
+    if (!prompt) {
+        throw new Error(`Unknown landing scenario id: ${args[1]}`);
+    }
+
+    return [prompt];
+};
+
+/** Replaces known fixture ids in place while preserving every other capture. */
+export const mergeLandingScenarioFixtures = (
+    existing: readonly LandingScenarioFixture[],
+    replacements: readonly LandingScenarioFixture[]
+): LandingScenarioFixture[] => {
+    const replacementIds = new Set<string>();
+    for (const replacement of replacements) {
+        if (replacementIds.has(replacement.id)) {
+            throw new Error(
+                `Duplicate landing scenario replacement: ${replacement.id}`
+            );
+        }
+        replacementIds.add(replacement.id);
+        if (
+            existing.filter((fixture) => fixture.id === replacement.id)
+                .length !== 1
+        ) {
+            throw new Error(
+                `Expected one existing landing scenario: ${replacement.id}`
+            );
+        }
+    }
+
+    return existing.map(
+        (fixture) =>
+            replacements.find((replacement) => replacement.id === fixture.id) ??
+            fixture
+    );
+};
+
+/**
  * Builds the prepared-response hash used by checked-in landing fixtures.
  *
  * The hash intentionally uses only the public question and message so regenerated
@@ -145,6 +196,15 @@ export const canonicalLandingHash = (
 export function assertScenarioId(value: string): void {
     if (!SCENARIO_ID_PATTERN.test(value)) {
         throw new Error(`Invalid landing scenario id: ${value}`);
+    }
+}
+
+export function assertConciseIntroductionResponse(message: string): void {
+    const wordCount = message.trim().split(/\s+/u).filter(Boolean).length;
+    if (wordCount < 40 || wordCount > 70) {
+        throw new Error(
+            `Expected the landing introduction to contain 40–70 words, received ${wordCount}.`
+        );
     }
 }
 
@@ -264,6 +324,7 @@ export const buildLandingScenarioFixture = (
         workflowModeId: input.workflowModeId,
         capturedResponseId: input.capturedResponseId,
         capturedChainHash: input.capturedChainHash,
+        capturedQuestion: input.scenario.question,
     },
 });
 

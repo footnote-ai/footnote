@@ -126,7 +126,7 @@ test('landing scenarios contain the selected ordinary-use prompts in order', () 
     assert.deepEqual(
         landingScenarios.map((scenario) => scenario.question),
         [
-            'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.',
+            'How does Footnote show its work?',
             "What does Footnote do when it can't confirm a claim?",
             'Can I run Footnote locally instead of using a cloud model?',
             'What should I include in a simple weekly household checklist?',
@@ -145,8 +145,15 @@ test('landing scenario ids are unique stable kebab-case values', () => {
     }
 });
 
-test('new landing examples keep their requested length, inline links, and varied TRACE scores', () => {
-    const newExamples = landingScenarios.slice(0, 3);
+test('intro stays concise while following examples keep their length, links, and varied TRACE scores', () => {
+    const introduction = landingScenarios[0]!;
+    const introductionWordCount = introduction.response.message
+        .trim()
+        .split(/\s+/u)
+        .filter(Boolean).length;
+    assert.ok(introductionWordCount >= 40 && introductionWordCount <= 70);
+
+    const newExamples = landingScenarios.slice(1, 3);
     const projectContextLength = landingScenarios[5].response.message.length;
 
     for (const scenario of newExamples) {
@@ -331,10 +338,7 @@ test('landing scenario capture blocks are compact and aligned', () => {
         );
         assert.equal(fixture.capture.capturedChainHash.trim().length > 0, true);
         if (fixture.id === 'inspect-an-answer') {
-            assert.equal(
-                fixture.capture.capturedQuestion,
-                'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.'
-            );
+            assert.equal(fixture.capture.capturedQuestion, fixture.question);
         }
     }
 });

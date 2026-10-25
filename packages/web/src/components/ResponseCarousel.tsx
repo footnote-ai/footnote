@@ -22,6 +22,7 @@ type ResponseCarouselProps<T> = {
     showPreviousNextControls?: boolean;
     previousLabel?: string;
     nextLabel?: string;
+    showPosition?: boolean;
 };
 
 const normalizeInitialIndex = (length: number, index: number): number =>
@@ -46,6 +47,7 @@ const ResponseCarousel = <T,>({
     showPreviousNextControls = false,
     previousLabel = 'Show previous response version',
     nextLabel = 'Show next response version',
+    showPosition = false,
 }: ResponseCarouselProps<T>): JSX.Element | null => {
     const [selectedIndex, setSelectedIndex] = useState(() =>
         normalizeInitialIndex(items.length, initialIndex)
@@ -105,6 +107,14 @@ const ResponseCarousel = <T,>({
                 >
                     Previous
                 </button>
+            )}
+            {showPosition && (
+                <span
+                    className="response-carousel__position"
+                    aria-live="polite"
+                >
+                    {activeIndex + 1} / {items.length}
+                </span>
             )}
             <div className={dotsClassName} aria-label={ariaLabel}>
                 {items.map((item, index) => {

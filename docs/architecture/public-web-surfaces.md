@@ -70,13 +70,14 @@ reuses it instead of copying submission behavior.
 
 ## Embed behavior
 
-`EmbedPage` adds explanatory and setup content around `Chat`. When it runs in an
-iframe, `createEmbedHeightMessenger` reports layout changes to the host. The
-embed observes content and viewport changes, posts settled heights, and removes
-its listeners and observers during cleanup.
-
-The embed can have route-specific copy and layout. It should not fork the chat
-request path or become dependent on homepage-only prepared-answer behavior.
+`EmbedPage` shows all prepared landing responses with the shared
+`ResponseCarousel`, then renders the shared `Chat` directly below them. Each
+prepared response keeps its captured metadata and complete canonical response
+footnote. The embed has compact route-specific navigation and branding without
+adding a second homepage or chat implementation. When it runs in an iframe,
+`createEmbedHeightMessenger` measures the outer page wrapper, including the
+header, reports layout changes to the host, and removes its listeners and
+observers during cleanup.
 
 ## Public presentation
 

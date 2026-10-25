@@ -15,10 +15,7 @@ import {
     response,
 } from './chat-test-helpers';
 
-const exampleQuestion =
-    'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.';
-
-test('standalone embed presents the first homepage answer, full footer, and project links', async ({
+test('standalone embed presents prepared responses, full footer, and compact navigation', async ({
     page,
 }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -38,22 +35,86 @@ test('standalone embed presents the first homepage answer, full footer, and proj
     await expect(
         page.getByRole('heading', { name: 'AI that shows its work.' })
     ).toBeVisible();
-    await expect(
-        page.getByText(
-            'See how an answer was made, set your own rules, and run Footnote your way.',
-            { exact: true }
-        )
-    ).toBeVisible();
+    await expect(page.locator('.public-embed__intro > p')).toHaveCount(0);
     await expect(example.getByText('Recorded example')).toHaveCount(0);
-    await expect(
-        example.getByText(exampleQuestion, { exact: true })
-    ).toBeVisible();
-    await expect(example.locator('.public-message--assistant')).toContainText(
-        'Footnote is built around inspectability, so there are two natural places to look: provenance and observability.'
+    await expect(example.getByRole('heading', { level: 2 })).toBeVisible();
+    await expect(example.getByRole('heading', { level: 2 })).toHaveText(
+        'How does Footnote show its work?'
+    );
+    await expect(example.locator('.public-message--assistant')).toBeVisible();
+    await expect(example.locator('.public-message--assistant')).toHaveCSS(
+        'border-top-width',
+        '0px'
+    );
+    await expect(example.locator('.public-message--assistant')).toHaveCSS(
+        'background-color',
+        'rgba(0, 0, 0, 0)'
+    );
+    await expect(footnote).toBeVisible();
+    const firstResponseId = await footnote.getAttribute('data-response-id');
+    expect(firstResponseId).toMatch(/^prepared-landing-/);
+    await expect(example.locator('.response-carousel__position')).toHaveText(
+        '1 / 6'
+    );
+    const nextExample = example.getByRole('button', {
+        name: 'Show next example',
+    });
+    await nextExample.click();
+    await expect(example.locator('.response-carousel__position')).toHaveText(
+        '2 / 6'
+    );
+    const responseIds = new Set([firstResponseId]);
+    responseIds.add(await footnote.getAttribute('data-response-id'));
+    for (let index = 2; index < 6; index += 1) {
+        await nextExample.click();
+        await expect(
+            example.locator('.response-carousel__position')
+        ).toHaveText(`${index + 1} / 6`);
+        responseIds.add(await footnote.getAttribute('data-response-id'));
+        if (index === 4) {
+            await page.setViewportSize({ width: 390, height: 844 });
+            const questionBox = await example
+                .locator('.public-embed__question')
+                .boundingBox();
+            const controlsBox = await example
+                .locator('.response-carousel__navigation')
+                .boundingBox();
+            expect(questionBox?.height).toBeGreaterThan(60);
+            expect(controlsBox).not.toBeNull();
+            if (questionBox && controlsBox) {
+                expect(controlsBox.x).toBeGreaterThan(questionBox.x);
+                expect(controlsBox.y).toBeGreaterThan(questionBox.y);
+                expect(controlsBox.y + controlsBox.height).toBeLessThan(
+                    questionBox.y + questionBox.height
+                );
+            }
+            await page.setViewportSize({ width: 1440, height: 900 });
+        }
+    }
+    expect(responseIds.size).toBe(6);
+    await expect(nextExample).toHaveAttribute('aria-disabled', 'true');
+    await example
+        .getByRole('button', { name: 'Show previous example' })
+        .focus();
+    await page.keyboard.press('Enter');
+    await expect(example.locator('.response-carousel__position')).toHaveText(
+        '5 / 6'
+    );
+    const previousExample = example.getByRole('button', {
+        name: 'Show previous example',
+    });
+    for (let index = 3; index >= 0; index -= 1) {
+        await previousExample.click();
+        await expect(
+            example.locator('.response-carousel__position')
+        ).toHaveText(`${index + 1} / 6`);
+    }
+    await expect(example.locator('.response-carousel__position')).toHaveText(
+        '1 / 6'
     );
     await expect(footnote).toHaveAttribute(
         'data-response-id',
-        'prepared-landing-inspect-an-answer'
+        firstResponseId ?? ''
     );
     for (const summary of ['Evidence', 'Sensitivity', 'Licensing']) {
         await expect(footnote).toContainText(summary);
@@ -110,25 +171,28 @@ test('standalone embed presents the first homepage answer, full footer, and proj
     );
     await expect(page.getByLabel('Ask a question')).toBeVisible();
     await expect(
-        page.locator('.interaction').getByText(exampleQuestion)
-    ).toHaveCount(0);
+        page.locator('.public-embed__live .interaction')
+    ).toBeVisible();
     const links = page.getByRole('navigation', { name: 'Footnote links' });
     for (const [name, href] of [
-        ['Open Footnote', '/'],
+        ['Full site', '/'],
         ['Docs', '/wiki/'],
         ['GitHub', 'https://github.com/footnote-ai/footnote'],
     ]) {
         const link = links.getByRole('link', { name, exact: true });
         await expect(link).toHaveAttribute('href', href);
         await expect(link).toHaveAttribute('target', '_blank');
+        await expect(link.locator('svg')).toHaveCount(1);
     }
+    await expect(
+        links.getByRole('button', { name: 'Switch to dark mode' })
+    ).toBeVisible();
 
     const sectionOrder = await main.evaluate((element) =>
         [
             '.public-embed__intro',
             '.public-embed__example',
             '.public-embed__live',
-            '.public-embed__links',
         ].map((selector) => {
             const section = element.querySelector<HTMLElement>(selector);
             if (!section) throw new Error('Missing embed section: ' + selector);
@@ -137,7 +201,11 @@ test('standalone embed presents the first homepage answer, full footer, and proj
     );
     expect(sectionOrder[0]).toBeLessThan(sectionOrder[1]);
     expect(sectionOrder[1]).toBeLessThan(sectionOrder[2]);
-    expect(sectionOrder[2]).toBeLessThan(sectionOrder[3]);
+
+    await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.getByRole('button', { name: 'Switch to light mode' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 
     await page.screenshot({
         animations: 'disabled',
@@ -176,6 +244,33 @@ test('iframe resizes with disclosures and live answers on a narrow viewport', as
     await expect(embed.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect.poll(() => readEmbedHeights(page)).not.toHaveLength(0);
     const initialHeight = await latestEmbedHeight(page);
+    const carousel = embed.locator('.public-embed__example');
+    await carousel.getByRole('button', { name: 'Show next example' }).click();
+    await expect(carousel.locator('.response-carousel__position')).toHaveText(
+        '2 / 6'
+    );
+    const pageHeightAfterNext = await embed
+        .locator('.public-home')
+        .evaluate((root) =>
+            Math.ceil(Math.max(root.scrollHeight, root.offsetHeight))
+        );
+    await expect
+        .poll(async () => (await readEmbedHeights(page)).at(-1) ?? 0)
+        .toBe(pageHeightAfterNext);
+    await carousel
+        .getByRole('button', { name: 'Show previous example' })
+        .click();
+    await expect(carousel.locator('.response-carousel__position')).toHaveText(
+        '1 / 6'
+    );
+    const pageHeightAfterPrevious = await embed
+        .locator('.public-home')
+        .evaluate((root) =>
+            Math.ceil(Math.max(root.scrollHeight, root.offsetHeight))
+        );
+    await expect
+        .poll(async () => (await readEmbedHeights(page)).at(-1) ?? 0)
+        .toBe(pageHeightAfterPrevious);
 
     await embed.getByRole('button', { name: 'Sources', exact: true }).click();
     await expect(embed.getByRole('region', { name: 'Sources' })).toBeVisible();
@@ -225,8 +320,8 @@ test('iframe resizes with disclosures and live answers on a narrow viewport', as
             clientHeight: body.clientHeight,
             clientWidth: body.clientWidth,
             mainBottom: main.getBoundingClientRect().bottom,
-            answerOverflow: getComputedStyle(answer).overflowY,
-            themeColor: getComputedStyle(home).backgroundColor,
+            answerOverflow: window.getComputedStyle(answer).overflowY,
+            themeColor: window.getComputedStyle(home).backgroundColor,
         };
     });
     expect(layout.bodyWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
@@ -241,6 +336,10 @@ test('iframe resizes with disclosures and live answers on a narrow viewport', as
         .evaluate((frame) => frame.getBoundingClientRect().height);
     const reportedHeight = (await readEmbedHeights(page)).at(-1) ?? 0;
     expect(iframeHeight).toBeGreaterThanOrEqual(reportedHeight);
+    const headerBottom = await embed
+        .locator('.public-header')
+        .evaluate((header) => header.getBoundingClientRect().bottom);
+    expect(reportedHeight).toBeGreaterThanOrEqual(headerBottom);
     await page.locator('#footnote-chat-frame').screenshot({
         animations: 'disabled',
         path: testInfo.outputPath('embed-iframe-mobile-dark.png'),
@@ -267,7 +366,7 @@ test('narrow iframe remains scrollable when its parent cannot receive resize mes
             body.scrollHeight,
             document.documentElement.scrollHeight
         ),
-        overflow: getComputedStyle(document.documentElement).overflowY,
+        overflow: window.getComputedStyle(document.documentElement).overflowY,
     }));
     expect(initialLayout.referrer).toBe('');
     expect(initialLayout.contentHeight).toBeGreaterThan(
@@ -327,17 +426,6 @@ test('narrow iframe remains scrollable when its parent cannot receive resize mes
     expect(chatInputBox.y).toBeLessThan(initialLayout.viewportHeight);
     expect(chatInputBox.y + chatInputBox.height).toBeGreaterThan(0);
 
-    const links = embed.getByRole('navigation', { name: 'Footnote links' });
-    await links.scrollIntoViewIfNeeded();
-    const githubLink = links.getByRole('link', { name: 'GitHub', exact: true });
-    await expect(githubLink).toBeVisible();
-    const githubBox = await githubLink.boundingBox();
-    expect(githubBox).not.toBeNull();
-    if (!githubBox) throw new Error('Missing bottom link bounds.');
-    expect(githubBox.y).toBeGreaterThanOrEqual(0);
-    expect(githubBox.y + githubBox.height).toBeLessThanOrEqual(
-        initialLayout.viewportHeight + 1
-    );
     const endLayout = await embed.locator('body').evaluate((body) => ({
         scrollY: window.scrollY,
         viewportHeight: window.innerHeight,
@@ -350,4 +438,83 @@ test('narrow iframe remains scrollable when its parent cannot receive resize mes
         animations: 'disabled',
         path: testInfo.outputPath('embed-mobile-fallback-bottom.png'),
     });
+});
+
+test('iframe reports the expanded CAPTCHA retry state', async ({ page }) => {
+    await page.route('**/turnstile/v0/api.js*', async (route) => {
+        await route.fulfill({
+            contentType: 'application/javascript',
+            body: `
+                window.__embedCaptchaCallbacks = [];
+                window.turnstile = {
+                    render(container, params) {
+                        window.__embedCaptchaCallbacks.push(params.callback);
+                        return String(window.__embedCaptchaCallbacks.length);
+                    },
+                    execute(container) {
+                        window.__embedCaptchaCallbacks.at(-1)?.('XXXX.DUMMY.TOKEN');
+                    },
+                    getResponse() { return 'XXXX.DUMMY.TOKEN'; },
+                    reset() {},
+                    remove() {},
+                };
+                if (typeof window.onloadTurnstileCallback === 'function') {
+                    window.onloadTurnstileCallback();
+                }
+            `,
+        });
+    });
+    await page.route('**/config.json', async (route) => {
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                turnstileSiteKey: '1x00000000000000000000AA',
+                setup: { required: false, routePath: '/setup' },
+            }),
+        });
+    });
+    await page.route('**/api/chat', async (route) => {
+        await route.fulfill({
+            status: 403,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'CAPTCHA verification failed' }),
+        });
+    });
+
+    const embed = await mountSizedEmbed(page);
+    await expect(embed.getByLabel('Ask a question')).toBeVisible();
+    await embed.getByLabel('Ask a question').focus();
+    await expect
+        .poll(() =>
+            embed.locator('body').evaluate(
+                () =>
+                    (
+                        window as typeof window & {
+                            __embedCaptchaCallbacks?: Array<
+                                (token: string) => void
+                            >;
+                        }
+                    ).__embedCaptchaCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(0);
+    await expect.poll(() => readEmbedHeights(page)).not.toHaveLength(0);
+    const initialHeight = await latestEmbedHeight(page);
+    await embed.locator('body').evaluate(() => {
+        const callbacks = (
+            window as typeof window & {
+                __embedCaptchaCallbacks?: Array<(token: string) => void>;
+            }
+        ).__embedCaptchaCallbacks;
+        callbacks?.at(-1)?.('XXXX.DUMMY.TOKEN.1.XXXX');
+    });
+    await embed.getByLabel('Ask a question').fill('Show the retry challenge.');
+    await embed.getByRole('button', { name: 'Submit question' }).click();
+    await expect(embed.getByRole('status')).toHaveAttribute(
+        'data-request-state',
+        'captcha'
+    );
+    await expect
+        .poll(() => latestEmbedHeight(page))
+        .toBeGreaterThan(initialHeight);
 });

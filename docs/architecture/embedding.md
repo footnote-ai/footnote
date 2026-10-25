@@ -1,13 +1,14 @@
 # Embedding Footnote
 
-The `/embed` route lets other sites include Footnote's public introduction and chat without rebuilding them. It uses:
+The `/embed` route gives other sites a compact, self-contained Footnote experience. It uses:
 
-- The shared public header and the homepage headline and supporting line.
-- The same first prepared answer as the homepage, with its response metadata and provenance footer.
-- A separate, working chat.
-- Links to Footnote, its documentation, and GitHub.
+- The Footnote wordmark and “AI that shows its work.” branding.
+- Header links to the full site, documentation, and GitHub, followed by the shared theme toggle.
+- Every prepared landing response, selected with previous/next controls and a position counter.
+- The same full `CanonicalResponseFootnote` used elsewhere, including its evidence, sensitivity, licensing, TRACE, and disclosure controls.
+- The shared live chat directly below the examples.
 
-The prepared answer is separate from a visitor's conversation. Its response details remain available, including sources, workflow information, and TRACE values. Trace and Report actions are unavailable for the prepared answer; their disabled controls do not show availability messages.
+The selected prepared response is separate from a visitor's conversation. Its response text and metadata are captured together by `pnpm generate-landing-scenarios -- --scenario-id inspect-an-answer`; that command refreshes this example while preserving the other prepared responses. Editing a question or answer without a new capture would misrepresent the recorded provenance. Trace and Report actions remain unavailable for prepared responses, with their existing disabled controls.
 
 ## Add it to a site
 
@@ -23,7 +24,7 @@ Point an iframe at the Footnote web origin:
 ></iframe>
 ```
 
-The `min-height` is a starting size, not a limit. The embed sends its content height to the parent page on load and when the layout changes. A host that handles those messages can resize the iframe as the visitor opens response details or uses the chat.
+The `min-height` is a starting size, not a limit. The embed sends its whole-document height, including the header, to the parent page on load and when the layout changes. A host that handles those messages can resize the iframe as the visitor changes examples, opens response details, or uses the chat.
 
 If the host doesn't handle resize messages, visitors can still scroll inside the iframe. Keep normal iframe scrolling available as a fallback rather than hiding overflow or clipping the footer.
 
@@ -67,4 +68,4 @@ window.addEventListener('message', (event) => {
 - The embed uses the shared web styles from `packages/web/src/styles/index.css`. It stacks vertically at narrow widths.
 - When resize messages are working, let the iframe follow its content height without a maximum-height cap. Otherwise, keep a usable fixed height and allow scrolling.
 - Live chat still uses the normal `/api/chat` rate limits, Cloudflare Turnstile checks, and keyboard behavior.
-- `packages/web/src/utils/embedHeight.ts` owns height measurement and messaging. Framing and CORS rules remain backend configuration.
+- `packages/web/src/utils/embedHeight.ts` owns height measurement and messaging. The embed measures its outer page wrapper so the report includes the header as well as the main content. Framing and CORS rules remain backend configuration.
