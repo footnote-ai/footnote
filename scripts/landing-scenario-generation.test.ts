@@ -314,7 +314,7 @@ test('buildChatRequest emits the landing capture payload shape', () => {
 test('introduction capture records its submitted prompt separately from the displayed question', () => {
     const scenario = LANDING_SCENARIO_PROMPTS[0];
     const submittedPrompt =
-        'How does Footnote show its work? Write a concise, plain-language introduction explaining how the response footnote lets readers inspect supporting evidence and provenance. Aim for 40–70 words, but treat that as a soft editorial target: do not pad an already complete shorter answer or cut a complete explanation just to hit 70. Keep the response to no more than 100 words. Do not browse or invent sources.';
+        "How does Footnote show its work? Answer in one short paragraph of three sentences, under 80 words. Explain what readers can inspect and why that doesn't guarantee an answer is correct.";
     const request = buildChatRequest(scenario, {
         backendBaseUrl: 'http://localhost:3000',
         modeId: 'express',
@@ -369,7 +369,8 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
             workflowModeId: 'balanced',
             capturedResponseId: 'AbCdEf12',
             capturedChainHash: '0123456789abcdef',
-            capturedQuestion: scenario.submittedPrompt,
+            capturedQuestion:
+                "How does Footnote show its work? Answer in one short paragraph of three sentences, under 80 words. Explain what readers can inspect and why that doesn't guarantee an answer is correct.",
         },
     });
     assert.deepEqual(fixture.capture, {
@@ -378,7 +379,8 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
         workflowModeId: 'balanced',
         capturedResponseId: 'AbCdEf12',
         capturedChainHash: '0123456789abcdef',
-        capturedQuestion: scenario.submittedPrompt,
+        capturedQuestion:
+            "How does Footnote show its work? Answer in one short paragraph of three sentences, under 80 words. Explain what readers can inspect and why that doesn't guarantee an answer is correct.",
     });
 });
 
@@ -390,8 +392,8 @@ test('assertScenarioId enforces kebab-case ids', () => {
     );
 });
 
-test('introduction capture treats 40 to 70 words as an editorial target', () => {
-    for (const wordCount of [35, 40, 70, 71, 100]) {
+test('introduction capture keeps the requested word range advisory', () => {
+    for (const wordCount of [35, 40, 70, 71, 79, 80, 100]) {
         assert.equal(
             assertConciseIntroductionResponse('word '.repeat(wordCount)),
             wordCount

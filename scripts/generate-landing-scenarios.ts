@@ -147,9 +147,9 @@ const captureScenario = async (
         const wordCount = assertConciseIntroductionResponse(
             parsed.data.message
         );
-        if (wordCount < 40 || wordCount > 70) {
+        if (wordCount >= 80) {
             logger.warn(
-                `Landing introduction is outside its 40–70 word editorial target; preserving the ${wordCount}-word capture.`,
+                `Landing introduction exceeded its under-80-word request; preserving the ${wordCount}-word capture.`,
                 { scenarioId: prompt.id, wordCount }
             );
         }

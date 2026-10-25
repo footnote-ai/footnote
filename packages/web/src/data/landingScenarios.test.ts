@@ -341,7 +341,7 @@ test('landing scenario capture blocks are compact and aligned', () => {
             assert.equal(fixture.question, 'How does Footnote show its work?');
             assert.equal(
                 fixture.capture.capturedQuestion,
-                'How does Footnote show its work? Write a concise, plain-language introduction explaining how the response footnote lets readers inspect supporting evidence and provenance. Aim for 40–70 words, but treat that as a soft editorial target: do not pad an already complete shorter answer or cut a complete explanation just to hit 70. Keep the response to no more than 100 words. Do not browse or invent sources.'
+                "How does Footnote show its work? Answer in one short paragraph of three sentences, under 80 words. Explain what readers can inspect and why that doesn't guarantee an answer is correct."
             );
         }
     }
