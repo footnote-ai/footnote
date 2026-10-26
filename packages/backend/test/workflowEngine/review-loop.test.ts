@@ -1053,6 +1053,12 @@ test('runBoundedReviewWorkflow executes engine-bounded refinement path without r
     assert.match(refineSystemMessage.content, /Revision instruction:/);
     assert.match(refineSystemMessage.content, /Trim and soften the phrasing\./);
     assert.equal(refineSystemMessage.content.includes('unknown_module'), false);
+    const assessInput = generationInputs[1];
+    const assessSystemMessage = assessInput?.messages
+        .filter((message) => message.role === 'system')
+        .at(-1);
+    assert.ok(assessSystemMessage);
+    assert.match(assessSystemMessage.content, /answer its material parts/u);
 });
 
 test('runBoundedReviewWorkflow marks requested-but-blocked refinement without refinementApplied signals', async () => {

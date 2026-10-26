@@ -59,6 +59,7 @@ const allowedCheckIdentifiers: Record<CheckCategory, ReadonlySet<string>> = {
         'modality_text',
         'review_decision_finalize',
         'review_decision_revise',
+        'review_decision_search',
     ]),
     qualitative: new Set([
         'clear_tradeoff_explanation',
@@ -67,6 +68,14 @@ const allowedCheckIdentifiers: Record<CheckCategory, ReadonlySet<string>> = {
         'decision_is_minimal',
         'no_unnecessary_revision',
         'revision_instruction_is_actionable',
+        'material_request_coverage',
+        'available_context_routes_to_revise',
+        'missing_evidence_routes_to_search',
+        'quantitative_relevance',
+        'no_unnecessary_work',
+        'appropriate_concision',
+        'ambiguity_not_overreviewed',
+        'uncertainty_appropriately_bounded',
     ]),
 };
 
@@ -210,8 +219,8 @@ const readCorpus = (value: unknown): BaselineCase[] => {
 
 const corpus = readCorpus(rawCorpus);
 
-test('model behavior baseline contains seven isolated workload cases', () => {
-    assert.equal(corpus.length, 7);
+test('model behavior baseline contains fifteen isolated workload cases', () => {
+    assert.equal(corpus.length, 15);
     assert.deepEqual(
         corpus.map((evaluationCase) => evaluationCase.id),
         [
@@ -222,6 +231,14 @@ test('model behavior baseline contains seven isolated workload cases', () => {
             'planner_difficult_routing',
             'review_finalize_good_draft',
             'review_revise_defective_draft',
+            'review_941_meta_omission_available_evidence',
+            'review_941_meta_omission_missing_evidence',
+            'review_941_gemini_claim_omission_available_evidence',
+            'review_941_complete_multipart_answer',
+            'review_941_irrelevant_quantitative_proxy',
+            'review_941_concise_sufficient_answer',
+            'review_941_ambiguity_bounded_answer',
+            'review_941_legitimate_uncertainty',
         ]
     );
     assert.equal(
