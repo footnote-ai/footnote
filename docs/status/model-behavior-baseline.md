@@ -69,6 +69,11 @@ regeneration, or the delivered answer.
 | Completion tokens                               |         3,657 |       3,990 |
 | Total tokens                                    |        11,108 |      11,713 |
 
+Twenty additional exploratory requests were consumed while correcting the
+baseline source and an early parse-aborting script. Their outputs were
+discarded and their usage was not persisted; the table covers only the 16
+scored calls and does not represent total inference spend.
+
 | Case                                | `origin/main` decision | #941 decision | Reasoning summary                                                                                                                     |
 | ----------------------------------- | ---------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Meta operational evidence available | search                 | revise        | Baseline saw the requested effect as missing and searched; candidate directed revision from the supplied compliance/process evidence. |
