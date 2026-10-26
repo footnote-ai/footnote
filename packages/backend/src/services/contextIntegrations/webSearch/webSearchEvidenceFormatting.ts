@@ -36,6 +36,11 @@ export const formatWebSearchEvidence = (
         return [
             `${index + 1}. Title: ${title}`,
             `   URL: ${record.url}`,
+            ...(record.sourceDate?.trim()
+                ? [
+                      `   Source date (provider-reported; publication or update): ${sanitizeUntrustedText(record.sourceDate)}`,
+                  ]
+                : []),
             snippet && snippet.length > 0
                 ? `   Excerpt: ${snippet}`
                 : '   Excerpt: not provided.',

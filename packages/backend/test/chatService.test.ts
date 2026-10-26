@@ -2349,11 +2349,20 @@ test('runChatMessages stores evidence and freshness chips for retrieved search r
 
 test('runChatMessages executes Reviewed loop and forwards workflow lineage', async () => {
     let callCount = 0;
+    const observedTimes: boolean[] = [];
     let capturedWorkflow:
         ResponseMetadataRuntimeContext['workflow'] | undefined;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate(_request) {
+            observedTimes.push(
+                _request.messages.some(
+                    (message) =>
+                        message.role === 'system' &&
+                        message.content ===
+                            'Effective request time: 2026-10-23T00:30:00.000Z (UTC). User timezone is unknown unless explicitly supplied in the conversation. Interpret relative dates in that timezone when known; otherwise use UTC as the reference and state the timezone limitation only when it changes the answer.'
+                )
+            );
             callCount += 1;
             if (callCount === 1) {
                 return {
@@ -2371,7 +2380,7 @@ test('runChatMessages executes Reviewed loop and forwards workflow lineage', asy
 
             if (callCount === 2) {
                 return {
-                    text: '{"decision":"finalize","reason":"Draft is complete and clear."}',
+                    text: '{"reviewDecision":"finalize","reviewReason":"Draft is complete and clear."}',
                     model: 'gpt-5-mini',
                     usage: {
                         promptTokens: 10,
@@ -2405,6 +2414,7 @@ test('runChatMessages executes Reviewed loop and forwards workflow lineage', asy
 
     const response = await chatService.runChatMessages({
         messages: [{ role: 'user', content: 'Summarize this.' }],
+        orchestrationStartedAtMs: Date.parse('2026-10-23T00:30:00.000Z'),
         conversationSnapshot: 'Summarize this.',
         generation: {
             reasoningEffort: 'low',
@@ -2413,6 +2423,7 @@ test('runChatMessages executes Reviewed loop and forwards workflow lineage', asy
     });
 
     assert.equal(response.message, 'initial draft');
+    assert.deepEqual(observedTimes, [true, true]);
     assert.equal(response.answerProvenanceEligible, true);
     assert.equal(callCount, 2);
     assert.equal(capturedWorkflow?.workflowName, 'message_reviewed');

@@ -11,13 +11,36 @@ generation continues fail-open without retrieved context.
 `web_search` helps with current facts and source discovery. It does not grant
 direct authority to external providers.
 
-- Providers can return candidate records (`title`, `url`, optional `snippet`).
+- Providers can return candidate records (`title`, `url`, optional `snippet`
+  and provider date text).
 - Footnote decides how those records are used.
 - If provider calls fail, workflow keeps fail-open behavior and continues
   without blocking the base response path.
 
 Search discovery is not source reading. Results are candidate sources, not
 verified evidence by themselves.
+
+Provider dates are preserved as text and labeled as provider-reported
+publication or update dates, not event dates. SearXNG supplies `publishedDate`,
+Brave supplies `page_age` (publication or last-modified date), falling back to
+its human-readable `age` when `page_age` is missing or blank. SerpAPI supplies
+`date`. Relative values stay relative text; no timezone, midnight timestamp, or
+event date is inferred. [Brave documents the distinction](https://api-dashboard.search.brave.com/api-reference/web/search/post), and [SerpAPI dates](https://serpapi.com/blog/how-to-parse-dates-from-google-search/)
+can also be relative text. Missing or non-string dates stay unknown. Dates
+travel with the same user-role evidence through generation, recovery, and
+reassessment, rather than becoming citation authority or a new public contract
+field.
+
+Text chat supplies a single backend request-time reference to planning,
+generation, and review. The orchestrator captures it at entry; direct service
+calls use service entry time. The reference is UTC, with no inferred user
+timezone. An explicitly supplied conversational timezone can change the local
+calendar date. This is distinct from an earlier conversation message's creation
+time, which remains envelope metadata. Temporal guidance distinguishes event,
+announcement, scheduled release, and confirmed availability; older historical
+sources and sufficient current evidence do not require another search merely
+because of their age. Decisive missing or contradictory current facts use the
+existing bounded search-recovery path.
 
 The model receives titles, URLs, and optional excerpts from the search provider,
 not the full pages. The formatted input makes that clear and marks missing
@@ -119,6 +142,7 @@ Current SerpAPI mapping for web search:
 - `organic_results[].link` -> normalized `url` (http/https only)
 - `organic_results[].title` -> `title`
 - `organic_results[].snippet` -> optional `snippet`
+- `organic_results[].date` -> optional provider-reported `sourceDate` text
 
 ## Configuration
 

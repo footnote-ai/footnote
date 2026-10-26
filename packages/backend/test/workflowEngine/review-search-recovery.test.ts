@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { buildRequestTimePrompt } from '../../src/services/prompts/conversationPromptLayers.js';
 import type {
     GenerationRequest,
     GenerationResult,
@@ -37,6 +38,8 @@ type SearchRecoveryFixture = {
     followUpQuery?: string;
     followUpTitle?: string;
     followUpText?: string;
+    initialSourceDate?: string;
+    followUpSourceDate?: string;
 };
 
 type SearchRecoveryFixtures = {
@@ -240,6 +243,7 @@ const createSearchResult = (input: {
     querySource: 'planner' | 'backend_repair' | 'assessment';
     title: string;
     content: string;
+    sourceDate?: string;
 }): ContextStepResult =>
     buildExecutedContextStepResult({
         toolName: 'web_search',
@@ -250,6 +254,7 @@ const createSearchResult = (input: {
                     url: 'https://sources.example.test/release-schedule',
                     provider: 'searxng',
                     snippet: input.content,
+                    sourceDate: input.sourceDate,
                 },
             ]),
         },
@@ -309,9 +314,13 @@ const runRecovery = async (input: {
     planContinuationAddsRetrieval?: boolean;
     maxIterations?: number;
     generationStartedAtMs?: number;
+    requestTimePrompt?: string;
 }) => {
     const requestMessages = [
         { role: 'user' as const, content: input.fixture.userRequest },
+        ...(input.requestTimePrompt === undefined
+            ? []
+            : [{ role: 'system' as const, content: input.requestTimePrompt }]),
     ];
     const initialQuery = input.initialQuery ?? input.fixture.initialQuery;
     const contextStepRequests = [
@@ -435,6 +444,10 @@ const runRecovery = async (input: {
             }
             return createSearchResult({
                 query,
+                sourceDate:
+                    querySource === 'assessment'
+                        ? input.fixture.followUpSourceDate
+                        : input.fixture.initialSourceDate,
                 querySource:
                     querySource === 'backend_repair' ||
                     querySource === 'assessment'
@@ -1029,6 +1042,9 @@ test('uses the slowest observed assessment to estimate recovery reassessment', a
 
 test('Balanced allowances admit plan, initial retrieval, recovery, and reassessment', async () => {
     const requests: GenerationRequest[] = [];
+    const requestTimePrompt = buildRequestTimePrompt(
+        Date.parse('2026-10-23T00:30:00.000Z')
+    );
     const { result, executedQueries, plannerCallCount } = await runRecovery({
         fixture: fixtures.staleInitialResults,
         maxSearchRecoveryCycles: 1,
@@ -1041,6 +1057,7 @@ test('Balanced allowances admit plan, initial retrieval, recovery, and reassessm
         planning: true,
         executionLimits: executionLimits(),
         requests,
+        requestTimePrompt,
     });
 
     assert.equal(result.outcome, 'generated');
@@ -1054,6 +1071,15 @@ test('Balanced allowances admit plan, initial retrieval, recovery, and reassessm
     ]);
     assert.equal(plannerCallCount, 1);
     assert.equal(requests.length, 4);
+    assert.ok(
+        requests.every((request) =>
+            request.messages.some(
+                (message) =>
+                    message.role === 'system' &&
+                    message.content === requestTimePrompt
+            )
+        )
+    );
 });
 
 test('stale initial results are retained and a fresh query runs as the only follow-up retrieval', async () => {
@@ -1063,6 +1089,8 @@ test('stale initial results are retained and a fresh query runs as the only foll
     const { result, executedQueries } = await runRecovery({
         fixture: {
             ...fixtures.staleInitialResults,
+            initialSourceDate: '2023-06-01',
+            followUpSourceDate: '2026-10-22',
             followUpText: `${fixtures.staleInitialResults.followUpText} ${injectedInstruction}`,
         },
         maxSearchRecoveryCycles: 1,
@@ -1084,6 +1112,15 @@ test('stale initial results are retained and a fresh query runs as the only foll
         requests[2]?.messages.map((message) => message.content).join('\n') ??
         '';
     assert.match(regenerationContext, /Synthetic stale result/);
+    for (const request of [requests[2], requests[3]]) {
+        const evidenceText =
+            request?.messages
+                .filter((message) => message.role === 'user')
+                .map((message) => message.content)
+                .join('\n') ?? '';
+        assert.match(evidenceText, /Source date .*2023-06-01/);
+        assert.match(evidenceText, /Source date .*2026-10-22/);
+    }
     assert.match(
         regenerationContext,
         /Synthetic current release-line evidence/

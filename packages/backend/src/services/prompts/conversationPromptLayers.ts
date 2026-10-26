@@ -49,6 +49,10 @@ promptRegistry.assertKeys(requiredConversationPromptKeys);
 
 export type ConversationSurface = keyof typeof surfaceSystemKeys;
 
+/** Supplies one backend clock reference without inventing user-local time. */
+export const buildRequestTimePrompt = (startedAtMs: number): string =>
+    `Effective request time: ${new Date(startedAtMs).toISOString()} (UTC). User timezone is unknown unless explicitly supplied in the conversation. Interpret relative dates in that timezone when known; otherwise use UTC as the reference and state the timezone limitation only when it changes the answer.`;
+
 export interface ConversationPromptLayers {
     systemPrompt: string;
     personaPrompt: string;

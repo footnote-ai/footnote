@@ -92,6 +92,10 @@ const runSearxng = async ({
                                 ? entry.content
                                 : undefined,
                         provider: 'searxng',
+                        sourceDate:
+                            typeof entry.publishedDate === 'string'
+                                ? entry.publishedDate
+                                : undefined,
                     });
                     if (records.length >= maxResults) {
                         break;
@@ -149,6 +153,10 @@ const runBrave = async ({
                     if (!url) {
                         continue;
                     }
+                    const sourceDate = [entry.page_age, entry.age].find(
+                        (value): value is string =>
+                            typeof value === 'string' && value.trim().length > 0
+                    );
                     records.push({
                         title:
                             typeof entry.title === 'string'
@@ -160,6 +168,7 @@ const runBrave = async ({
                                 ? entry.description
                                 : undefined,
                         provider: 'brave',
+                        sourceDate,
                     });
                     if (records.length >= maxResults) {
                         break;
@@ -233,6 +242,10 @@ const runSerpApi = async ({
                                 ? entry.snippet
                                 : undefined,
                         provider: 'serpapi',
+                        sourceDate:
+                            typeof entry.date === 'string'
+                                ? entry.date
+                                : undefined,
                     });
                     if (records.length >= maxResults) {
                         break;

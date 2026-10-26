@@ -23,6 +23,8 @@ export type ChatPlannerInvocationContext = {
     purpose: ChatPlannerInvocationPurpose;
     /** Workflow-owned output reservation for this bounded planner call. */
     maxOutputTokens?: number;
+    /** Backend clock reference shared with generation and assessment. */
+    requestStartedAtMs?: number;
 };
 
 export const isWorkflowOwnedPlannerInvocation = (
@@ -41,7 +43,12 @@ export const isWorkflowOwnedPlannerInvocation = (
         candidate.workflowName.trim().length > 0 &&
         (candidate.maxOutputTokens === undefined ||
             (typeof candidate.maxOutputTokens === 'number' &&
-                Number.isFinite(candidate.maxOutputTokens)))
+                Number.isFinite(candidate.maxOutputTokens))) &&
+        (candidate.requestStartedAtMs === undefined ||
+            (typeof candidate.requestStartedAtMs === 'number' &&
+                Number.isFinite(
+                    new Date(candidate.requestStartedAtMs).getTime()
+                )))
     );
 };
 

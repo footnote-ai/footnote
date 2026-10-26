@@ -14,6 +14,23 @@ import {
 } from '../src/services/prompts/reviewPromptComposer.js';
 import { DEFAULT_REVIEW_DECISION_PROMPT } from '../src/services/workflowEngine/reviewDecision.js';
 
+test('assessment checks temporal relevance without imposing freshness cutoffs', () => {
+    for (const options of [
+        {},
+        { basePromptOverride: DEFAULT_REVIEW_DECISION_PROMPT },
+    ]) {
+        const { prompt } = composeAssessPrompt(options);
+        assert.match(prompt, /effective request time/);
+        assert.match(prompt, /confirmed availability/);
+        assert.match(prompt, /missing dates remain unknown/i);
+        assert.match(prompt, /historical questions?/);
+        assert.match(
+            prompt,
+            /current evidence is sufficient|sufficient current evidence/
+        );
+    }
+});
+
 test('composeAssessPrompt includes base assess prompt and selected modules in deterministic order', () => {
     const composed = composeAssessPrompt({
         moduleIds: ['concise_answer', 'natural_human_style'],

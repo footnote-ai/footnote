@@ -29,6 +29,41 @@ import { renderConversationPromptLayers } from '../src/services/prompts/conversa
 import { buildPersonaExpressionGuidance } from '../src/services/prompts/personaExpression.js';
 import type { WeatherForecastTool } from '../src/services/contextIntegrations/weather/index.js';
 import { logger } from '../src/utils/logger.js';
+import { isWorkflowOwnedPlannerInvocation } from '../src/services/chatPlannerInvocation.js';
+
+test('planner request clock accepts valid instants and rejects invalid date metadata', () => {
+    const invocation = {
+        owner: 'workflow',
+        workflowName: 'chat',
+        stepKind: 'plan',
+        purpose: 'chat_orchestrator_action_selection',
+    };
+    assert.equal(isWorkflowOwnedPlannerInvocation(invocation), true);
+    for (const requestStartedAtMs of [0, Date.parse('2026-10-23T00:30:00Z')]) {
+        assert.equal(
+            isWorkflowOwnedPlannerInvocation({
+                ...invocation,
+                requestStartedAtMs,
+            }),
+            true
+        );
+    }
+    for (const requestStartedAtMs of [
+        NaN,
+        Infinity,
+        9e15,
+        '2026-10-23',
+        null,
+    ]) {
+        assert.equal(
+            isWorkflowOwnedPlannerInvocation({
+                ...invocation,
+                requestStartedAtMs,
+            }),
+            false
+        );
+    }
+});
 
 const PLANNER_TOKEN_SENTINEL = DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS;
 const originalLoggerInfo = logger.info;
@@ -176,6 +211,7 @@ const withDefaultPersonaExpressionGuidance = (personaPrompt: string): string =>
 
 test('web requests go through planner and are coerced to message when planner picks react', async () => {
     let callCount = 0;
+    let plannerMessages: Array<{ role: string; content: string }> = [];
     let finalMessages: Array<{ role: string; content: string }> = [];
 
     const orchestrator = createChatOrchestrator({
@@ -183,6 +219,7 @@ test('web requests go through planner and are coerced to message when planner pi
             async ({ messages, maxOutputTokens }) => {
                 callCount += 1;
                 if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                    plannerMessages = messages;
                     return {
                         text: JSON.stringify({
                             action: 'react',
@@ -232,6 +269,17 @@ test('web requests go through planner and are coerced to message when planner pi
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'coerced web reply');
     assert.equal(response.answerProvenanceEligible, true);
+    const plannerTime = plannerMessages.find((message) =>
+        message.content.startsWith('Effective request time:')
+    );
+    assert.ok(plannerTime);
+    assert.ok(
+        finalMessages.some(
+            (message) =>
+                message.role === 'system' &&
+                message.content === plannerTime.content
+        )
+    );
     assert.equal(
         finalMessages[0]?.content,
         renderConversationPromptLayers('web-chat').systemPrompt
