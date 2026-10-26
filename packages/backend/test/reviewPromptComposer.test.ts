@@ -47,7 +47,11 @@ test('workflow assessment prompt checks material request coverage without demand
     assert.match(prompt, /answer its material parts/u);
     assert.match(
         prompt,
-        /For quantitative questions, use the requested measure/u
+        /Check whether comparisons and quantitative evidence address the dimension the user asked about/u
+    );
+    assert.match(
+        prompt,
+        /A related metric is not a substitute unless its relevance is explained/u
     );
     assert.match(
         prompt,
