@@ -145,8 +145,17 @@ test('landing scenario ids are unique stable kebab-case values', () => {
     }
 });
 
-test('new landing examples keep their requested length, inline links, and varied TRACE scores', () => {
-    const newExamples = landingScenarios.slice(0, 3);
+test('existing intro retains its captured evidence while following examples keep their length, links, and varied TRACE scores', () => {
+    const introduction = landingScenarios[0]!;
+    assert.equal(introduction.response.metadata.provenance, 'Retrieved');
+    assert.ok(introduction.response.metadata.citations.length >= 2);
+    assert.ok(
+        introduction.response.message.includes(
+            introduction.response.metadata.citations[0]!.url
+        )
+    );
+
+    const newExamples = landingScenarios.slice(1, 3);
     const projectContextLength = landingScenarios[5].response.message.length;
 
     for (const scenario of newExamples) {
@@ -315,7 +324,7 @@ test('landing scenario metadata carries required prepared fields', () => {
     }
 });
 
-test('landing scenario capture blocks are compact and aligned', () => {
+test('landing scenario capture blocks are aligned with their captured prompts', () => {
     const captureIds = landingScenarioFixtures.map(
         (fixture) => fixture.capture.capturedResponseId
     );
@@ -331,6 +340,11 @@ test('landing scenario capture blocks are compact and aligned', () => {
         );
         assert.equal(fixture.capture.capturedChainHash.trim().length > 0, true);
         if (fixture.id === 'inspect-an-answer') {
+            assert.equal(
+                fixture.question,
+                'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.'
+            );
+            assert.equal(fixture.capture.workflowModeId, 'balanced');
             assert.equal(
                 fixture.capture.capturedQuestion,
                 'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.'

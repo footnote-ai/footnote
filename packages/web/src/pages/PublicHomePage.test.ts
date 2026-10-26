@@ -149,8 +149,20 @@ test('response carousel owns the preserved transition and accessible dot control
     assert.doesNotMatch(source, /tabIndex=\{0\}/);
     assert.match(source, /role="group"/);
     assert.match(source, /showPreviousNextControls/);
+    assert.match(source, /iconOnlyPreviousNextControls/);
+    assert.match(source, /aria-hidden="true"[\s\S]*?viewBox="0 0 16 16"/);
     assert.match(source, /const activeIndex = normalizeInitialIndex/);
     assert.match(source, /items\[activeIndex\]/);
+});
+
+test('embed carousel uses labeled chevron controls with its position counter', async () => {
+    const source = await readFile(`${pagesDirectory}EmbedPage.tsx`, 'utf8');
+
+    assert.match(source, /showPreviousNextControls/);
+    assert.match(source, /iconOnlyPreviousNextControls/);
+    assert.match(source, /showPosition/);
+    assert.match(source, /previousLabel="Show previous example"/);
+    assert.match(source, /nextLabel="Show next example"/);
 });
 
 test('public cutover removes the design-lab route', async () => {
@@ -197,7 +209,7 @@ test('chat stays suggestion-free and falls back to an out-of-flow managed challe
         chatPageSource,
         /Ask anything, and see how Footnote responds!/
     );
-    assert.match(embedSource, /<Chat \/>/);
+    assert.match(embedSource, /<Chat placeholder="Ask a question…"/);
     assert.match(headerSource, /<Link to="\/account">\s*Account\s*<\/Link>/);
     assert.match(headerSource, /<a href="\/wiki\/">\s*Docs\s*<\/a>/);
     assert.match(headerSource, /Footnote<sup>\[1\]<\/sup>/);
@@ -340,7 +352,7 @@ test('homepage projects prepared metadata through the canonical footnote', async
     );
     assert.match(
         stylesSource,
-        /\.public-home__response > \.response-carousel__item-and-navigation > \.public-message--person[\s\S]*?justify-self: end/
+        /\.public-home__response\s*>\s*\.response-carousel__item-and-navigation\s*>\s*\.public-message--person[\s\S]*?justify-self: end/
     );
 });
 
@@ -360,7 +372,8 @@ test('standalone routes use the shared public shell without changing their route
     assert.match(layoutSource, /PublicHeader/);
     assert.match(layoutSource, /PublicFooter/);
     assert.match(setupSource, /<PublicPageLayout>/);
-    assert.match(embedSource, /<PublicPageLayout>/);
+    assert.match(embedSource, /<PublicHeader variant="embed" \/>/);
+    assert.doesNotMatch(embedSource, /PublicPageLayout|PublicFooter/);
     assert.match(embedSource, /createEmbedHeightMessenger/);
     assert.match(traceSource, /<PublicPageLayout>/);
     assert.match(traceSource, /trace-safety-indicator/);

@@ -15,10 +15,14 @@ import { PostChatResponseSchema } from '@footnote/contracts/web/schemas';
 import { logger } from '../packages/discord-bot/src/utils/logger';
 import {
     LANDING_SCENARIO_PROMPTS,
+    assertNonEmptyCapturedAnswer,
     buildChatRequest,
     buildLandingScenarioFixture,
     formatJson,
+    mergeLandingScenarioFixtures,
+    selectLandingScenarioPrompts,
     type LandingScenarioFixture,
+    writeJsonFileAtomically,
 } from './lib/landing-scenario-generation.js';
 
 type CaptureResult = {
@@ -140,6 +144,8 @@ const captureScenario = async (
         );
     }
 
+    assertNonEmptyCapturedAnswer(parsed.data.message);
+
     const capturedAt = new Date().toISOString();
     const capturedResponseId = parsed.data.metadata.responseId;
     const capturedChainHash = parsed.data.metadata.chainHash;
@@ -188,6 +194,7 @@ const writeJsonFiles = async (
 };
 
 const main = async (): Promise<void> => {
+    const scenarioPrompts = selectLandingScenarioPrompts(process.argv.slice(2));
     const backendBaseUrl =
         getEnv('BACKEND_BASE_URL') ?? 'http://localhost:3000';
     const traceApiToken = readRequiredEnv('TRACE_API_TOKEN');
@@ -195,26 +202,35 @@ const main = async (): Promise<void> => {
 
     const captures: CaptureResult[] = [];
 
-    for (const prompt of LANDING_SCENARIO_PROMPTS) {
+    for (const prompt of scenarioPrompts) {
         captures.push(
             await captureScenario(backendBaseUrl, traceApiToken, modeId, prompt)
         );
     }
 
-    await cleanJsonFiles(scenarioDir);
+    const isPartialCapture =
+        scenarioPrompts.length !== LANDING_SCENARIO_PROMPTS.length;
+    let fixtures = captures.map((capture) => capture.fixture);
+    if (isPartialCapture) {
+        const existing = JSON.parse(
+            await fs.readFile(fixturesJsonPath, 'utf8')
+        ) as LandingScenarioFixture[];
+        fixtures = mergeLandingScenarioFixtures(existing, fixtures);
+    } else {
+        await cleanJsonFiles(scenarioDir);
+    }
 
     await writeJsonFiles(
         scenarioDir,
-        captures.map((capture) => ({
-            fileName: `${capture.fixture.id}.json`,
-            payload: capture.fixture,
+        (isPartialCapture
+            ? captures.map((capture) => capture.fixture)
+            : fixtures
+        ).map((fixture) => ({
+            fileName: `${fixture.id}.json`,
+            payload: fixture,
         }))
     );
-    await fs.writeFile(
-        fixturesJsonPath,
-        formatJson(captures.map((capture) => capture.fixture)),
-        'utf8'
-    );
+    await writeJsonFileAtomically(fixturesJsonPath, fixtures);
 
     logger.info(
         `Generated ${captures.length} landing scenarios into ${path.relative(rootDir, scenarioDir)} and ${path.relative(rootDir, fixturesJsonPath)}.`,

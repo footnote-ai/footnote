@@ -8,7 +8,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { ChatMessageActionResponse } from '@footnote/contracts/web';
+import { PostChatRequestSchema } from '@footnote/contracts/web/schemas';
 import type {
     ExecutionEvent,
     ProvenanceAssessment,
@@ -17,12 +21,16 @@ import type {
 } from '@footnote/contracts/policy';
 import {
     LANDING_SCENARIO_PROMPTS,
+    assertNonEmptyCapturedAnswer,
     assertScenarioId,
     buildChatRequest,
     buildLandingScenarioFixture,
     canonicalLandingHash,
     formatJson,
+    mergeLandingScenarioFixtures,
+    selectLandingScenarioPrompts,
     sanitizeLandingScenarioResponse,
+    writeJsonFileAtomically,
 } from './lib/landing-scenario-generation.js';
 import { landingScenarios } from '../packages/web/src/data/landingScenarios.js';
 
@@ -53,6 +61,51 @@ test('canonical hash matches the checked-in landing fixture', () => {
         canonicalLandingHash(scenario.question, scenario.response.message),
         scenario.response.metadata.chainHash
     );
+});
+
+test('scenario selection validates a known id before capture', () => {
+    assert.equal(selectLandingScenarioPrompts([]).length, 6);
+    assert.deepEqual(
+        selectLandingScenarioPrompts([
+            '--scenario-id',
+            LANDING_SCENARIO_PROMPTS[0].id,
+        ]),
+        [LANDING_SCENARIO_PROMPTS[0]]
+    );
+    assert.throws(
+        () => selectLandingScenarioPrompts(['--scenario-id', 'unknown']),
+        /Unknown landing scenario id/
+    );
+    assert.throws(
+        () => selectLandingScenarioPrompts(['--scenario-id']),
+        /Expected no arguments/
+    );
+});
+
+test('partial fixture update preserves every other captured scenario', () => {
+    const existing = landingScenarios.map((scenario) => ({
+        ...scenario,
+        capture: {
+            generatedAt: '2026-10-25T00:00:00.000Z',
+            backendBaseUrl: 'http://localhost:3000',
+            workflowModeId: 'balanced',
+            capturedResponseId: scenario.response.metadata.responseId,
+            capturedChainHash: scenario.response.metadata.chainHash,
+        },
+    }));
+    const replacement = {
+        ...existing[0]!,
+        response: {
+            ...existing[0]!.response,
+            message: 'Newly captured answer',
+        },
+    };
+
+    const merged = mergeLandingScenarioFixtures(existing, [replacement]);
+
+    assert.equal(merged.length, existing.length);
+    assert.deepEqual(merged[0], replacement);
+    assert.deepEqual(merged.slice(1), existing.slice(1));
 });
 
 test('sanitizeLandingScenarioResponse rewrites prepared metadata', () => {
@@ -262,6 +315,39 @@ test('buildChatRequest emits the landing capture payload shape', () => {
     });
 });
 
+test('introduction capture records its submitted prompt separately from the displayed question', () => {
+    const scenario = LANDING_SCENARIO_PROMPTS[0];
+    const submittedPrompt =
+        'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.';
+    const request = buildChatRequest(scenario, {
+        backendBaseUrl: 'http://localhost:3000',
+        modeId: 'balanced',
+    });
+    const response = createMessageResponse('A captured answer');
+    const fixture = buildLandingScenarioFixture({
+        scenario,
+        response,
+        capturedResponseId: 'AbCdEf12',
+        capturedChainHash: '0123456789abcdef',
+        capturedAt: '2026-06-11T00:34:07.189Z',
+        backendBaseUrl: 'http://localhost:3000',
+        workflowModeId: 'balanced',
+    });
+
+    assert.equal(
+        scenario.question,
+        'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.'
+    );
+    assert.equal(scenario.submittedPrompt, submittedPrompt);
+    assert.equal(request.latestUserInput, submittedPrompt);
+    assert.deepEqual(PostChatRequestSchema.parse(request), request);
+    assert.deepEqual(request.conversation, [
+        { role: 'user', content: submittedPrompt },
+    ]);
+    assert.equal(fixture.question, scenario.question);
+    assert.equal(fixture.capture.capturedQuestion, submittedPrompt);
+});
+
 test('buildLandingScenarioFixture merges the capture block into each scenario', () => {
     const scenario = LANDING_SCENARIO_PROMPTS[0];
     const response = createMessageResponse('A prepared answer');
@@ -291,6 +377,8 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
             workflowModeId: 'balanced',
             capturedResponseId: 'AbCdEf12',
             capturedChainHash: '0123456789abcdef',
+            capturedQuestion:
+                'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.',
         },
     });
     assert.deepEqual(fixture.capture, {
@@ -299,6 +387,8 @@ test('buildLandingScenarioFixture merges the capture block into each scenario', 
         workflowModeId: 'balanced',
         capturedResponseId: 'AbCdEf12',
         capturedChainHash: '0123456789abcdef',
+        capturedQuestion:
+            'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.',
     });
 });
 
@@ -307,6 +397,19 @@ test('assertScenarioId enforces kebab-case ids', () => {
     assert.throws(
         () => assertScenarioId('what is footnote'),
         /Invalid landing scenario id/
+    );
+});
+
+test('captured answers must be non-empty without a word-count limit', () => {
+    assert.throws(
+        () => assertNonEmptyCapturedAnswer('  \n  '),
+        /Expected landing scenario response to be non-empty/
+    );
+    assert.doesNotThrow(() =>
+        assertNonEmptyCapturedAnswer('A prepared answer')
+    );
+    assert.doesNotThrow(() =>
+        assertNonEmptyCapturedAnswer('word '.repeat(101))
     );
 });
 
@@ -330,4 +433,23 @@ test('formatJson emits stable pretty JSON arrays with a trailing newline', () =>
     assert.equal(formatted.endsWith('\n'), true);
     assert.equal(formatted.startsWith('[\n'), true);
     assert.deepEqual(JSON.parse(formatted), input);
+});
+
+test('writeJsonFileAtomically replaces the aggregate with complete JSON', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'landing-scenarios-'));
+    const filePath = path.join(directory, 'fixtures.json');
+    const fixtures = [{ id: 'inspect-an-answer' }, { id: 'run-locally' }];
+
+    try {
+        await writeFile(filePath, '{"previous":"capture"}\n', 'utf8');
+        await writeJsonFileAtomically(filePath, fixtures);
+
+        assert.deepEqual(
+            JSON.parse(await readFile(filePath, 'utf8')),
+            fixtures
+        );
+        assert.deepEqual(await readdir(directory), ['fixtures.json']);
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
 });

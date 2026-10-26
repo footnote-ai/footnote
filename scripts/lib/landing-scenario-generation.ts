@@ -7,6 +7,7 @@
  */
 
 import crypto from 'node:crypto';
+import { rename, rm, writeFile } from 'node:fs/promises';
 
 import type {
     ChatMessageActionResponse,
@@ -20,6 +21,7 @@ import type {
 export type LandingScenarioPromptConfig = {
     id: string;
     question: string;
+    submittedPrompt?: string;
 };
 
 export type LandingScenarioMetadata = Pick<
@@ -61,6 +63,7 @@ export type LandingScenarioCapture = {
     workflowModeId: string;
     capturedResponseId: string;
     capturedChainHash: string;
+    capturedQuestion?: string;
 };
 
 export type LandingScenarioFixture = LandingScenarioRuntimePayload & {
@@ -95,6 +98,8 @@ export const LANDING_SCENARIO_PROMPTS = [
         id: 'inspect-an-answer',
         question:
             'Can you walk me through how to trace why Footnote gave an answer? Please link to two relevant documentation pages.',
+        submittedPrompt:
+            'In about 1,500 characters, how can I inspect why Footnote answered something? Link to two relevant documentation pages.',
     },
     {
         id: 'unconfirmed-claims',
@@ -119,6 +124,57 @@ export const LANDING_SCENARIO_PROMPTS = [
         question: "How does Footnote's project context integration work?",
     },
 ] as const satisfies readonly LandingScenarioPromptConfig[];
+
+/**
+ * Selects all landing prompts by default or one known prompt for a safe refresh.
+ */
+export const selectLandingScenarioPrompts = (
+    args: readonly string[]
+): readonly (typeof LANDING_SCENARIO_PROMPTS)[number][] => {
+    if (args.length === 0) return LANDING_SCENARIO_PROMPTS;
+    if (args.length !== 2 || args[0] !== '--scenario-id') {
+        throw new Error('Expected no arguments or --scenario-id <known-id>.');
+    }
+
+    const prompt = LANDING_SCENARIO_PROMPTS.find(
+        (candidate) => candidate.id === args[1]
+    );
+    if (!prompt) {
+        throw new Error(`Unknown landing scenario id: ${args[1]}`);
+    }
+
+    return [prompt];
+};
+
+/** Replaces known fixture ids in place while preserving every other capture. */
+export const mergeLandingScenarioFixtures = (
+    existing: readonly LandingScenarioFixture[],
+    replacements: readonly LandingScenarioFixture[]
+): LandingScenarioFixture[] => {
+    const replacementIds = new Set<string>();
+    for (const replacement of replacements) {
+        if (replacementIds.has(replacement.id)) {
+            throw new Error(
+                `Duplicate landing scenario replacement: ${replacement.id}`
+            );
+        }
+        replacementIds.add(replacement.id);
+        if (
+            existing.filter((fixture) => fixture.id === replacement.id)
+                .length !== 1
+        ) {
+            throw new Error(
+                `Expected one existing landing scenario: ${replacement.id}`
+            );
+        }
+    }
+
+    return existing.map(
+        (fixture) =>
+            replacements.find((replacement) => replacement.id === fixture.id) ??
+            fixture
+    );
+};
 
 /**
  * Builds the prepared-response hash used by checked-in landing fixtures.
@@ -148,6 +204,12 @@ export function assertScenarioId(value: string): void {
     }
 }
 
+export function assertNonEmptyCapturedAnswer(message: string): void {
+    if (!message.trim()) {
+        throw new Error('Expected landing scenario response to be non-empty.');
+    }
+}
+
 /**
  * Constructs the backend chat request used during landing scenario capture.
  *
@@ -157,26 +219,30 @@ export function assertScenarioId(value: string): void {
 export const buildChatRequest = (
     scenario: LandingScenarioPromptConfig,
     options: LandingScenarioRequestOptions
-): PostChatRequest => ({
-    surface: 'web',
-    modeId: options.modeId,
-    trigger: { kind: 'submit' },
-    latestUserInput: scenario.question,
-    conversation: [
-        {
-            role: 'user',
-            content: scenario.question,
+): PostChatRequest => {
+    const submittedPrompt = scenario.submittedPrompt ?? scenario.question;
+
+    return {
+        surface: 'web',
+        modeId: options.modeId,
+        trigger: { kind: 'submit' },
+        latestUserInput: submittedPrompt,
+        conversation: [
+            {
+                role: 'user',
+                content: submittedPrompt,
+            },
+        ],
+        capabilities: {
+            canReact: false,
+            canGenerateImages: false,
+            canUseTts: false,
         },
-    ],
-    capabilities: {
-        canReact: false,
-        canGenerateImages: false,
-        canUseTts: false,
-    },
-    surfaceContext: {
-        requestHost: new URL(options.backendBaseUrl).host,
-    },
-});
+        surfaceContext: {
+            requestHost: new URL(options.backendBaseUrl).host,
+        },
+    };
+};
 
 /**
  * Converts a backend chat response into the public runtime fixture shape.
@@ -264,6 +330,9 @@ export const buildLandingScenarioFixture = (
         workflowModeId: input.workflowModeId,
         capturedResponseId: input.capturedResponseId,
         capturedChainHash: input.capturedChainHash,
+        ...(input.scenario.submittedPrompt !== undefined && {
+            capturedQuestion: input.scenario.submittedPrompt,
+        }),
     },
 });
 
@@ -272,3 +341,20 @@ export const buildLandingScenarioFixture = (
  */
 export const formatJson = (value: unknown): string =>
     `${JSON.stringify(value, null, 4)}\n`;
+
+/**
+ * Replaces a generated fixture only after its complete JSON has been written.
+ */
+export const writeJsonFileAtomically = async (
+    filePath: string,
+    value: unknown
+): Promise<void> => {
+    const tempPath = `${filePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+    try {
+        await writeFile(tempPath, formatJson(value), 'utf8');
+        await rename(tempPath, filePath);
+    } catch (error) {
+        await rm(tempPath, { force: true }).catch(() => undefined);
+        throw error;
+    }
+};
