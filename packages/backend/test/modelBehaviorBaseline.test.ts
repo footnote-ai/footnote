@@ -76,6 +76,8 @@ const allowedCheckIdentifiers: Record<CheckCategory, ReadonlySet<string>> = {
         'appropriate_concision',
         'ambiguity_not_overreviewed',
         'uncertainty_appropriately_bounded',
+        'temporal_correctness',
+        'factual_support',
     ]),
 };
 
@@ -219,8 +221,8 @@ const readCorpus = (value: unknown): BaselineCase[] => {
 
 const corpus = readCorpus(rawCorpus);
 
-test('model behavior baseline contains fifteen isolated workload cases', () => {
-    assert.equal(corpus.length, 15);
+test('model behavior baseline contains twenty-five isolated workload cases', () => {
+    assert.equal(corpus.length, 25);
     assert.deepEqual(
         corpus.map((evaluationCase) => evaluationCase.id),
         [
@@ -239,6 +241,16 @@ test('model behavior baseline contains fifteen isolated workload cases', () => {
             'review_941_concise_sufficient_answer',
             'review_941_ambiguity_bounded_answer',
             'review_941_legitimate_uncertainty',
+            'review_942_relative_timezone',
+            'review_942_meta_superseded',
+            'review_942_publication_event',
+            'review_942_rollout_missing',
+            'review_942_scheduled_not_confirmed',
+            'review_942_undated_missing',
+            'review_942_historical_sufficient',
+            'review_942_current_sufficient',
+            'review_942_undated_bounded',
+            'review_942_conflicting_current',
         ]
     );
     assert.equal(

@@ -71,6 +71,7 @@ import {
 } from './chatPlannerInvocation.js';
 import { classifyTypedModelOutputFailure } from './typedModelOutput.js';
 import type { ChatPlannerInvocationContext } from './chatPlannerInvocation.js';
+import { buildRequestTimePrompt } from './prompts/conversationPromptLayers.js';
 export type {
     ChatPlannerInvocationContext,
     ChatPlannerInvocationPurpose,
@@ -1061,8 +1062,13 @@ const buildPlannerMessages = (input: {
     requestSummary: string;
     request: PostChatRequest;
     contextTier: PlannerContextTier;
+    requestStartedAtMs: number;
 }): RuntimeMessage[] => [
     { role: 'system', content: input.plannerPrompt },
+    {
+        role: 'system',
+        content: buildRequestTimePrompt(input.requestStartedAtMs),
+    },
     {
         role: 'system',
         content: `Planner capability profiles (bounded): ${input.plannerProfileContext}`,
@@ -1877,6 +1883,8 @@ export const createChatPlanner = ({
         ): ChatPlannerRequestPayload => {
             const messages = buildPlannerMessages({
                 plannerPrompt: renderPlannerModePrompt(mode),
+                requestStartedAtMs:
+                    invocationContext.requestStartedAtMs ?? plannerStartedAt,
                 plannerProfileContext: plannerCapabilityContext,
                 plannerTrustGraphTargetContext,
                 requestSummary,
@@ -1894,6 +1902,9 @@ export const createChatPlanner = ({
                     compatibilityMessages: () =>
                         buildPlannerMessages({
                             plannerPrompt: renderPlannerModePrompt('text_json'),
+                            requestStartedAtMs:
+                                invocationContext.requestStartedAtMs ??
+                                plannerStartedAt,
                             plannerProfileContext: plannerCapabilityContext,
                             plannerTrustGraphTargetContext,
                             requestSummary,

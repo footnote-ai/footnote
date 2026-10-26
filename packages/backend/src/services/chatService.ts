@@ -63,7 +63,10 @@ import type {
 } from './presentation.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ExecutionContract } from './executionContract.js';
-import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
+import {
+    buildRequestTimePrompt,
+    renderConversationPromptLayers,
+} from './prompts/conversationPromptLayers.js';
 import { buildPersonaExpressionGuidance } from './prompts/personaExpression.js';
 import { resolveNoGenerationHandlingFromTermination } from './workflowProfileContract.js';
 import {
@@ -1369,15 +1372,19 @@ export const createChatService = ({
             const repoExplainerHint = normalizedGeneration
                 ? buildRepoExplainerResponseHint(normalizedGeneration)
                 : null;
-            const messagesWithHints: RuntimeMessage[] = repoExplainerHint
-                ? [
-                      ...messages,
-                      {
-                          role: 'system',
-                          content: repoExplainerHint,
-                      },
-                  ]
-                : messages;
+            // Freeze one backend clock reference across planning, recovery and review.
+            const messagesWithHints: RuntimeMessage[] = [
+                ...messages,
+                {
+                    role: 'system',
+                    content: buildRequestTimePrompt(
+                        orchestrationStartedAtMs ?? generationStartedAt
+                    ),
+                },
+                ...(repoExplainerHint
+                    ? [{ role: 'system' as const, content: repoExplainerHint }]
+                    : []),
+            ];
             const generationRequest: GenerationRequest = {
                 messages: messagesWithHints,
                 model: model ?? defaultModel,

@@ -25,6 +25,8 @@ export type WebSearchRecord = {
     title: string;
     url: string;
     snippet?: string;
+    /** Provider date text, not an inferred event date or normalized instant. */
+    sourceDate?: string;
     provider: WebSearchProviderName;
 };
 

@@ -958,6 +958,7 @@ export const createChatOrchestrator = ({
         // action-selection details, but it is not policy authority, contract
         // authority, runtime ownership, or a second orchestrator.
         const plannerInvocationContext: ChatPlannerInvocationContext = {
+            requestStartedAtMs: orchestrationStartedAt,
             owner: 'workflow',
             workflowName: 'chat_orchestration',
             stepKind: 'plan',

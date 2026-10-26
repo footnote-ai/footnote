@@ -176,6 +176,7 @@ const withDefaultPersonaExpressionGuidance = (personaPrompt: string): string =>
 
 test('web requests go through planner and are coerced to message when planner picks react', async () => {
     let callCount = 0;
+    let plannerMessages: Array<{ role: string; content: string }> = [];
     let finalMessages: Array<{ role: string; content: string }> = [];
 
     const orchestrator = createChatOrchestrator({
@@ -183,6 +184,7 @@ test('web requests go through planner and are coerced to message when planner pi
             async ({ messages, maxOutputTokens }) => {
                 callCount += 1;
                 if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                    plannerMessages = messages;
                     return {
                         text: JSON.stringify({
                             action: 'react',
@@ -232,6 +234,17 @@ test('web requests go through planner and are coerced to message when planner pi
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'coerced web reply');
     assert.equal(response.answerProvenanceEligible, true);
+    const plannerTime = plannerMessages.find((message) =>
+        message.content.startsWith('Effective request time:')
+    );
+    assert.ok(plannerTime);
+    assert.ok(
+        finalMessages.some(
+            (message) =>
+                message.role === 'system' &&
+                message.content === plannerTime.content
+        )
+    );
     assert.equal(
         finalMessages[0]?.content,
         renderConversationPromptLayers('web-chat').systemPrompt

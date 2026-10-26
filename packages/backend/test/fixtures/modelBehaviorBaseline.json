@@ -405,6 +405,306 @@
                     "uncertainty_appropriately_bounded"
                 ]
             }
+        },
+        {
+            "id": "review_942_relative_timezone",
+            "kind": "review",
+            "description": "Synthetic temporal case: Convert the request instant to October 22 locally; distinguish the event time from the UTC calendar date.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "At the effective request time, did the October 22 launch happen today? I am in America/Los_Angeles."
+                }
+            ],
+            "draft": "No, October 22 was yesterday.",
+            "reviewContext": "Effective request time is 2026-10-23T00:30:00Z. The official excerpt says the launch occurred October 22 at 10:00 PDT. America/Los_Angeles is UTC-7 on this date.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_revise"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_942_meta_superseded",
+            "kind": "review",
+            "description": "Synthetic temporal case: Use the supported newer event rather than dismissing it based on older model knowledge.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the latest judgment against Meta in these reports?"
+                }
+            ],
+            "draft": "The newest judgment is the 2023 fine; the larger 2026 judgment seems mistaken.",
+            "reviewContext": "Synthetic Meta failure shape, not the original incident. An official court excerpt dated October 22, 2026 reports a new $25 billion judgment that day. A 2023 regulator excerpt reports an older fine. The reports concern separate events, with no contradiction in the supplied evidence.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_revise"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_942_publication_event",
+            "kind": "review",
+            "description": "Synthetic temporal case: Choose B by event date rather than publication date.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Which of these two launches happened most recently?"
+                }
+            ],
+            "draft": "A is newer because its article was published October 22.",
+            "reviewContext": "Synthetic sources: A article published October 22, 2026 explicitly describes its September 1 launch. B article published October 20, 2026 explicitly describes its October 19 launch. Both sources have equal authority.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_revise"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_942_rollout_missing",
+            "kind": "review",
+            "description": "Synthetic temporal case: Search for confirmed current availability rather than assert unchanged testing status or infer release from a schedule.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Is the Gemini feature generally available now?"
+                }
+            ],
+            "draft": "Gemini is still rolling out to invited testers.",
+            "reviewContext": "Synthetic Gemini failure shape, not the original incident. Only an announcement excerpt published June 1, 2026 says invited testing started that day and general release is planned for October. Effective request time is October 22, 2026. No later rollout status is available. One targeted web search is allowed.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_search"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_942_scheduled_not_confirmed",
+            "kind": "review",
+            "description": "Synthetic temporal case: State the scheduled date and missing confirmation; do not turn a passed schedule into confirmed availability.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Has Widget shipped? Use only the supplied source."
+                }
+            ],
+            "draft": "Yes, Widget shipped on October 20.",
+            "reviewContext": "Synthetic announcement published September 1, 2026 schedules release for October 20. Effective request time is October 22, 2026. No evidence confirms actual release. External search is forbidden.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_revise"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_942_undated_missing",
+            "kind": "review",
+            "description": "Synthetic temporal case: Recognize the material missing chronology without inventing today or newest.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Is this the newest release?"
+                }
+            ],
+            "draft": "Yes, this is the newest release, launched today.",
+            "reviewContext": "Synthetic provider excerpt says Widget version 3 is available but contains no publication or event date and no comparison to other versions. Effective request time is October 22, 2026. Targeted retrieval is allowed.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_search"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_942_historical_sufficient",
+            "kind": "review",
+            "description": "Synthetic temporal case: An older source answers the historical question; do not search or warn just because it is old.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What did the company announce in 2018?"
+                }
+            ],
+            "draft": "It announced the Atlas prototype in 2018.",
+            "reviewContext": "Synthetic archive excerpt published June 4, 2018 explicitly states that the company announced the Atlas prototype that day. The question is historical. No later status is requested.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_finalize"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_942_current_sufficient",
+            "kind": "review",
+            "description": "Synthetic temporal case: Finalize adequate current evidence without another search or a stale warning.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Is Widget available today?"
+                }
+            ],
+            "draft": "Yes, Widget is generally available as of October 22, 2026.",
+            "reviewContext": "Synthetic official status excerpt published October 22, 2026 confirms general availability that day. Effective request time is October 22, 2026 at 18:00 UTC. No conflicting evidence is present.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_finalize"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_942_undated_bounded",
+            "kind": "review",
+            "description": "Synthetic temporal case: Finalize the specific honest limitation without inventing dates or demanding unavailable research.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "When was this released? Use only the excerpt."
+                }
+            ],
+            "draft": "The excerpt says version 3 is available but does not give a release date.",
+            "reviewContext": "Synthetic undated excerpt says version 3 is available. No publication, event, or timezone metadata exists. External retrieval is forbidden.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_finalize"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_942_conflicting_current",
+            "kind": "review",
+            "description": "Synthetic temporal case: Resolve the decisive availability conflict using bounded targeted recovery.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Is Widget generally available now?"
+                }
+            ],
+            "draft": "Yes, Widget is available to everyone.",
+            "reviewContext": "Synthetic sources of equal authority: October 21 status says generally available; October 22 correction says the release was postponed but gives no new date. Effective request time is October 23, 2026. Targeted retrieval is allowed.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_search"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
         }
     ]
 }

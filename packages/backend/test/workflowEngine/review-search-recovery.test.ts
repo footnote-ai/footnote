@@ -37,6 +37,8 @@ type SearchRecoveryFixture = {
     followUpQuery?: string;
     followUpTitle?: string;
     followUpText?: string;
+    initialSourceDate?: string;
+    followUpSourceDate?: string;
 };
 
 type SearchRecoveryFixtures = {
@@ -240,6 +242,7 @@ const createSearchResult = (input: {
     querySource: 'planner' | 'backend_repair' | 'assessment';
     title: string;
     content: string;
+    sourceDate?: string;
 }): ContextStepResult =>
     buildExecutedContextStepResult({
         toolName: 'web_search',
@@ -250,6 +253,7 @@ const createSearchResult = (input: {
                     url: 'https://sources.example.test/release-schedule',
                     provider: 'searxng',
                     snippet: input.content,
+                    sourceDate: input.sourceDate,
                 },
             ]),
         },
@@ -435,6 +439,10 @@ const runRecovery = async (input: {
             }
             return createSearchResult({
                 query,
+                sourceDate:
+                    querySource === 'assessment'
+                        ? input.fixture.followUpSourceDate
+                        : input.fixture.initialSourceDate,
                 querySource:
                     querySource === 'backend_repair' ||
                     querySource === 'assessment'
@@ -1063,6 +1071,8 @@ test('stale initial results are retained and a fresh query runs as the only foll
     const { result, executedQueries } = await runRecovery({
         fixture: {
             ...fixtures.staleInitialResults,
+            initialSourceDate: '2023-06-01',
+            followUpSourceDate: '2026-10-22',
             followUpText: `${fixtures.staleInitialResults.followUpText} ${injectedInstruction}`,
         },
         maxSearchRecoveryCycles: 1,
@@ -1084,6 +1094,15 @@ test('stale initial results are retained and a fresh query runs as the only foll
         requests[2]?.messages.map((message) => message.content).join('\n') ??
         '';
     assert.match(regenerationContext, /Synthetic stale result/);
+    for (const request of [requests[2], requests[3]]) {
+        const evidenceText =
+            request?.messages
+                .filter((message) => message.role === 'user')
+                .map((message) => message.content)
+                .join('\n') ?? '';
+        assert.match(evidenceText, /Source date .*2023-06-01/);
+        assert.match(evidenceText, /Source date .*2026-10-22/);
+    }
     assert.match(
         regenerationContext,
         /Synthetic current release-line evidence/
