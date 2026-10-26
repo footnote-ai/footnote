@@ -176,6 +176,235 @@
                 "objective": ["review_decision_revise"],
                 "qualitative": ["revision_instruction_is_actionable"]
             }
+        },
+        {
+            "id": "review_941_meta_omission_available_evidence",
+            "kind": "review",
+            "description": "Synthetic #941 Meta failure shape, not the original Discord request: the draft omits operational consequences present in the supplied evidence.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What operational consequences could the reported $25 billion judgment have for Meta? Explain the effect on operations, not just its size relative to the company."
+                }
+            ],
+            "draft": "The judgment is about 8% of Meta's market capitalization.",
+            "reviewContext": "Synthetic representative context, not the original run. The supplied excerpt says the judgment requires compliance steps and changes to product processes, but gives no estimate of revenue or cash-flow impact. The draft only compares the judgment with market capitalization.",
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_revise"],
+                "qualitative": [
+                    "material_request_coverage",
+                    "available_context_routes_to_revise"
+                ]
+            }
+        },
+        {
+            "id": "review_941_meta_omission_missing_evidence",
+            "kind": "review",
+            "description": "Synthetic #941 Meta failure shape, not the original Discord request: operational evidence is absent and a targeted search is available.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What operational consequences could the reported $25 billion judgment have for Meta? Explain the effect on operations, not just its size relative to the company."
+                }
+            ],
+            "draft": "The judgment is about 8% of Meta's market capitalization.",
+            "reviewContext": "Synthetic representative context, not the original run. The supplied excerpt gives the judgment amount and market capitalization only; it says nothing about operational terms or impact. A targeted search of court records and reliable reporting is allowed and could find the missing facts.",
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_search"],
+                "qualitative": [
+                    "material_request_coverage",
+                    "missing_evidence_routes_to_search"
+                ]
+            }
+        },
+        {
+            "id": "review_941_gemini_claim_omission_available_evidence",
+            "kind": "review",
+            "description": "Synthetic #941 Gemini failure shape, not the original Discord request: grounding is described but the specific trust claim is not evaluated.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Does grounding make Gemini's answers more trustworthy as claimed? Evaluate that specific claim and its limits."
+                }
+            ],
+            "draft": "Grounding retrieves information from external sources and uses it to inform an answer.",
+            "reviewContext": "Synthetic representative context, not the original run. Supplied evidence says grounding can reduce unsupported factual assertions, but its value depends on source relevance and completeness and it does not guarantee the sources or answer are correct. The draft explains the mechanism without evaluating the trustworthiness claim.",
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_revise"],
+                "qualitative": [
+                    "material_request_coverage",
+                    "available_context_routes_to_revise"
+                ]
+            }
+        },
+        {
+            "id": "review_941_complete_multipart_answer",
+            "kind": "review",
+            "description": "Synthetic negative control: a concise draft answers each requested comparison dimension using supplied evidence.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Compare plans A and B: which is cheaper, which is faster, and what is the trade-off?"
+                }
+            ],
+            "draft": "Plan B costs less ($0.10 versus $0.20 per million tokens), while plan A is faster (80 ms versus 120 ms). Choose B for cost and A for latency.",
+            "reviewContext": "Synthetic evidence: plan A has 80 ms latency and costs $0.20 per million tokens; plan B has 120 ms latency and costs $0.10. The draft addresses cost, speed, and the resulting trade-off.",
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_finalize"],
+                "qualitative": [
+                    "material_request_coverage",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_941_irrelevant_quantitative_proxy",
+            "kind": "review",
+            "description": "Synthetic proxy control: the draft answers an operating-impact question with market capitalization despite relevant operating evidence being available.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Would this hypothetical $2 billion penalty threaten the firm's operating flexibility? Consider liquidity and operating cash flow."
+                }
+            ],
+            "draft": "The penalty is only 1% of the firm's market capitalization, so it should be manageable.",
+            "reviewContext": "Synthetic evidence gives $3 billion cash on hand and $4 billion annual operating cash flow, but no direct assessment of affordability or other obligations. Market capitalization is not a substitute for the requested liquidity and cash-flow analysis.",
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_revise"],
+                "qualitative": [
+                    "material_request_coverage",
+                    "quantitative_relevance"
+                ]
+            }
+        },
+        {
+            "id": "review_941_concise_sufficient_answer",
+            "kind": "review",
+            "description": "Synthetic negative control: a short answer directly resolves the single requested comparison.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "How much faster is plan A at 80 ms than plan B at 120 ms?"
+                }
+            ],
+            "draft": "Plan A is 40 ms faster.",
+            "reviewContext": "Synthetic evidence confirms the two latency figures. The user asked only for their difference.",
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_finalize"],
+                "qualitative": ["no_unnecessary_work", "appropriate_concision"]
+            }
+        },
+        {
+            "id": "review_941_ambiguity_bounded_answer",
+            "kind": "review",
+            "description": "Synthetic negative control: the draft handles an ambiguous trust question with a concise, explicit interpretation.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Does this make it safer?"
+                }
+            ],
+            "draft": "If you mean more factually reliable, grounding can help by connecting claims to sources, but it cannot guarantee those sources or the answer are correct.",
+            "reviewContext": "Synthetic preceding context is about grounding an answer in retrieved sources. Here, safer plausibly means more factually reliable; no safety-critical or personal-risk topic is present.",
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_finalize"],
+                "qualitative": [
+                    "no_unnecessary_work",
+                    "ambiguity_not_overreviewed"
+                ]
+            }
+        },
+        {
+            "id": "review_941_legitimate_uncertainty",
+            "kind": "review",
+            "description": "Synthetic negative control: the answer states what the supplied excerpt cannot establish and no additional research is allowed.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Exactly how would this hypothetical judgment affect the company's product launches next quarter? Use only the supplied excerpt."
+                }
+            ],
+            "draft": "The excerpt gives the judgment amount but not its operational terms, so it does not establish an effect on next-quarter product launches.",
+            "reviewContext": "Synthetic context contains only the judgment amount and explicitly prohibits external research. No source describes operational terms or product launches. The answer identifies that specific evidence gap without guessing.",
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_finalize"],
+                "qualitative": [
+                    "no_unnecessary_work",
+                    "uncertainty_appropriately_bounded"
+                ]
+            }
         }
     ]
 }
