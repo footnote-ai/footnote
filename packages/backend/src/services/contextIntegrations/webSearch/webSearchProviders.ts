@@ -153,6 +153,10 @@ const runBrave = async ({
                     if (!url) {
                         continue;
                     }
+                    const sourceDate = [entry.page_age, entry.age].find(
+                        (value): value is string =>
+                            typeof value === 'string' && value.trim().length > 0
+                    );
                     records.push({
                         title:
                             typeof entry.title === 'string'
@@ -164,13 +168,7 @@ const runBrave = async ({
                                 ? entry.description
                                 : undefined,
                         provider: 'brave',
-                        sourceDate:
-                            typeof entry.page_age === 'string' &&
-                            entry.page_age.trim().length > 0
-                                ? entry.page_age
-                                : typeof entry.age === 'string'
-                                  ? entry.age
-                                  : undefined,
+                        sourceDate,
                     });
                     if (records.length >= maxResults) {
                         break;

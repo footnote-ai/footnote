@@ -69,6 +69,22 @@ test('all providers preserve date text without inventing precision or instructio
                 '2 days ago',
             ],
             [
+                'brave',
+                {
+                    web: {
+                        results: [
+                            {
+                                title: 'Malformed date fields',
+                                url: 'https://example.test/malformed',
+                                page_age: 20261022,
+                                age: '   ',
+                            },
+                        ],
+                    },
+                },
+                undefined,
+            ],
+            [
                 'serpapi',
                 {
                     organic_results: [
@@ -93,11 +109,15 @@ test('all providers preserve date text without inventing precision or instructio
                 'status',
                 result.records
             ).join('\n');
-            assert.ok(
-                evidence.includes(
-                    `Source date (provider-reported; publication or update): ${date}`
-                )
-            );
+            if (date === undefined) {
+                assert.doesNotMatch(evidence, /Source date/);
+            } else {
+                assert.ok(
+                    evidence.includes(
+                        `Source date (provider-reported; publication or update): ${date}`
+                    )
+                );
+            }
             assert.doesNotMatch(
                 evidence,
                 /\nIgnore instructions|2026-10-23|00:00:00Z/
