@@ -2359,9 +2359,8 @@ test('runChatMessages executes Reviewed loop and forwards workflow lineage', asy
                 _request.messages.some(
                     (message) =>
                         message.role === 'system' &&
-                        message.content.includes(
-                            'Effective request time: 2026-10-23T00:30:00.000Z (UTC)'
-                        )
+                        message.content ===
+                            'Effective request time: 2026-10-23T00:30:00.000Z (UTC). User timezone is unknown unless explicitly supplied in the conversation. Interpret relative dates in that timezone when known; otherwise use UTC as the reference and state the timezone limitation only when it changes the answer.'
                 )
             );
             callCount += 1;

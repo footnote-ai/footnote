@@ -22,13 +22,14 @@ verified evidence by themselves.
 
 Provider dates are preserved as text and labeled as provider-reported
 publication or update dates, not event dates. SearXNG supplies `publishedDate`,
-Brave supplies `page_age` (or the relative `age` when absent), and SerpAPI
-supplies `date`. No timezone, midnight timestamp, or event date is inferred.
-Brave explicitly defines its [page date](https://api-dashboard.search.brave.com/api-reference/web/search/get)
-as publication or last modification; [SerpAPI dates](https://serpapi.com/blog/how-to-parse-dates-from-google-search/)
-can also be relative text. Missing dates stay unknown. Dates travel with the
-same user-role evidence through generation, recovery, and reassessment, rather
-than becoming citation authority or a new public contract field.
+Brave supplies `page_age` (publication or last-modified date), falling back to
+its human-readable `age` when `page_age` is missing or blank. SerpAPI supplies
+`date`. Relative values stay relative text; no timezone, midnight timestamp, or
+event date is inferred. [Brave documents the distinction](https://api-dashboard.search.brave.com/api-reference/web/search/post), and [SerpAPI dates](https://serpapi.com/blog/how-to-parse-dates-from-google-search/)
+can also be relative text. Missing or non-string dates stay unknown. Dates
+travel with the same user-role evidence through generation, recovery, and
+reassessment, rather than becoming citation authority or a new public contract
+field.
 
 Text chat supplies a single backend request-time reference to planning,
 generation, and review. The orchestrator captures it at entry; direct service

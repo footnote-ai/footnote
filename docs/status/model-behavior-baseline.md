@@ -158,7 +158,9 @@ did not establish it; the candidate requested missing chronology instead.
 Conversely, the baseline requested retrieval for the genuine conflict while
 the candidate only proposed stating the conflict. That candidate answer would
 be supported but misses useful allowed recovery. Equal decision scores conceal
-this trade-off; the pilot does not establish an overall decision improvement.
+this trade-off. The one-shot pilot does not establish an overall decision
+improvement or show whether more prompt guidance would make recovery more
+reliable.
 
 ### Delivered workflow results
 
@@ -171,13 +173,13 @@ kept its normal 1,024-token output limit; regeneration allowed 600 tokens.
 Baseline/candidate generation and review prompts came from their respective
 versions. Reassessments and transport fallbacks remained active and recorded.
 
-| Case                        | Baseline delivered result                                                         | Candidate delivered result                                                                |
-| --------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Meta supersession           | Wrong older judgment retained after assessment failure                            | Same failure and retained wrong judgment                                                  |
-| Gemini stale rollout        | One search; regenerated supported availability, then reassessment failed          | No search; replaced unsupported status with a specific unresolved-availability limitation |
-| Historical question         | Correct answer; no search                                                         | Correct answer; no search                                                                 |
-| Sufficient current evidence | Correct answer; no search                                                         | Correct answer; no search                                                                 |
-| Undated newest release      | One search, but recovery generation failed and unsupported initial draft survived | No search; removed invented date/newest claim and stated the missing chronology           |
+| Case                        | Baseline delivered result                                                         | Candidate delivered result                                                              |
+| --------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Meta supersession           | Wrong older judgment retained after assessment failure                            | Same failure and retained wrong judgment                                                |
+| Gemini stale rollout        | One search; regenerated supported availability, then reassessment failed          | No recovery search; replaced unsupported status with a specific availability limitation |
+| Historical question         | Correct answer; no search                                                         | Correct answer; no search                                                               |
+| Sufficient current evidence | Correct answer; no search                                                         | Correct answer; no search                                                               |
+| Undated newest release      | One search, but recovery generation failed and unsupported initial draft survived | No search; removed invented date/newest claim and stated the missing chronology         |
 
 Manual source comparison found supported, temporally bounded delivered text in
 3/5 baseline and 4/5 candidate runs. The undated case demonstrates a narrower,
@@ -185,6 +187,12 @@ better-supported delivered answer, not successful identification of the newest
 release. The candidate did not resolve the missing current facts in either
 recovery case. Neither variant repaired the Meta answer. These observations
 are not a reliability estimate or a claim of end-to-end incident resolution.
+
+The candidate's qualified answers show that it can avoid repeating unsupported
+status claims, but the two missing-fact workflow cases ended without useful
+retrieval. The direct assessment comparison also missed search on the unordered
+conflict. Those are model decision differences in synthetic cases; the pilot
+does not show that another prompt rule would fix them.
 
 Workflow median durations were 6.959 s baseline and 12.817 s candidate. Baseline
 used 14 transports, 23,312 input and 11,228 completion tokens ($0.00558868);
@@ -220,23 +228,29 @@ is retained in ignored `response-comparison/.local/temporal/usage-ledger.jsonl`.
 The executing maintainer owns raw-capture cleanup after scoring/review under
 the [evaluation retention policy](web-search-evidence-quality.md).
 
-Deterministic checks establish propagation and authority boundaries, not model
-compliance. The pilot supports preserving the missing temporal inputs and
-more explicit guidance, but **does not justify closing #942**: useful search
-recovery still varies, output-limit failures preserve wrong drafts, and the
-original incident inputs and full public chat flow remain unverified. A future
-approved run should repeat fixed cases through normal planning/generation with
-complete attempt accounting before making a stronger claim.
+Deterministic checks establish clock and metadata propagation, not model
+compliance. The pilot does not support a general behavioral improvement: direct
+Assess scores tied with different misses, and the workflow's one additional
+supported answer was a narrower limitation rather than resolution of current
+facts. Candidate workflow calls used more tokens and took longer. Assessment
+choice differences remain a prompt/model hypothesis; output-limit failures,
+failed recovery stages and preserved drafts are workflow/runtime limits. Keep
+#942 open until broader behavioral criteria are demonstrated.
 
-Local validation used the focused web-search, review-composition, corpus and
-review-loop/recovery tests, plus clock-plumbing and invocation-validation tests;
-prompt/backend builds and `pnpm review --changed-only` also ran. Broader
-service/orchestrator test attempts were interrupted after unrelated failures
-and stalled progress. The incomplete-usage assertion (`records.length` 0 vs 1)
-also failed when replayed with the original baseline chat-service source and
-the same credential-disabled environment. This isolates that service-source
-comparison, not a certification of the entire baseline suite. The full suite
-and integrated browser flow were not verified.
+Focused validation on the current correction passed 37/37 orchestrator tests,
+41/41 recovery tests, 12/12 web-search executor tests, and the request-clock and
+search-failure caveat service tests. `pnpm lint` and `pnpm review --changed-only`
+also passed. The canonical `pnpm build` completed, including backend, web app,
+and wiki builds.
+
+The full `chatService.test.ts` file timed out at its publication-persistence
+gate; the same timeout reproduced with the exact `origin/main` service source
+and test file. That gate test passes by itself and with the first five file
+tests. The separate invalid-review-output test expects two runtime calls but
+observes three; the same assertion failure reproduced on `origin/main`. This
+test-suite state is unrelated to #942's date plumbing, but the full service file
+remains incomplete. The full repository test suite and integrated browser flow
+remain unverified.
 
 ## Check Classes
 

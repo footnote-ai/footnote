@@ -53,6 +53,22 @@ test('all providers preserve date text without inventing precision or instructio
                 '2026-10-22T08:00:00',
             ],
             [
+                'brave',
+                {
+                    web: {
+                        results: [
+                            {
+                                title: 'Relative date',
+                                url: 'https://example.test/relative',
+                                page_age: '',
+                                age: '2 days ago',
+                            },
+                        ],
+                    },
+                },
+                '2 days ago',
+            ],
+            [
                 'serpapi',
                 {
                     organic_results: [

@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { buildRequestTimePrompt } from '../../src/services/prompts/conversationPromptLayers.js';
 import type {
     GenerationRequest,
     GenerationResult,
@@ -313,9 +314,13 @@ const runRecovery = async (input: {
     planContinuationAddsRetrieval?: boolean;
     maxIterations?: number;
     generationStartedAtMs?: number;
+    requestTimePrompt?: string;
 }) => {
     const requestMessages = [
         { role: 'user' as const, content: input.fixture.userRequest },
+        ...(input.requestTimePrompt === undefined
+            ? []
+            : [{ role: 'system' as const, content: input.requestTimePrompt }]),
     ];
     const initialQuery = input.initialQuery ?? input.fixture.initialQuery;
     const contextStepRequests = [
@@ -1037,6 +1042,9 @@ test('uses the slowest observed assessment to estimate recovery reassessment', a
 
 test('Balanced allowances admit plan, initial retrieval, recovery, and reassessment', async () => {
     const requests: GenerationRequest[] = [];
+    const requestTimePrompt = buildRequestTimePrompt(
+        Date.parse('2026-10-23T00:30:00.000Z')
+    );
     const { result, executedQueries, plannerCallCount } = await runRecovery({
         fixture: fixtures.staleInitialResults,
         maxSearchRecoveryCycles: 1,
@@ -1049,6 +1057,7 @@ test('Balanced allowances admit plan, initial retrieval, recovery, and reassessm
         planning: true,
         executionLimits: executionLimits(),
         requests,
+        requestTimePrompt,
     });
 
     assert.equal(result.outcome, 'generated');
@@ -1062,6 +1071,15 @@ test('Balanced allowances admit plan, initial retrieval, recovery, and reassessm
     ]);
     assert.equal(plannerCallCount, 1);
     assert.equal(requests.length, 4);
+    assert.ok(
+        requests.every((request) =>
+            request.messages.some(
+                (message) =>
+                    message.role === 'system' &&
+                    message.content === requestTimePrompt
+            )
+        )
+    );
 });
 
 test('stale initial results are retained and a fresh query runs as the only follow-up retrieval', async () => {

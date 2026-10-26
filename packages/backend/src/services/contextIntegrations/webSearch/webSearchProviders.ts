@@ -165,7 +165,8 @@ const runBrave = async ({
                                 : undefined,
                         provider: 'brave',
                         sourceDate:
-                            typeof entry.page_age === 'string'
+                            typeof entry.page_age === 'string' &&
+                            entry.page_age.trim().length > 0
                                 ? entry.page_age
                                 : typeof entry.age === 'string'
                                   ? entry.age
