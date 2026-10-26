@@ -1,7 +1,8 @@
 # Model Behavior Baseline
 
-Status: the corpus has fifteen cases: seven initial planner/generation/review
-cases and eight synthetic Assess-coverage cases for #941. Integrity tests
+Status: the corpus has twenty-six cases: seven initial planner/generation/review
+cases, eight synthetic Assess-coverage cases for #941, and eleven temporal
+relevance cases for #942. Integrity tests
 validate case structure and labels; they do not execute a model. A one-off
 Assess-decision comparison has now run through the existing generation
 runtime; a general runner remains deferred until it can exercise the normal
@@ -95,6 +96,147 @@ increase omission detection. Token and latency figures are descriptive only:
 one call per case and variant on one model is not enough to attribute output
 variation to the prompt or establish a general effect. Delivered-answer
 quality and factual support remain unmeasured.
+
+## Temporal relevance investigation and pilot (#942)
+
+The implementation baseline was `6c8032713ecfc19e0c3d7155ac84a2868164c0fb`,
+which includes #920/#926 evidence guidance and #941/#953 coverage guidance.
+Inspection confirmed that conversation creation timestamps remained in the
+context envelope rather than model messages; there was no shared effective
+request clock. Web-search adapters also discarded provider date fields.
+Generation and Assess mentioned dates generally but did not distinguish event,
+announcement, planned release, and confirmed availability. Assess already had
+bounded search recovery and adequate-evidence finalization; neither needed a
+new service, compulsory model call, or changed decision contract.
+
+Text chat now shares one backend clock reference across planning, generation,
+recovery and assessment. An explicit conversational timezone can determine the
+local date; missing timezone metadata remains unknown, with UTC as the stated
+reference. Provider date text survives as publication/update metadata in
+user-role evidence, without date parsing, inferred precision, or citation
+contract changes. The shared generation and existing assessment prompts now
+cover temporal distinctions, supersession and historical controls.
+
+The original October 22 Meta/Gemini requests, drafts, retrieval payloads and
+traces were not available in the issues or checkout. Every added case is
+synthetic, not an incident reproduction. Ten cases were frozen before prompt
+changes. Independent review found that one expected `search` label was wrong:
+an explicitly later correction already resolved the older status. Its inputs
+were retained and its oracle changed to `revise` before scoring. An eleventh
+case separately supplies genuinely unordered, contradictory same-day reports.
+It was evaluated in both variants without changing the candidate prompt.
+
+### Paired assessment results
+
+The October 25, 2026 pilot used the existing `GenerationRuntime`, assessment
+composer, review schema and parser. Baseline and candidate used OpenRouter
+`deepseek/deepseek-v4-flash-0731`, pinned to `wafer/fast`, with provider fallback
+disabled, low reasoning/verbosity, and a 1,024-token output limit. The observed
+model/provider were the same for scored calls. Source context and drafts were
+identical in each pair; the candidate changed only temporal guidance in this
+direct assessment comparison. This does not test backend clock injection or
+provider date mapping, which have separate deterministic tests.
+
+| Measure                                             |    Baseline |   Candidate |
+| --------------------------------------------------- | ----------: | ----------: |
+| Expected decisions matched                          |       10/11 |       10/11 |
+| Searches requested                                  |           2 |           2 |
+| Unnecessary work on three finalize controls         |           0 |           0 |
+| False stale warnings on historical/current controls |           0 |           0 |
+| Transport attempts, including retries               |          14 |          12 |
+| Prompt tokens                                       |      11,584 |      10,819 |
+| Completion tokens, including reasoning              |      10,548 |       8,005 |
+| Median logical assessment duration                  |     3.676 s |     3.312 s |
+| Provider-reported cost                              | $0.00392044 | $0.00323226 |
+
+Both corrected the timezone boundary, newer Meta judgment, publication/event
+confusion and unconfirmed scheduled release, and accepted historical,
+sufficient-current and honestly undated answers. Both used the explicit later
+postponement correction without searching. The baseline's undated-release
+revision incorrectly proposed attributing a "newest" claim to an excerpt that
+did not establish it; the candidate requested missing chronology instead.
+Conversely, the baseline requested retrieval for the genuine conflict while
+the candidate only proposed stating the conflict. That candidate answer would
+be supported but misses useful allowed recovery. Equal decision scores conceal
+this trade-off; the pilot does not establish an overall decision improvement.
+
+### Delivered workflow results
+
+Five paired runs exercised the real reviewed workflow after injecting the same
+fixed initial draft, using synthetic evidence and a synthetic retrieval
+executor. Planning and initial live generation were not exercised. Both used
+the same bounds: seven steps, one tool call, two review cycles, three
+deliberation calls, 20,000 tokens, 90 seconds and one recovery cycle. Assessment
+kept its normal 1,024-token output limit; regeneration allowed 600 tokens.
+Baseline/candidate generation and review prompts came from their respective
+versions. Reassessments and transport fallbacks remained active and recorded.
+
+| Case                        | Baseline delivered result                                                         | Candidate delivered result                                                                |
+| --------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Meta supersession           | Wrong older judgment retained after assessment failure                            | Same failure and retained wrong judgment                                                  |
+| Gemini stale rollout        | One search; regenerated supported availability, then reassessment failed          | No search; replaced unsupported status with a specific unresolved-availability limitation |
+| Historical question         | Correct answer; no search                                                         | Correct answer; no search                                                                 |
+| Sufficient current evidence | Correct answer; no search                                                         | Correct answer; no search                                                                 |
+| Undated newest release      | One search, but recovery generation failed and unsupported initial draft survived | No search; removed invented date/newest claim and stated the missing chronology           |
+
+Manual source comparison found supported, temporally bounded delivered text in
+3/5 baseline and 4/5 candidate runs. The undated case demonstrates a narrower,
+better-supported delivered answer, not successful identification of the newest
+release. The candidate did not resolve the missing current facts in either
+recovery case. Neither variant repaired the Meta answer. These observations
+are not a reliability estimate or a claim of end-to-end incident resolution.
+
+Workflow median durations were 6.959 s baseline and 12.817 s candidate. Baseline
+used 14 transports, 23,312 input and 11,228 completion tokens ($0.00558868);
+candidate used 16 transports, 30,291 input and 12,609 completion tokens
+($0.00678286). Eight transports in each variant reached the output limit,
+often spending the allowance on reasoning without usable visible text. This
+left three baseline workflows and one candidate workflow with
+`executor_error_fail_open`. Fail-open preservation is truthful but can retain
+an incorrect draft. No runtime budget or model-routing changes were made to
+mask these failures.
+
+### Attempts, cost and limits
+
+All attempts, including setup failures, exploratory routes, retries and failed
+workflow stages, were logged before scoring. The campaign had explicit approval
+for $0.50. Each outbound transport reserved a conservative input-byte/output
+ceiling at catalog rates before dispatch; retries were separately admitted and
+failed calls received no reservation refund. Total reserved ceiling was
+$0.36106048; provider-reported total was **$0.021428486**, not the reservation.
+
+| Attempt group                                                                 | Transports | Input tokens | Completion tokens | Reported cost |
+| ----------------------------------------------------------------------------- | ---------: | -----------: | ----------------: | ------------: |
+| Local logger-stub failures (20 assessments, 8 workflow attempts)              |          0 |            0 |                 0 |            $0 |
+| Exploratory unpinned-provider run, interrupted after repeated empty responses |         11 |        9,529 |             4,160 |  $0.001904246 |
+| Scored direct assessments                                                     |         26 |       22,403 |            18,553 |  $0.007152700 |
+| Scored workflows, including unsuccessful stages                               |         30 |       53,603 |            23,837 |  $0.012371540 |
+| Total                                                                         |         67 |       85,535 |            46,550 |  $0.021428486 |
+
+Every dispatched transport has a recorded response and usage; no interrupted
+transport has unknown billing. The exploratory results are excluded from the
+paired comparison but included in total spend. A sanitized per-attempt ledger
+is retained in ignored `response-comparison/.local/temporal/usage-ledger.jsonl`.
+The executing maintainer owns raw-capture cleanup after scoring/review under
+the [evaluation retention policy](web-search-evidence-quality.md).
+
+Deterministic checks establish propagation and authority boundaries, not model
+compliance. The pilot supports preserving the missing temporal inputs and
+more explicit guidance, but **does not justify closing #942**: useful search
+recovery still varies, output-limit failures preserve wrong drafts, and the
+original incident inputs and full public chat flow remain unverified. A future
+approved run should repeat fixed cases through normal planning/generation with
+complete attempt accounting before making a stronger claim.
+
+Local validation used the focused web-search, review-composition, corpus and
+review-loop/recovery tests, plus clock-plumbing and invocation-validation tests;
+prompt/backend builds and `pnpm review --changed-only` also ran. Broader
+service/orchestrator test attempts were interrupted after unrelated failures
+and stalled progress. The incomplete-usage assertion (`records.length` 0 vs 1)
+also failed when replayed with the original baseline chat-service source and
+the same credential-disabled environment. This isolates that service-source
+comparison, not a certification of the entire baseline suite. The full suite
+and integrated browser flow were not verified.
 
 ## Check Classes
 

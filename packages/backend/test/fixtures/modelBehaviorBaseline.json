@@ -679,7 +679,7 @@
         {
             "id": "review_942_conflicting_current",
             "kind": "review",
-            "description": "Synthetic temporal case: Resolve the decisive availability conflict using bounded targeted recovery.",
+            "description": "Synthetic temporal negative control: use the explicitly later correction to supersede older availability without unnecessary retrieval.",
             "messages": [
                 {
                     "role": "user",
@@ -688,6 +688,36 @@
             ],
             "draft": "Yes, Widget is available to everyone.",
             "reviewContext": "Synthetic sources of equal authority: October 21 status says generally available; October 22 correction says the release was postponed but gives no new date. Effective request time is October 23, 2026. Targeted retrieval is allowed.",
+            "request": {
+                "maxOutputTokens": 1024,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_revise"],
+                "qualitative": [
+                    "temporal_correctness",
+                    "factual_support",
+                    "no_unnecessary_work"
+                ]
+            }
+        },
+        {
+            "id": "review_942_unresolved_conflict",
+            "kind": "review",
+            "description": "Synthetic temporal case: equally authoritative, unordered same-day status reports leave current availability unresolved.",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Is Widget generally available now?"
+                }
+            ],
+            "draft": "Yes, Widget is available to everyone.",
+            "reviewContext": "Synthetic sources of equal authority: two October 22, 2026 status excerpts disagree, one saying generally available and one saying postponed. Neither has a time, correction notice, or indication of which is later. Effective request time is October 23, 2026. Targeted retrieval is allowed.",
             "request": {
                 "maxOutputTokens": 1024,
                 "reasoningEffort": "low",

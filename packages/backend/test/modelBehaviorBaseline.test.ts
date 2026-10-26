@@ -221,8 +221,8 @@ const readCorpus = (value: unknown): BaselineCase[] => {
 
 const corpus = readCorpus(rawCorpus);
 
-test('model behavior baseline contains twenty-five isolated workload cases', () => {
-    assert.equal(corpus.length, 25);
+test('model behavior baseline contains twenty-six isolated workload cases', () => {
+    assert.equal(corpus.length, 26);
     assert.deepEqual(
         corpus.map((evaluationCase) => evaluationCase.id),
         [
@@ -251,6 +251,7 @@ test('model behavior baseline contains twenty-five isolated workload cases', () 
             'review_942_current_sufficient',
             'review_942_undated_bounded',
             'review_942_conflicting_current',
+            'review_942_unresolved_conflict',
         ]
     );
     assert.equal(

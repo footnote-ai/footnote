@@ -29,6 +29,41 @@ import { renderConversationPromptLayers } from '../src/services/prompts/conversa
 import { buildPersonaExpressionGuidance } from '../src/services/prompts/personaExpression.js';
 import type { WeatherForecastTool } from '../src/services/contextIntegrations/weather/index.js';
 import { logger } from '../src/utils/logger.js';
+import { isWorkflowOwnedPlannerInvocation } from '../src/services/chatPlannerInvocation.js';
+
+test('planner request clock accepts valid instants and rejects invalid date metadata', () => {
+    const invocation = {
+        owner: 'workflow',
+        workflowName: 'chat',
+        stepKind: 'plan',
+        purpose: 'chat_orchestrator_action_selection',
+    };
+    assert.equal(isWorkflowOwnedPlannerInvocation(invocation), true);
+    for (const requestStartedAtMs of [0, Date.parse('2026-10-23T00:30:00Z')]) {
+        assert.equal(
+            isWorkflowOwnedPlannerInvocation({
+                ...invocation,
+                requestStartedAtMs,
+            }),
+            true
+        );
+    }
+    for (const requestStartedAtMs of [
+        NaN,
+        Infinity,
+        9e15,
+        '2026-10-23',
+        null,
+    ]) {
+        assert.equal(
+            isWorkflowOwnedPlannerInvocation({
+                ...invocation,
+                requestStartedAtMs,
+            }),
+            false
+        );
+    }
+});
 
 const PLANNER_TOKEN_SENTINEL = DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS;
 const originalLoggerInfo = logger.info;
