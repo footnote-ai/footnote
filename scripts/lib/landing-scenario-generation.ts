@@ -7,6 +7,7 @@
  */
 
 import crypto from 'node:crypto';
+import { rename, rm, writeFile } from 'node:fs/promises';
 
 import type {
     ChatMessageActionResponse,
@@ -340,3 +341,20 @@ export const buildLandingScenarioFixture = (
  */
 export const formatJson = (value: unknown): string =>
     `${JSON.stringify(value, null, 4)}\n`;
+
+/**
+ * Replaces a generated fixture only after its complete JSON has been written.
+ */
+export const writeJsonFileAtomically = async (
+    filePath: string,
+    value: unknown
+): Promise<void> => {
+    const tempPath = `${filePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+    try {
+        await writeFile(tempPath, formatJson(value), 'utf8');
+        await rename(tempPath, filePath);
+    } catch (error) {
+        await rm(tempPath, { force: true }).catch(() => undefined);
+        throw error;
+    }
+};

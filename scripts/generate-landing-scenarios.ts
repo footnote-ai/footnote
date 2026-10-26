@@ -22,6 +22,7 @@ import {
     mergeLandingScenarioFixtures,
     selectLandingScenarioPrompts,
     type LandingScenarioFixture,
+    writeJsonFileAtomically,
 } from './lib/landing-scenario-generation.js';
 
 type CaptureResult = {
@@ -229,7 +230,7 @@ const main = async (): Promise<void> => {
             payload: fixture,
         }))
     );
-    await fs.writeFile(fixturesJsonPath, formatJson(fixtures), 'utf8');
+    await writeJsonFileAtomically(fixturesJsonPath, fixtures);
 
     logger.info(
         `Generated ${captures.length} landing scenarios into ${path.relative(rootDir, scenarioDir)} and ${path.relative(rootDir, fixturesJsonPath)}.`,

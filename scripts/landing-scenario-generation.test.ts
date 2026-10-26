@@ -8,6 +8,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { ChatMessageActionResponse } from '@footnote/contracts/web';
 import { PostChatRequestSchema } from '@footnote/contracts/web/schemas';
 import type {
@@ -27,6 +30,7 @@ import {
     mergeLandingScenarioFixtures,
     selectLandingScenarioPrompts,
     sanitizeLandingScenarioResponse,
+    writeJsonFileAtomically,
 } from './lib/landing-scenario-generation.js';
 import { landingScenarios } from '../packages/web/src/data/landingScenarios.js';
 
@@ -429,4 +433,23 @@ test('formatJson emits stable pretty JSON arrays with a trailing newline', () =>
     assert.equal(formatted.endsWith('\n'), true);
     assert.equal(formatted.startsWith('[\n'), true);
     assert.deepEqual(JSON.parse(formatted), input);
+});
+
+test('writeJsonFileAtomically replaces the aggregate with complete JSON', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'landing-scenarios-'));
+    const filePath = path.join(directory, 'fixtures.json');
+    const fixtures = [{ id: 'inspect-an-answer' }, { id: 'run-locally' }];
+
+    try {
+        await writeFile(filePath, '{"previous":"capture"}\n', 'utf8');
+        await writeJsonFileAtomically(filePath, fixtures);
+
+        assert.deepEqual(
+            JSON.parse(await readFile(filePath, 'utf8')),
+            fixtures
+        );
+        assert.deepEqual(await readdir(directory), ['fixtures.json']);
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
 });
