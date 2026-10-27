@@ -1393,11 +1393,67 @@ test('uses JSON mode after an explicit native schema transport rejection', async
         attempts.map((attempt) => attempt.status),
         ['failed_transport_fallback', 'executed']
     );
+    assert.deepEqual(
+        attempts.map((attempt) => attempt.providerCallStatus),
+        ['failed', 'succeeded']
+    );
     assert.equal(attempts[0]?.finishReason, 'structured_output_unavailable');
     assert.equal(attempts[0]?.completion?.status, 'failed');
     assert.equal(attempts[0]?.promptCache?.surface, 'web');
     assert.equal(attempts[0]?.promptCache?.purpose, 'assessment');
     assert.equal(attempts[0]?.promptCache?.appliedTtlSeconds, 43200);
+});
+
+test('marks pre-provider assessment transport failures as not called', async () => {
+    const profile = {
+        ...makeProfile('native-review-profile'),
+        capabilities: {
+            canUseSearch: false,
+            toolCapabilities: {
+                'generation.structured_output': true,
+                'generation.json_mode': true,
+            },
+        },
+    };
+    let calls = 0;
+    const result = await runGeneration({
+        runtime: {
+            kind: 'test-runtime',
+            async generate() {
+                calls += 1;
+                if (calls === 1) return { text: 'A complete draft.' };
+                if (calls === 2) {
+                    throw Object.assign(
+                        new GenerationRuntimeError(
+                            'native schema unavailable',
+                            { classification: 'structured_output_unavailable' }
+                        ),
+                        { preProviderCallFailure: true }
+                    );
+                }
+                return {
+                    text: JSON.stringify({
+                        reviewDecision: 'finalize',
+                        reviewReason: 'The answer is ready.',
+                    }),
+                };
+            },
+        },
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [profile],
+        assessCandidates: [profile],
+    });
+
+    const assessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.ok(assessStep);
+    assert.deepEqual(
+        assessStep.attempts?.[0]?.routingAttempts?.map(
+            (attempt) => attempt.providerCallStatus
+        ),
+        ['not_called', 'succeeded']
+    );
 });
 
 test('falls from JSON compatibility to parser compatibility with usage evidence', async () => {

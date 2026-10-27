@@ -41,6 +41,10 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // shortcut: standard system Git installs only; add a fixed protected path if another layout is supported.
+const safeGitExecutable =
+    process.platform === 'win32'
+        ? String.raw`C:\Program Files\Git\cmd\git.exe`
+        : '/usr/bin/git';
 const safeGitPath =
     process.platform === 'win32'
         ? String.raw`C:\Windows\System32;C:\Program Files\Git\cmd;C:\Program Files\Git\mingw64\bin;C:\Program Files\Git\usr\bin`
@@ -287,7 +291,7 @@ const run = async (): Promise<void> => {
             )
             .digest('hex'),
         capturedAt: new Date().toISOString(),
-        commit: execFileSync('git', ['rev-parse', 'HEAD'], {
+        commit: execFileSync(safeGitExecutable, ['rev-parse', 'HEAD'], {
             cwd: root,
             encoding: 'utf8',
             env: {

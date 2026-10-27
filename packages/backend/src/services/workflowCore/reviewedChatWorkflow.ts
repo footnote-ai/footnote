@@ -98,6 +98,7 @@ import {
     type RoutingChainAttemptLog,
     type RoutingChainInternalAttempt,
 } from '../stepRoutingExecutor.js';
+import { isPreProviderCallFailure } from '../preProviderCallFailure.js';
 import type { ResolvedStepRoutingCandidate } from '../stepRoutingChains.js';
 import type { ProviderAvailabilityStore } from '../providerAvailability.js';
 import { toRoutingChainResult } from '../routingChainResult.js';
@@ -2791,6 +2792,7 @@ export const runBoundedReviewWorkflow = async (
         const recordStructuredOutputTransportFailure = (
             attempt: {
                 providerModel: string;
+                providerCallStatus: 'failed' | 'not_called';
                 provider?: string;
                 model?: string;
                 usage?: GenerationUsage;
@@ -2818,6 +2820,7 @@ export const runBoundedReviewWorkflow = async (
             reviewAttempts.push(failureResult);
             recordAttempt?.({
                 promptCache: attempt.promptCache,
+                providerCallStatus: attempt.providerCallStatus,
                 status: 'failed_transport_fallback',
                 finishReason: failureResult.finishReason,
                 completion: failureResult.completion,
@@ -2907,6 +2910,9 @@ export const runBoundedReviewWorkflow = async (
                     recordStructuredOutputTransportFailure(
                         {
                             providerModel: generationInput.providerModel,
+                            providerCallStatus: isPreProviderCallFailure(error)
+                                ? 'not_called'
+                                : 'failed',
                             provider:
                                 generationInput.request.provider ??
                                 generationInput.profile?.provider,
