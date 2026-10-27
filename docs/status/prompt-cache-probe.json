@@ -1,0 +1,840 @@
+{
+    "experimentId": "44cf86b6-2860-4a66-8a63-44c26173d6e5",
+    "reportSourceDigest": "10163615593c9f780390b04a368cef1d078459427be17fe713b2a650dc80a42a",
+    "capturedAt": "2026-10-27T14:04:24.159Z",
+    "commit": "7ea77138efa2f3568c7012399fc0229f158f34e7",
+    "fixtureVersion": 1,
+    "synthetic": true,
+    "limits": {
+        "maxCalls": 60,
+        "maxEstimatedUsd": 2
+    },
+    "budget": {
+        "calls": 51,
+        "reservedUsd": 0.14936481350000003
+    },
+    "preflight": [
+        {
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "credentialsAvailable": false,
+            "pricingAvailable": true
+        },
+        {
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "credentialsAvailable": true,
+            "pricingAvailable": true
+        }
+    ],
+    "pricingSources": [
+        "checked-in OpenAI pricing table",
+        "https://openrouter.ai/api/v1/models"
+    ],
+    "pricing": {
+        "gpt-5.6-luna": {
+            "inputPerToken": 1.0000000000000001e-7,
+            "outputPerToken": 6e-7
+        },
+        "deepseek/deepseek-v4-flash-0731": {
+            "inputPerToken": 1.19e-7,
+            "outputPerToken": 2.38e-7
+        }
+    },
+    "samples": [
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "planner",
+            "variant": "baseline",
+            "repeat": 0,
+            "durationMs": 3237,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 945,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 91,
+                "reasoningTokens": 0,
+                "totalTokens": 1036
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000547757
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "planner",
+            "variant": "baseline",
+            "repeat": 1,
+            "durationMs": 1748,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 945,
+                "cachedInputTokens": 768,
+                "cacheWriteTokens": 0,
+                "completionTokens": 88,
+                "reasoningTokens": 0,
+                "totalTokens": 1033
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.000043379
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "planner",
+            "variant": "candidate",
+            "repeat": 0,
+            "durationMs": 7828,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 945,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 64,
+                "reasoningTokens": 0,
+                "totalTokens": 1009
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "planner",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 1012,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000503558
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "planner",
+            "variant": "candidate",
+            "repeat": 1,
+            "durationMs": 1374,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 945,
+                "cachedInputTokens": 768,
+                "cacheWriteTokens": 0,
+                "completionTokens": 86,
+                "reasoningTokens": 0,
+                "totalTokens": 1031
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "planner",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 1012,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000430516
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "generation",
+            "variant": "baseline",
+            "repeat": 0,
+            "durationMs": 4911,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 1051,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 4,
+                "reasoningTokens": 0,
+                "totalTokens": 1055
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.000045007
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "generation",
+            "variant": "baseline",
+            "repeat": 1,
+            "durationMs": 917,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 1051,
+                "cachedInputTokens": 1024,
+                "cacheWriteTokens": 0,
+                "completionTokens": 7,
+                "reasoningTokens": 0,
+                "totalTokens": 1058
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000309573
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "generation",
+            "variant": "candidate",
+            "repeat": 0,
+            "durationMs": 10697,
+            "status": "failed",
+            "failure": "transient"
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "generation",
+            "variant": "candidate",
+            "repeat": 1,
+            "durationMs": 9404,
+            "status": "failed",
+            "failure": "transient"
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "assessment",
+            "variant": "baseline",
+            "repeat": 0,
+            "durationMs": 11268,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 684,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 117,
+                "reasoningTokens": 0,
+                "totalTokens": 801
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000480177
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "assessment",
+            "variant": "baseline",
+            "repeat": 1,
+            "durationMs": 378,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 684,
+                "cachedInputTokens": 512,
+                "cacheWriteTokens": 0,
+                "completionTokens": 7,
+                "reasoningTokens": 0,
+                "totalTokens": 691
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000227403
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "assessment",
+            "variant": "candidate",
+            "repeat": 0,
+            "durationMs": 10223,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 684,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 92,
+                "reasoningTokens": 0,
+                "totalTokens": 776
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "assessment",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 682,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000439252
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "assessment",
+            "variant": "candidate",
+            "repeat": 1,
+            "durationMs": 1687,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 684,
+                "cachedInputTokens": 512,
+                "cacheWriteTokens": 0,
+                "completionTokens": 88,
+                "reasoningTokens": 0,
+                "totalTokens": 772
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "assessment",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 682,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.000036
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "revision",
+            "variant": "baseline",
+            "repeat": 0,
+            "durationMs": 4407,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 156,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 10,
+                "reasoningTokens": 0,
+                "totalTokens": 166
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000082202
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "revision",
+            "variant": "baseline",
+            "repeat": 1,
+            "durationMs": 758,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 156,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 11,
+                "reasoningTokens": 0,
+                "totalTokens": 167
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000083839
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "revision",
+            "variant": "candidate",
+            "repeat": 0,
+            "durationMs": 23457,
+            "status": "failed",
+            "failure": "transient"
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "revision",
+            "variant": "candidate",
+            "repeat": 1,
+            "durationMs": 16020,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 156,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 9,
+                "reasoningTokens": 0,
+                "totalTokens": 165
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "revision",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 132,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000080565
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "presentation",
+            "variant": "baseline",
+            "repeat": 0,
+            "durationMs": 1040,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 93,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 8,
+                "reasoningTokens": 0,
+                "totalTokens": 101
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000052342
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "presentation",
+            "variant": "baseline",
+            "repeat": 1,
+            "durationMs": 938,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 93,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 8,
+                "reasoningTokens": 0,
+                "totalTokens": 101
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000052342
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "presentation",
+            "variant": "candidate",
+            "repeat": 0,
+            "durationMs": 6215,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 93,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 8,
+                "reasoningTokens": 0,
+                "totalTokens": 101
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "presentation",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 45,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000052342
+        },
+        {
+            "fixtureId": "v1:ordinary",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "presentation",
+            "variant": "candidate",
+            "repeat": 1,
+            "durationMs": 885,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 93,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 6,
+                "reasoningTokens": 0,
+                "totalTokens": 99
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "presentation",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 45,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0000049068
+        },
+        {
+            "fixtureId": "v1:long_positive_control",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "generation",
+            "variant": "baseline",
+            "repeat": 0,
+            "durationMs": 1209,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 10781,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 7,
+                "reasoningTokens": 0,
+                "totalTokens": 10788
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0004561041
+        },
+        {
+            "fixtureId": "v1:long_positive_control",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "generation",
+            "variant": "baseline",
+            "repeat": 1,
+            "durationMs": 593,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 10781,
+                "cachedInputTokens": 10752,
+                "cacheWriteTokens": 0,
+                "completionTokens": 5,
+                "reasoningTokens": 0,
+                "totalTokens": 10786
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0003030983
+        },
+        {
+            "fixtureId": "v1:long_positive_control",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "generation",
+            "variant": "candidate",
+            "repeat": 0,
+            "durationMs": 1843,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 10781,
+                "cachedInputTokens": 0,
+                "cacheWriteTokens": 0,
+                "completionTokens": 5,
+                "reasoningTokens": 0,
+                "totalTokens": 10786
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "generation",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 14197,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0004557767
+        },
+        {
+            "fixtureId": "v1:long_positive_control",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "generation",
+            "variant": "candidate",
+            "repeat": 1,
+            "durationMs": 764,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 10781,
+                "cachedInputTokens": 10752,
+                "cacheWriteTokens": 0,
+                "completionTokens": 8,
+                "reasoningTokens": 0,
+                "totalTokens": 10789
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "generation",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 14197,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0003035894
+        },
+        {
+            "fixtureId": "v1:changed_suffix",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "generation",
+            "variant": "candidate",
+            "repeat": 2,
+            "durationMs": 560,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 10781,
+                "cachedInputTokens": 10752,
+                "cacheWriteTokens": 0,
+                "completionTokens": 10,
+                "reasoningTokens": 0,
+                "totalTokens": 10791
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "generation",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 14197,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.0003039168
+        },
+        {
+            "fixtureId": "v1:invalidated",
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4-flash-0731",
+            "purpose": "generation",
+            "variant": "candidate",
+            "repeat": 2,
+            "durationMs": 773,
+            "status": "measured",
+            "observedProvider": "Relace",
+            "observedModel": "deepseek/deepseek-v4-flash-20260731",
+            "usage": {
+                "promptTokens": 10786,
+                "cachedInputTokens": 8192,
+                "cacheWriteTokens": 0,
+                "completionTokens": 16,
+                "reasoningTokens": 0,
+                "totalTokens": 10802
+            },
+            "cache": {
+                "mode": "automatic",
+                "purpose": "generation",
+                "surface": "web",
+                "requestedTtlSeconds": 1800,
+                "stablePrefixTokensEstimate": 14205,
+                "omissionReason": "unsupported_retention"
+            },
+            "estimate": {
+                "inputCostUsd": 0,
+                "outputCostUsd": 0,
+                "totalCostUsd": 0,
+                "costCompleteness": "unknown",
+                "costAppliedRules": [],
+                "costIncompleteReasons": ["unpriced_model"]
+            },
+            "upstreamReportedCostUsd": 0.000341462
+        }
+    ],
+    "limitations": [
+        "Synthetic fixtures are not production hit-rate evidence.",
+        "OpenRouter upstream charges remain separate from backend estimates.",
+        "Missing credentials, rates, or measurements leave provider verification pending."
+    ],
+    "deliberateCachingEnabledByDefault": false
+}

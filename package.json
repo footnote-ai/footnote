@@ -40,6 +40,7 @@
         "agent:chat": "pnpm exec tsx scripts/agent-chat.ts",
         "context:repo:list": "pnpm --filter @footnote/repository-context build && pnpm exec tsx scripts/list-repository-context.ts",
         "context:repo:load": "pnpm --filter @footnote/repository-context build && pnpm exec tsx scripts/load-repository-context.ts",
+        "cache:probe": "pnpm exec tsx scripts/cache-probe.mts",
         "responses:compare": "pnpm exec tsx scripts/responses-compare.ts",
         "eval:planner": "pnpm exec tsx scripts/planner-comparison.mts",
         "check-annotation-schema": "pnpm exec tsx scripts/check-annotation-schema.ts",

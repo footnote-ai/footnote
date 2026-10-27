@@ -39,11 +39,14 @@ export type BackendLLMCostRecord = {
     usageQuantity?: number;
     cachedInputTokens?: number;
     cacheWriteTokens?: number;
+    cacheWrite30mTokens?: number;
+    cacheWrite12hTokens?: number;
     completionTokens: number;
     totalTokens: number;
     inputCostUsd: number;
     outputCostUsd: number;
     totalCostUsd: number;
+    cacheSavingsUsd?: number;
     costCompleteness?: OpenAITextCostCompleteness;
     costAppliedRules?: OpenAITextCostAppliedRule[];
     costIncompleteReasons?: Array<
@@ -61,6 +64,7 @@ export type BackendTextCostEstimate = Pick<
     | 'inputCostUsd'
     | 'outputCostUsd'
     | 'totalCostUsd'
+    | 'cacheSavingsUsd'
     | 'costCompleteness'
     | 'costAppliedRules'
 > & {
@@ -102,6 +106,16 @@ export const combineBackendTextCostEstimates = (
             (total, estimate) => total + estimate.totalCostUsd,
             0
         ),
+        ...(completeness === 'complete' &&
+        available.length > 0 &&
+        available.every((estimate) => estimate.cacheSavingsUsd !== undefined)
+            ? {
+                  cacheSavingsUsd: available.reduce(
+                      (sum, estimate) => sum + (estimate.cacheSavingsUsd ?? 0),
+                      0
+                  ),
+              }
+            : {}),
         costCompleteness: completeness,
         costAppliedRules: [
             ...new Set(
@@ -165,6 +179,9 @@ export const estimateBackendTextCost = (
         inputCostUsd: estimatedCost.inputCost,
         outputCostUsd: estimatedCost.outputCost,
         totalCostUsd: estimatedCost.totalCost,
+        ...(estimatedCost.cacheSavingsUsd === undefined
+            ? {}
+            : { cacheSavingsUsd: estimatedCost.cacheSavingsUsd }),
         costCompleteness: estimatedCost.completeness,
         costAppliedRules: estimatedCost.appliedRules,
         costIncompleteReasons: estimatedCost.incompleteReasons,
@@ -233,6 +250,8 @@ export const recordBackendLLMUsage = (record: BackendLLMCostRecord): void => {
             }),
             ...(record.cacheWriteTokens !== undefined && {
                 cacheWriteTokens: record.cacheWriteTokens,
+                cacheWrite30mTokens: record.cacheWrite30mTokens,
+                cacheWrite12hTokens: record.cacheWrite12hTokens,
             }),
             completionTokens: record.completionTokens,
             totalTokens: record.totalTokens,

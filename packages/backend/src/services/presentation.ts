@@ -5,7 +5,9 @@
  * @footnote-risk: high - Candidate prose reaches the authoritative generator but never owns answer meaning.
  * @footnote-ethics: high - Persona expression must remain distinct from evidence, safety, permissions, provenance, and TRACE authority.
  */
+import { applyPromptCaching } from './workflowEngine/promptCaching.js';
 import type {
+    RuntimeMessage,
     GenerationRequest,
     GenerationResult,
     GenerationRuntime,
@@ -114,12 +116,12 @@ const hmacIdentifier = (
         ? hmacId(secret, text, 'presentation:v1:candidate')
         : undefined;
 
-const candidateSystemPrompt = (input: {
+const candidateSystemMessages = (input: {
     expressionGuidance: string;
     presentationGuidance: string;
     caution?: PresentationCaution;
     promptVariant?: PresentationPromptVariant;
-}): string => {
+}): RuntimeMessage[] => {
     const task =
         input.promptVariant === 'style-sketch'
             ? 'Draft the answer in the requested voice. Stay faithful to the supplied context; the authoritative model will decide the final facts and conclusions.'
@@ -127,7 +129,17 @@ const candidateSystemPrompt = (input: {
               ? 'Rewrite the answer in the requested voice. Keep its meaning, limits, sources, permissions, refusals, provenance, TRACE posture, and safety decisions unchanged.'
               : 'Rewrite the answer in the requested voice and at the requested expression strength. Keep its meaning, limits, sources, permissions, refusals, provenance, TRACE posture, and safety decisions unchanged.';
     const caution = input.caution ?? 'unavailable';
-    return `${task} Do not use tools or search. Return only the draft. TRACE caution: ${caution}. ${input.expressionGuidance}\n\nStyle guidance:\n${input.presentationGuidance}`;
+    return [
+        {
+            role: 'system',
+            cacheable: true,
+            content: `${task} Do not use tools or search. Return only the draft.`,
+        },
+        {
+            role: 'system',
+            content: `TRACE caution: ${caution}. ${input.expressionGuidance}\n\nStyle guidance:\n${input.presentationGuidance}`,
+        },
+    ];
 };
 
 const toPresentationSettingsMetadata = (
@@ -145,15 +157,12 @@ const buildCandidateRequest = (
     return {
         ...candidateRequest,
         messages: [
-            {
-                role: 'system',
-                content: candidateSystemPrompt({
-                    expressionGuidance: persona.expressionGuidance,
-                    presentationGuidance: persona.presentationGuidance,
-                    caution,
-                    promptVariant: settings?.promptVariant,
-                }),
-            },
+            ...candidateSystemMessages({
+                expressionGuidance: persona.expressionGuidance,
+                presentationGuidance: persona.presentationGuidance,
+                caution,
+                promptVariant: settings?.promptVariant,
+            }),
             ...request.messages,
         ],
     };
@@ -315,20 +324,30 @@ export const runPresentationCandidate = async (input: {
         const draftResult = await withTimeout(
             input.config.timeoutMs,
             (signal) =>
-                input.generationRuntime.generate({
-                    ...buildCandidateRequest(
-                        candidateRequest,
-                        input.persona,
-                        input.caution,
-                        settingsResolution.forwarded
-                    ),
-                    model: input.config.profile?.providerModel,
-                    provider: input.config.profile?.provider,
-                    capabilities: input.config.profile?.capabilities,
-                    providerRouting: input.config.profile?.providerRouting,
-                    providerOptions: input.config.profile?.providerOptions,
-                    signal,
-                }),
+                input.generationRuntime.generate(
+                    applyPromptCaching(
+                        {
+                            ...buildCandidateRequest(
+                                candidateRequest,
+                                input.persona,
+                                input.caution,
+                                settingsResolution.forwarded
+                            ),
+                            model: input.config.profile?.providerModel,
+                            provider: input.config.profile?.provider,
+                            capabilities: input.config.profile?.capabilities,
+                            providerRouting:
+                                input.config.profile?.providerRouting,
+                            providerOptions:
+                                input.config.profile?.providerOptions,
+                            signal,
+                        },
+                        input.config.profile,
+                        'presentation',
+                        input.generationRequest.promptCache?.surface ??
+                            'unknown'
+                    )
+                ),
             'presentation_draft_timeout'
         );
 

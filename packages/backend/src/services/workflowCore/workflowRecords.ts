@@ -53,6 +53,7 @@ export type ChatStepMetadata = {
     providerObservations?: GenerationResult['providerObservations'];
     capabilities?: WorkflowAttemptCapabilities;
     routingAttempts?: WorkflowAttemptRoutingRecord[];
+    promptCache?: GenerationResult['promptCache'];
     usage?: GenerationResult['usage'];
     estimatedCost?: BackendTextCostEstimate;
     signals?: StepSignals;
@@ -109,6 +110,9 @@ const toWorkflowRoutingAttempts = (
             ? {}
             : { completion: attempt.completion }),
         ...(attempt.usage === undefined ? {} : { usage: attempt.usage }),
+        ...(attempt.promptCache === undefined
+            ? {}
+            : { promptCache: attempt.promptCache }),
         ...toWorkflowRoutingAttemptProviderEvidence(attempt),
         ...(attempt.cost === undefined
             ? {}
@@ -308,6 +312,9 @@ export const buildWorkflowLineage = (input: {
                     ...(attemptMetadata?.capabilities === undefined
                         ? {}
                         : { capabilities: attemptMetadata.capabilities }),
+                    ...(attemptMetadata?.promptCache === undefined
+                        ? {}
+                        : { promptCache: attemptMetadata.promptCache }),
                     ...(attemptMetadata?.usage === undefined
                         ? {}
                         : { usage: attemptMetadata.usage }),

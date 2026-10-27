@@ -8,6 +8,10 @@
 import {
     GenerationRuntimeError,
     normalizeGenerationUsage,
+    normalizeProviderTextUsage,
+    translatePromptCache,
+    type GenerationRequest,
+    type GenerationResult,
     type GenerationUsage,
     type RuntimeMessage,
 } from '@footnote/agent-runtime';
@@ -19,6 +23,7 @@ import {
 
 type ChatPlannerStructuredExecutionRequest = {
     messages: RuntimeMessage[];
+    promptCache?: GenerationRequest['promptCache'];
     model: string;
     maxOutputTokens: number;
     reasoningEffort?: SupportedReasoningEffort;
@@ -39,6 +44,7 @@ type ChatPlannerStructuredExecutionResult = {
     model?: string;
     usage?: GenerationUsage;
     rawArguments?: string;
+    promptCache?: GenerationResult['promptCache'];
 };
 
 type CreateOpenAiChatPlannerStructuredExecutorOptions = {
@@ -102,14 +108,7 @@ const readProviderErrorCode = (value: unknown): string | undefined => {
 const normalizeResponsesUsage = (
     usage: ResponsesUsage | undefined
 ): GenerationUsage | undefined => {
-    const normalized = normalizeGenerationUsage({
-        promptTokens: usage?.input_tokens,
-        cachedInputTokens: usage?.input_tokens_details?.cached_tokens,
-        cacheWriteTokens: usage?.input_tokens_details?.cache_write_tokens,
-        completionTokens: usage?.output_tokens,
-        reasoningTokens: usage?.output_tokens_details?.reasoning_tokens,
-        totalTokens: usage?.total_tokens,
-    });
+    const normalized = normalizeProviderTextUsage(usage);
     const promptTokens = normalized?.promptTokens;
     const completionTokens = normalized?.completionTokens;
     const hasComponentTokens =
@@ -155,9 +154,23 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
     return async (
         request: ChatPlannerStructuredExecutionRequest
     ): Promise<ChatPlannerStructuredExecutionResult> => {
+        const cache = translatePromptCache({ ...request, provider: 'openai' });
+        const input = toResponsesInputMessages(request.messages);
+        if (cache?.breakpoint !== undefined) {
+            const message = input[(cache.prefixMessages ?? 0) - 1];
+            if (message !== undefined && Array.isArray(message.content))
+                message.content = message.content.map((part, index, parts) => ({
+                    ...part,
+                    ...(index === parts.length - 1
+                        ? { prompt_cache_breakpoint: cache.breakpoint }
+                        : {}),
+                }));
+        }
         const requestBody = JSON.stringify({
+            store: false,
+            ...cache?.native,
             model: request.model,
-            input: toResponsesInputMessages(request.messages),
+            input,
             max_output_tokens: request.maxOutputTokens,
             ...(request.reasoningEffort !== undefined && {
                 reasoning: {
@@ -301,6 +314,7 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
             model: responseModel,
             usage,
             rawArguments: functionCallItem.arguments,
+            ...(cache === undefined ? {} : { promptCache: cache.receipt }),
         };
     };
 };

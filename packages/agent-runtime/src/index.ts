@@ -7,6 +7,7 @@
  * @footnote-ethics: high - This boundary protects Footnote-owned provenance and review semantics from being swallowed by framework-specific code.
  */
 import type { JSONSchema7 } from 'ai';
+export { translatePromptCache } from './promptCache.js';
 import type {
     ImageGenerationQuality as ContractImageGenerationQuality,
     ImageGenerationSize as ContractImageGenerationSize,
@@ -15,6 +16,8 @@ import type {
     ModelProfileProviderOptions,
     ModelProfileProviderRouting,
     PresentationGenerationSettings,
+    PromptCachePolicy,
+    PromptCacheReceipt,
     SupportedImageOutputFormat,
     SupportedOpenAIImageModel,
     SupportedOpenAITextModel,
@@ -82,6 +85,8 @@ export type GenerationProvenance = 'Retrieved' | 'Inferred' | 'Speculative';
  * first consumer, but the naming is general enough for future callers.
  */
 export interface RuntimeMessage {
+    /** Only backend-authored shared prompt fragments may carry this annotation. */
+    cacheable?: boolean;
     /**
      * Message role in the generation transcript.
      */
@@ -144,6 +149,8 @@ export interface GenerationStructuredOutput {
  * by backend code outside this package.
  */
 export interface GenerationRequest {
+    /** Backend-owned prompt cache intent, resolved after selecting the actual route. */
+    promptCache?: PromptCachePolicy;
     /**
      * Normalized text conversation to hand to the runtime.
      */
@@ -234,17 +241,23 @@ export class GenerationRuntimeError extends Error {
     readonly details: GenerationRuntimeErrorDetails;
     readonly model?: string;
     readonly usage?: GenerationUsage;
+    readonly promptCache?: PromptCacheReceipt;
 
     constructor(
         message: string,
         details: GenerationRuntimeErrorDetails,
-        evidence?: { model?: string; usage?: GenerationUsage }
+        evidence?: {
+            model?: string;
+            usage?: GenerationUsage;
+            promptCache?: PromptCacheReceipt;
+        }
     ) {
         super(message);
         this.name = 'GenerationRuntimeError';
         this.details = details;
         this.model = evidence?.model;
         this.usage = evidence?.usage;
+        this.promptCache = evidence?.promptCache;
     }
 }
 
@@ -290,6 +303,9 @@ export interface GenerationUsage {
      * Input tokens written to the provider prompt cache, when reported.
      */
     cacheWriteTokens?: number;
+    /** Provider-reported write counts at each priced retention tier. */
+    cacheWrite30mTokens?: number;
+    cacheWrite12hTokens?: number;
     /**
      * Output or completion token count, when the runtime exposes it.
      */
@@ -309,7 +325,7 @@ export interface GenerationUsage {
 export const isNonNegativeSafeInteger = (value: unknown): value is number =>
     typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 
-/** Normalizes the shared six-field token usage representation. */
+/** Normalizes provider token measurements without filling absent fields. */
 export const normalizeGenerationUsage = (
     value: unknown
 ): GenerationUsage | undefined => {
@@ -322,6 +338,8 @@ export const normalizeGenerationUsage = (
         'promptTokens',
         'cachedInputTokens',
         'cacheWriteTokens',
+        'cacheWrite30mTokens',
+        'cacheWrite12hTokens',
         'completionTokens',
         'reasoningTokens',
         'totalTokens',
@@ -333,6 +351,36 @@ export const normalizeGenerationUsage = (
         }
     }
     return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
+/** Reads raw hosted-provider usage before SDK defaults erase missing fields. */
+export const normalizeProviderTextUsage = (
+    value: unknown
+): GenerationUsage | undefined => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value))
+        return undefined;
+    const usage = value as Record<string, unknown>;
+    const record = (item: unknown): Record<string, unknown> =>
+        item !== null && typeof item === 'object' && !Array.isArray(item)
+            ? (item as Record<string, unknown>)
+            : {};
+    const input = record(
+        usage.input_tokens_details ?? usage.prompt_tokens_details
+    );
+    const output = record(
+        usage.output_tokens_details ?? usage.completion_tokens_details
+    );
+    const writes = record(input.cache_write_tokens_details);
+    return normalizeGenerationUsage({
+        promptTokens: usage.input_tokens ?? usage.prompt_tokens,
+        completionTokens: usage.output_tokens ?? usage.completion_tokens,
+        totalTokens: usage.total_tokens,
+        cachedInputTokens: input.cached_tokens,
+        cacheWriteTokens: input.cache_write_tokens,
+        cacheWrite30mTokens: writes.ttl_30m_tokens,
+        cacheWrite12hTokens: writes.ttl_12h_tokens,
+        reasoningTokens: output.reasoning_tokens,
+    });
 };
 
 /**
@@ -357,6 +405,8 @@ export interface GenerationRetrieval {
  * diagnostics.
  */
 export interface GenerationResult {
+    /** Text-free request-side cache receipt; not evidence of a cache hit. */
+    promptCache?: PromptCacheReceipt;
     /**
      * Final user-visible text generated by the runtime.
      */

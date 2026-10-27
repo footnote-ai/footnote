@@ -390,6 +390,10 @@ export const createInternalNewsTaskService = ({
                 }),
                 ...(generationResult.usage?.cacheWriteTokens !== undefined && {
                     cacheWriteTokens: generationResult.usage.cacheWriteTokens,
+                    cacheWrite30mTokens:
+                        generationResult.usage.cacheWrite30mTokens,
+                    cacheWrite12hTokens:
+                        generationResult.usage.cacheWrite12hTokens,
                 }),
                 completionTokens,
                 totalTokens,

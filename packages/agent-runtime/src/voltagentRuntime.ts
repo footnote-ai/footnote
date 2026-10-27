@@ -18,6 +18,7 @@ import { APICallError, jsonSchema, Output } from 'ai';
 import {
     isNonNegativeSafeInteger,
     normalizeGenerationUsage,
+    normalizeProviderTextUsage,
     type GenerationCitation,
     type GenerationRuntimeError,
     type GenerationRuntimeErrorDetails,
@@ -34,6 +35,7 @@ import {
     isGenerationRuntimeError,
 } from './index.js';
 import { extractMarkdownLinkCitations } from './citationRecovery.js';
+import { translatePromptCache } from './promptCache.js';
 import {
     intersectModelCapabilityFacts,
     resolveModelProfileCapabilityFacts,
@@ -100,6 +102,8 @@ export interface VoltAgentUsage {
     promptTokens?: number;
     cachedInputTokens?: number;
     cacheWriteTokens?: number;
+    cacheWrite30mTokens?: number;
+    cacheWrite12hTokens?: number;
     completionTokens?: number;
     reasoningTokens?: number;
     totalTokens?: number;
@@ -169,6 +173,7 @@ export interface VoltAgentTextExecutor {
  */
 export type VoltAgentExecutorFactory = (input: {
     model: string;
+    promptCache?: ReturnType<typeof translatePromptCache>;
     logger?: VoltAgentLogger;
     voltOpsClient?: VoltOpsClient;
     ollama?: VoltAgentExecutorOllamaConfig;
@@ -233,10 +238,19 @@ type VoltAgentCallOptions = NonNullable<Parameters<Agent['generateText']>[1]>;
  * Turns the shared runtime transcript into the simple message shape VoltAgent
  * accepts for text generation.
  */
-const toVoltAgentMessages = (messages: RuntimeMessage[]): BaseMessage[] =>
-    messages.map((message) => ({
+const toVoltAgentMessages = (
+    messages: RuntimeMessage[],
+    cache?: ReturnType<typeof translatePromptCache>
+): BaseMessage[] =>
+    messages.map((message, index) => ({
         role: message.role,
         content: message.content,
+        ...(cache?.breakpoint !== undefined &&
+            index === (cache.prefixMessages ?? 0) - 1 && {
+                providerOptions: {
+                    openai: { promptCacheBreakpoint: cache.breakpoint },
+                },
+            }),
     }));
 
 /**
@@ -560,7 +574,10 @@ export const normalizeGenerationRuntimeError = (
 
     return details === undefined
         ? undefined
-        : new GenerationRuntimeErrorClass(error.message, details);
+        : new GenerationRuntimeErrorClass(error.message, details, {
+              model: readString(payload?.model),
+              usage: normalizeProviderTextUsage(payload?.usage),
+          });
 };
 
 const normalizeCompletionStatus = (input: {
@@ -1378,7 +1395,13 @@ const normalizeVoltAgentResult = (
     const incompleteReason = readBoundedString(incompleteDetails?.reason);
     const responseUsage = asRecord(responseBody?.usage);
     const outputTokenDetails = asRecord(responseUsage?.output_tokens_details);
-    const runtimeUsage = normalizeGenerationUsage(result.usage);
+    const hostedProvider = ['openai', 'openrouter'].includes(
+        getVoltAgentProvider(executedModel)
+    );
+    const runtimeUsage =
+        hostedProvider && responseBody !== undefined
+            ? normalizeProviderTextUsage(responseUsage)
+            : normalizeGenerationUsage(result.usage);
     const ollamaProvider = getVoltAgentProvider(executedModel) === 'ollama';
     if (ollamaProvider && runtimeUsage !== undefined) {
         // Ollama's native response has evaluation counts, not reasoning-token counts.
@@ -1464,6 +1487,9 @@ const normalizeVoltAgentResult = (
 
     return {
         text: result.text,
+        ...(translatePromptCache(request) === undefined
+            ? {}
+            : { promptCache: translatePromptCache(request)?.receipt }),
         model: toFootnoteModel(responseModel),
         ...(upstreamAttribution !== undefined && { upstreamAttribution }),
         ...(providerSettingResolution !== undefined && {
@@ -1505,6 +1531,7 @@ const normalizeVoltAgentResult = (
  */
 const createDefaultVoltAgentExecutor = ({
     model,
+    promptCache,
     logger,
     voltOpsClient,
     ollama,
@@ -1548,11 +1575,44 @@ const createDefaultVoltAgentExecutor = ({
                   // this capability is explicit.
                   supportsStructuredOutputs: true,
                   metadataExtractor: openRouterMetadataExtractor,
-                  transformRequestBody: (body) =>
-                      mergeOpenRouterRequestBody(
+                  transformRequestBody: (body) => {
+                      const merged = mergeOpenRouterRequestBody(
                           body,
                           openRouterProviderPayload
-                      ),
+                      );
+                      if (
+                          promptCache?.breakpoint === undefined ||
+                          !Array.isArray(merged.messages)
+                      )
+                          return { ...merged, ...promptCache?.native };
+                      return {
+                          ...merged,
+                          ...promptCache.native,
+                          messages: merged.messages.map(
+                              (message: unknown, index: number) => {
+                                  if (
+                                      index !==
+                                          (promptCache.prefixMessages ?? 0) -
+                                              1 ||
+                                      !isRecord(message) ||
+                                      typeof message.content !== 'string'
+                                  )
+                                      return message;
+                                  return {
+                                      ...message,
+                                      content: [
+                                          {
+                                              type: 'text',
+                                              text: message.content,
+                                              prompt_cache_breakpoint:
+                                                  promptCache.breakpoint,
+                                          },
+                                      ],
+                                  };
+                              }
+                          ),
+                      };
+                  },
               })(model.slice('openrouter/'.length))
             : undefined;
     const configuredOllamaBaseUrl = ollama?.baseUrl;
@@ -1589,10 +1649,13 @@ const createDefaultVoltAgentExecutor = ({
             messages: RuntimeMessage[],
             options: VoltAgentGenerateTextOptions
         ): Promise<VoltAgentTextResult> {
-            const { instructions, transcript } = splitLeadingSystemMessages(
-                messages,
-                getVoltAgentProvider(model) === 'ollama'
-            );
+            const explicitCache = promptCache?.breakpoint !== undefined;
+            const { instructions, transcript } = explicitCache
+                ? { instructions: '', transcript: messages }
+                : splitLeadingSystemMessages(
+                      messages,
+                      getVoltAgentProvider(model) === 'ollama'
+                  );
             const searchInstruction = options.search
                 ? buildVoltAgentSearchInstruction(options.search)
                 : undefined;
@@ -1602,8 +1665,23 @@ const createDefaultVoltAgentExecutor = ({
                         part !== undefined && part.trim().length > 0
                 )
                 .join('\n\n');
-            const resolvedInstructions =
-                mergedInstructions.length > 0 ? mergedInstructions : undefined;
+            // Keep the reusable block visible to the SDK instead of joining it into top-level instructions.
+            const resolvedInstructions = explicitCache
+                ? ''
+                : mergedInstructions.length > 0
+                  ? mergedInstructions
+                  : undefined;
+            const providerMessages =
+                explicitCache && searchInstruction !== undefined
+                    ? [
+                          ...transcript.slice(0, promptCache.prefixMessages),
+                          {
+                              role: 'system' as const,
+                              content: searchInstruction,
+                          },
+                          ...transcript.slice(promptCache.prefixMessages),
+                      ]
+                    : transcript;
             logger?.debug('Projected generation messages for provider.', {
                 event: 'generation.message_projection',
                 provider: getVoltAgentProvider(model),
@@ -1667,7 +1745,7 @@ const createDefaultVoltAgentExecutor = ({
                       )
                     : createAgent(resolvedInstructions);
             const result = await activeAgent.generateText(
-                toVoltAgentMessages(transcript),
+                toVoltAgentMessages(providerMessages, promptCache),
                 callOptions
             );
 
@@ -1681,7 +1759,12 @@ const createDefaultVoltAgentExecutor = ({
                     { classification: 'structured_output_unavailable' },
                     {
                         model: result.response.modelId,
-                        usage: normalizeGenerationUsage(result.usage),
+                        usage: normalizeProviderTextUsage(
+                            asRecord(result.response.body)?.usage
+                        ),
+                        ...(promptCache === undefined
+                            ? {}
+                            : { promptCache: promptCache.receipt }),
                     }
                 );
             }
@@ -1868,8 +1951,20 @@ const createVoltAgentRuntime = ({
                     }
                 );
             }
+            const cacheControls = translatePromptCache(request);
+            if (cacheControls?.receipt.omissionReason !== undefined)
+                logger?.warn(
+                    'Prompt cache control omitted; continuing generation.',
+                    {
+                        event: 'generation.cache_control_omitted',
+                        provider,
+                        model: executedModel,
+                        reasonCode: cacheControls.receipt.omissionReason,
+                    }
+                );
             const executor = createExecutor({
                 model: executedModel,
+                promptCache: cacheControls,
                 ...(logger !== undefined && { logger }),
                 ...(voltOpsClient !== undefined && { voltOpsClient }),
                 ...(executorOllamaConfig !== undefined && {
@@ -1886,6 +1981,20 @@ const createVoltAgentRuntime = ({
                 request,
                 provider
             );
+            if (
+                provider === 'openai' &&
+                cacheControls !== undefined &&
+                providerOptions !== undefined
+            ) {
+                const hints = providerOptions.providerHints ?? {};
+                providerOptions.providerHints = {
+                    ...hints,
+                    openai: {
+                        ...(isRecord(hints.openai) ? hints.openai : {}),
+                        ...cacheControls.sdk,
+                    },
+                };
+            }
             let result: VoltAgentTextResult;
             try {
                 result = await executor.generateText(request.messages, {
@@ -1912,7 +2021,19 @@ const createVoltAgentRuntime = ({
                     ...(providerOptions !== undefined && { providerOptions }),
                 });
             } catch (error) {
-                throw normalizeGenerationRuntimeError(error) ?? error;
+                const normalized = normalizeGenerationRuntimeError(error);
+                if (normalized === undefined) throw error;
+                throw new GenerationRuntimeErrorClass(
+                    normalized.message,
+                    normalized.details,
+                    {
+                        model: normalized.model,
+                        usage: normalized.usage,
+                        ...(cacheControls === undefined
+                            ? {}
+                            : { promptCache: cacheControls.receipt }),
+                    }
+                );
             }
 
             return normalizeVoltAgentResult(

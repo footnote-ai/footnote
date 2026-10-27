@@ -80,6 +80,7 @@ export type PlannerStepResult = {
             upstreamReportedCostUsd?: number;
         };
         providerSettingResolution?: WorkflowAttemptSettings;
+        promptCache?: import('@footnote/agent-runtime').GenerationResult['promptCache'];
         providerObservations?: OllamaRuntimeObservations;
         routingChainAttempts?: RoutingChainAttemptLog[];
     };
@@ -100,6 +101,7 @@ export type PlannerExecutionSummaryExtras = {
     structuredOutputOutcome?: PlannerStepResult['execution']['structuredOutputOutcome'];
     upstreamAttribution?: PlannerStepResult['execution']['upstreamAttribution'];
     providerSettingResolution?: PlannerStepResult['execution']['providerSettingResolution'];
+    promptCache?: PlannerStepResult['execution']['promptCache'];
     providerObservations?: PlannerStepResult['execution']['providerObservations'];
     routingChainAttempts?: PlannerStepResult['execution']['routingChainAttempts'];
 };
@@ -112,6 +114,9 @@ export const buildPlannerExecutionSummaryExtras = (
     execution: PlannerStepResult['execution']
 ): PlannerExecutionSummaryExtras => ({
     ...(execution.model !== undefined && { model: execution.model }),
+    ...(execution.promptCache === undefined
+        ? {}
+        : { promptCache: execution.promptCache }),
     ...(execution.usage !== undefined && { usage: execution.usage }),
     ...(execution.cost !== undefined && { cost: execution.cost }),
     ...(execution.structuredOutputOutcome !== undefined && {

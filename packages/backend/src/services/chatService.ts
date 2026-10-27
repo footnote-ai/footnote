@@ -6,6 +6,7 @@
  * @footnote-risk: high - Mistakes here change the canonical chat behavior used by multiple callers.
  * @footnote-ethics: high - This workflow owns the AI response and provenance metadata users rely on.
  */
+import { applyPromptCaching } from './workflowEngine/promptCaching.js';
 import { randomBytes } from 'node:crypto';
 import type {
     GenerationResult,
@@ -1195,6 +1196,10 @@ export const createChatService = ({
                       cachedInputTokens:
                           generationResult.usage.cachedInputTokens,
                       cacheWriteTokens: generationResult.usage.cacheWriteTokens,
+                      cacheWrite30mTokens:
+                          generationResult.usage.cacheWrite30mTokens,
+                      cacheWrite12hTokens:
+                          generationResult.usage.cacheWrite12hTokens,
                       completionTokens: generationResult.usage.completionTokens,
                       totalTokens: generationResult.usage.totalTokens,
                       reasoningTokens: generationResult.usage.reasoningTokens,
@@ -1236,6 +1241,8 @@ export const createChatService = ({
                 }),
                 ...(result.usage?.cacheWriteTokens !== undefined && {
                     cacheWriteTokens: result.usage.cacheWriteTokens,
+                    cacheWrite30mTokens: result.usage.cacheWrite30mTokens,
+                    cacheWrite12hTokens: result.usage.cacheWrite12hTokens,
                 }),
             }
         );
@@ -1270,6 +1277,8 @@ export const createChatService = ({
                     }),
                     ...(result.usage?.cacheWriteTokens !== undefined && {
                         cacheWriteTokens: result.usage.cacheWriteTokens,
+                        cacheWrite30mTokens: result.usage.cacheWrite30mTokens,
+                        cacheWrite12hTokens: result.usage.cacheWrite12hTokens,
                     }),
                     completionTokens,
                     totalTokens,
@@ -1505,17 +1514,27 @@ export const createChatService = ({
                             request,
                         });
                         const result = normalizeGenerationResultEvidence(
-                            await generationRuntime.generate({
-                                ...applyModelSettings(
-                                    request,
-                                    settingsResolution.applied
-                                ),
-                                model: profile.providerModel,
-                                provider: profile.provider,
-                                capabilities: profile.capabilities,
-                                providerRouting: profile.providerRouting,
-                                providerOptions: profile.providerOptions,
-                            })
+                            await generationRuntime.generate(
+                                applyPromptCaching(
+                                    {
+                                        ...applyModelSettings(
+                                            request,
+                                            settingsResolution.applied
+                                        ),
+                                        model: profile.providerModel,
+                                        provider: profile.provider,
+                                        capabilities: profile.capabilities,
+                                        providerRouting:
+                                            profile.providerRouting,
+                                        providerOptions:
+                                            profile.providerOptions,
+                                    },
+                                    profile,
+                                    'generation',
+                                    contextEnvelope?.diagnostics.surface ??
+                                        'unknown'
+                                )
+                            )
                         );
                         // Record every routed provider Attempt, including an
                         // inadmissible result that causes fail-open progression.
@@ -2806,10 +2825,16 @@ export const createChatService = ({
             {
                 role: 'system',
                 content: promptLayers.systemPrompt,
+                cacheable: true,
             },
             {
                 role: 'system',
-                content: `${promptLayers.personaPrompt}\n\n${resolvedPresentationPersona.expressionGuidance}`,
+                content: promptLayers.personaPrompt,
+                cacheable: true,
+            },
+            {
+                role: 'system',
+                content: resolvedPresentationPersona.expressionGuidance,
             },
             { role: 'user', content: question.trim() },
         ];

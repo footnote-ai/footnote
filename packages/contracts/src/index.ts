@@ -10,6 +10,16 @@
 // place without needing to know the internal folder layout of the contracts
 // package.
 
+export {
+    PromptCacheReceiptSchema,
+    PromptCacheSummarySchema,
+} from './prompt-caching.js';
+export type {
+    PromptCachePolicy,
+    PromptCacheReceipt,
+    PromptCacheSummary,
+} from './prompt-caching.js';
+
 // Ethics Core contracts (provenance/risk metadata)
 export type {
     Provenance,

@@ -50,6 +50,7 @@ export type RoutingChainAttemptLog = {
     selectionSource?: 'explicit' | 'configured';
     finishReason?: string;
     completion?: GenerationCompletion;
+    promptCache?: GenerationResult['promptCache'];
     usage?: GenerationExecutionUsage;
     /** Requested/applied/ignored provider controls from this attempt. */
     providerSettingResolution?: GenerationResult['providerSettingResolution'];
@@ -75,6 +76,7 @@ export type RoutingChainInternalAttempt = Pick<
     | 'temporaryUnavailableReason'
     | 'finishReason'
     | 'completion'
+    | 'promptCache'
     | 'usage'
     | 'cost'
     | 'startedAtMs'
@@ -403,6 +405,10 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                         actualModel: error.model,
                     }),
                 ...(failedUsage !== undefined && { usage: failedUsage }),
+                ...(isGenerationRuntimeError(error) &&
+                error.promptCache !== undefined
+                    ? { promptCache: error.promptCache }
+                    : {}),
                 status: transient
                     ? 'failed_transient_advanced'
                     : 'failed_non_transient_stopped',

@@ -7,6 +7,10 @@
  */
 
 import { z } from 'zod';
+import {
+    PromptCacheReceiptSchema,
+    PromptCacheSummarySchema,
+} from '../prompt-caching.js';
 export * from './discordAccounts.js';
 import {
     BOUNDED_REVIEW_ASSESS_DECISIONS,
@@ -601,6 +605,8 @@ const GenerationUsageSchema = z
         promptTokens: z.number().int().nonnegative().optional(),
         cachedInputTokens: z.number().int().nonnegative().optional(),
         cacheWriteTokens: z.number().int().nonnegative().optional(),
+        cacheWrite30mTokens: z.number().int().nonnegative().optional(),
+        cacheWrite12hTokens: z.number().int().nonnegative().optional(),
         completionTokens: z.number().int().nonnegative().optional(),
         totalTokens: z.number().int().nonnegative().optional(),
         reasoningTokens: z.number().int().nonnegative().optional(),
@@ -1080,6 +1086,7 @@ const WorkflowCostSchema = z
         inputCostUsd: z.number().nonnegative(),
         outputCostUsd: z.number().nonnegative(),
         totalCostUsd: z.number().nonnegative(),
+        cacheSavingsUsd: z.number().finite().optional(),
         costCompleteness: z.enum(['complete', 'partial', 'unknown']).optional(),
         costAppliedRules: z
             .array(
@@ -1097,6 +1104,7 @@ const WorkflowCostSchema = z
                     'unpriced_model',
                     'cached_input_tokens_unavailable',
                     'cache_write_tokens_unavailable',
+                    'cache_write_tier_unavailable',
                     'invalid_input_token_breakdown',
                     'provider_usage_unavailable',
                 ])
@@ -1158,6 +1166,7 @@ const WorkflowAttemptRoutingRecordSchema = z
         finishReason: z.string().min(1).optional(),
         completion: GenerationCompletionSchema.optional(),
         settings: WorkflowAttemptSettingsSchema.optional(),
+        promptCache: PromptCacheReceiptSchema.optional(),
         providerObservations: OllamaRuntimeObservationsSchema.optional(),
         usage: GenerationUsageSchema.optional().describe(
             'Provider/runtime-reported token counts for this routing attempt. Omitted counts are unavailable.'
@@ -1296,6 +1305,7 @@ const WorkflowAttemptRecordSchema = z
         actualProvider: z.string().min(1).optional(),
         actualModel: z.string().min(1).optional(),
         settings: WorkflowAttemptSettingsSchema.optional(),
+        promptCache: PromptCacheReceiptSchema.optional(),
         providerObservations: OllamaRuntimeObservationsSchema.optional(),
         capabilities: WorkflowAttemptCapabilitiesSchema.optional(),
         completion: GenerationCompletionSchema.optional(),
@@ -1342,6 +1352,8 @@ const StepRecordSchema = z
                 promptTokens: z.number().int().nonnegative().optional(),
                 cachedInputTokens: z.number().int().nonnegative().optional(),
                 cacheWriteTokens: z.number().int().nonnegative().optional(),
+                cacheWrite30mTokens: z.number().int().nonnegative().optional(),
+                cacheWrite12hTokens: z.number().int().nonnegative().optional(),
                 completionTokens: z.number().int().nonnegative().optional(),
                 totalTokens: z.number().int().nonnegative().optional(),
                 reasoningTokens: z.number().int().nonnegative().optional(),
@@ -1542,6 +1554,7 @@ const validateAssessTraceSignals = (
 
 const WorkflowRecordSchema = z
     .object({
+        cacheSummary: z.array(PromptCacheSummarySchema).optional(),
         runId: z.string().min(1).optional(),
         sessionCorrelationId: z.string().min(1).max(64).optional(),
         runStatus: z
@@ -1932,6 +1945,8 @@ const ImageGenerationMetadataSchema = z
                 inputTokens: z.number().int().nonnegative(),
                 cachedInputTokens: z.number().int().nonnegative().optional(),
                 cacheWriteTokens: z.number().int().nonnegative().optional(),
+                cacheWrite30mTokens: z.number().int().nonnegative().optional(),
+                cacheWrite12hTokens: z.number().int().nonnegative().optional(),
                 outputTokens: z.number().int().nonnegative(),
                 totalTokens: z.number().int().nonnegative(),
                 imageCount: z.number().int().nonnegative(),

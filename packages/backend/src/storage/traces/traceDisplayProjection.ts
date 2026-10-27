@@ -6,6 +6,8 @@
  * @footnote-risk: high - An unsafe projection could expose malformed or sensitive trace data.
  * @footnote-ethics: high - Partial provenance must be explicit so operators do not mistake missing evidence for complete evidence.
  */
+import { summarizePromptCaching } from '../../services/workflowEngine/cacheMeasurements.js';
+import { PromptCacheReceiptSchema } from '@footnote/contracts';
 import type {
     PartialResponseTemperament,
     ResponseMetadata,
@@ -208,6 +210,10 @@ const projectPublicOutcome = (
 const projectPublicCost = (
     cost: NonNullable<StepRecord['cost']>
 ): NonNullable<StepRecord['cost']> => ({
+    ...(cost.costCompleteness === 'complete' &&
+    Number.isFinite(cost.cacheSavingsUsd)
+        ? { cacheSavingsUsd: cost.cacheSavingsUsd }
+        : {}),
     inputCostUsd: cost.inputCostUsd,
     outputCostUsd: cost.outputCostUsd,
     totalCostUsd: cost.totalCostUsd,
@@ -222,10 +228,28 @@ const projectPublicCost = (
     }),
 });
 
+const publicCacheReceipt = (
+    receipt: WorkflowAttemptRecord['promptCache']
+): WorkflowAttemptRecord['promptCache'] => {
+    if (receipt === undefined) return undefined;
+    const parsed = PromptCacheReceiptSchema.safeParse({
+        mode: receipt.mode,
+        purpose: receipt.purpose,
+        surface: receipt.surface,
+        requestedTtlSeconds: receipt.requestedTtlSeconds,
+        appliedTtlSeconds: receipt.appliedTtlSeconds,
+        stablePrefixTokensEstimate: receipt.stablePrefixTokensEstimate,
+    });
+    return parsed.success ? parsed.data : undefined;
+};
+
 const projectPublicAttempt = (
     attempt: WorkflowAttemptRecord
 ): WorkflowAttemptRecord => ({
     attempt: attempt.attempt,
+    ...(publicCacheReceipt(attempt.promptCache) === undefined
+        ? {}
+        : { promptCache: publicCacheReceipt(attempt.promptCache) }),
     status: attempt.status,
     startedAt: attempt.startedAt,
     finishedAt: attempt.finishedAt,
@@ -262,6 +286,8 @@ const projectPublicAttempt = (
             }),
             ...(attempt.usage.cacheWriteTokens !== undefined && {
                 cacheWriteTokens: attempt.usage.cacheWriteTokens,
+                cacheWrite30mTokens: attempt.usage.cacheWrite30mTokens,
+                cacheWrite12hTokens: attempt.usage.cacheWrite12hTokens,
             }),
             ...(attempt.usage.completionTokens !== undefined && {
                 completionTokens: attempt.usage.completionTokens,
@@ -316,6 +342,8 @@ const projectPublicStep = (step: StepRecord): StepRecord => ({
             }),
             ...(step.usage.cacheWriteTokens !== undefined && {
                 cacheWriteTokens: step.usage.cacheWriteTokens,
+                cacheWrite30mTokens: step.usage.cacheWrite30mTokens,
+                cacheWrite12hTokens: step.usage.cacheWrite12hTokens,
             }),
             ...(step.usage.completionTokens !== undefined && {
                 completionTokens: step.usage.completionTokens,
@@ -344,6 +372,7 @@ const projectPublicStep = (step: StepRecord): StepRecord => ({
 });
 
 const projectPublicWorkflow = (workflow: WorkflowRecord): WorkflowRecord => ({
+    cacheSummary: summarizePromptCaching(workflow),
     ...(workflow.runId !== undefined && { runId: workflow.runId }),
     ...(workflow.runStatus !== undefined && { runStatus: workflow.runStatus }),
     ...(workflow.startedAt !== undefined && { startedAt: workflow.startedAt }),

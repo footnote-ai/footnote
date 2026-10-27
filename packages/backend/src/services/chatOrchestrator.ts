@@ -5,6 +5,7 @@
  * @footnote-risk: high - Routing mistakes here can send the wrong action or break chat across surfaces.
  * @footnote-ethics: high - This is the canonical action-selection boundary for user-facing chat behavior.
  */
+import { applyPromptCaching } from './workflowEngine/promptCaching.js';
 import type {
     ChatAssistantIdentity,
     PostChatRequest,
@@ -168,6 +169,8 @@ const combinePlannerUsage = (
         'promptTokens',
         'cachedInputTokens',
         'cacheWriteTokens',
+        'cacheWrite30mTokens',
+        'cacheWrite12hTokens',
         'completionTokens',
         'reasoningTokens',
         'totalTokens',
@@ -347,26 +350,38 @@ export const createChatOrchestrator = ({
                         let compatibilityResult: GenerationResult;
                         try {
                             compatibilityResult =
-                                await generationRuntime.generate({
-                                    ...resolvedRequest,
-                                    messages:
-                                        compatibilityMessages?.() ??
-                                        resolvedRequest.messages,
-                                    model: activePlannerProfile.providerModel,
-                                    provider: activePlannerProfile.provider,
-                                    capabilities:
-                                        activePlannerProfile.capabilities,
-                                    providerRouting:
-                                        activePlannerProfile.providerRouting,
-                                    providerOptions:
-                                        activePlannerProfile.providerOptions,
-                                    maxOutputTokens: resolvedMaxOutputTokens,
-                                    ...(activePlannerCapabilityFacts.jsonMode ===
-                                        'supported' && { jsonMode: true }),
-                                    ...(safetyIdentifier !== undefined && {
-                                        safetyIdentifier,
-                                    }),
-                                });
+                                await generationRuntime.generate(
+                                    applyPromptCaching(
+                                        {
+                                            ...resolvedRequest,
+                                            messages:
+                                                compatibilityMessages?.() ??
+                                                resolvedRequest.messages,
+                                            model: activePlannerProfile.providerModel,
+                                            provider:
+                                                activePlannerProfile.provider,
+                                            capabilities:
+                                                activePlannerProfile.capabilities,
+                                            providerRouting:
+                                                activePlannerProfile.providerRouting,
+                                            providerOptions:
+                                                activePlannerProfile.providerOptions,
+                                            maxOutputTokens:
+                                                resolvedMaxOutputTokens,
+                                            ...(activePlannerCapabilityFacts.jsonMode ===
+                                                'supported' && {
+                                                jsonMode: true,
+                                            }),
+                                            ...(safetyIdentifier !==
+                                                undefined && {
+                                                safetyIdentifier,
+                                            }),
+                                        },
+                                        activePlannerProfile,
+                                        'planner',
+                                        request.cacheSurface
+                                    )
+                                );
                         } catch (error) {
                             const outcome = isTypedOutputTransportUnavailable(
                                 error
@@ -468,6 +483,7 @@ export const createChatOrchestrator = ({
                                 compatibilityResult.providerSettingResolution,
                             providerObservations:
                                 compatibilityResult.providerObservations,
+                            promptCache: compatibilityResult.promptCache,
                             rawArguments: compatibilityResult.text.slice(
                                 0,
                                 2_000
@@ -486,14 +502,24 @@ export const createChatOrchestrator = ({
                         directOpenAiStructuredExecutor !== undefined
                     ) {
                         try {
-                            return await directOpenAiStructuredExecutor({
-                                ...resolvedRequest,
-                                model: activePlannerProfile.providerModel,
-                                maxOutputTokens: resolvedMaxOutputTokens,
-                                ...(safetyIdentifier !== undefined && {
-                                    safetyIdentifier,
-                                }),
-                            });
+                            return await directOpenAiStructuredExecutor(
+                                applyPromptCaching(
+                                    {
+                                        ...resolvedRequest,
+                                        model: activePlannerProfile.providerModel,
+                                        structuredOutput:
+                                            chatPlannerDecisionStructuredOutput,
+                                        maxOutputTokens:
+                                            resolvedMaxOutputTokens,
+                                        ...(safetyIdentifier !== undefined && {
+                                            safetyIdentifier,
+                                        }),
+                                    },
+                                    activePlannerProfile,
+                                    'planner',
+                                    request.cacheSurface
+                                )
+                            );
                         } catch (error) {
                             if (error instanceof SyntaxError) {
                                 throw error;
@@ -526,21 +552,29 @@ export const createChatOrchestrator = ({
                     }
 
                     try {
-                        const result = await generationRuntime.generate({
-                            ...resolvedRequest,
-                            model: activePlannerProfile.providerModel,
-                            provider: activePlannerProfile.provider,
-                            capabilities: activePlannerProfile.capabilities,
-                            providerRouting:
-                                activePlannerProfile.providerRouting,
-                            providerOptions:
-                                activePlannerProfile.providerOptions,
-                            structuredOutput:
-                                chatPlannerDecisionStructuredOutput,
-                            ...(safetyIdentifier !== undefined && {
-                                safetyIdentifier,
-                            }),
-                        });
+                        const result = await generationRuntime.generate(
+                            applyPromptCaching(
+                                {
+                                    ...resolvedRequest,
+                                    model: activePlannerProfile.providerModel,
+                                    provider: activePlannerProfile.provider,
+                                    capabilities:
+                                        activePlannerProfile.capabilities,
+                                    providerRouting:
+                                        activePlannerProfile.providerRouting,
+                                    providerOptions:
+                                        activePlannerProfile.providerOptions,
+                                    structuredOutput:
+                                        chatPlannerDecisionStructuredOutput,
+                                    ...(safetyIdentifier !== undefined && {
+                                        safetyIdentifier,
+                                    }),
+                                },
+                                activePlannerProfile,
+                                'planner',
+                                request.cacheSurface
+                            )
+                        );
                         const throwStructuredResultFailure = (
                             outcome: ConstructorParameters<
                                 typeof ChatPlannerStructuredOutputError
@@ -600,6 +634,7 @@ export const createChatOrchestrator = ({
                             providerSettingResolution:
                                 result.providerSettingResolution,
                             providerObservations: result.providerObservations,
+                            promptCache: result.promptCache,
                             rawArguments: result.text.slice(0, 2_000),
                         };
                     } catch (error) {
@@ -630,6 +665,7 @@ export const createChatOrchestrator = ({
             }),
             ...(signal !== undefined && { signal }),
             executePlanner: async ({
+                cacheSurface,
                 messages,
                 model: _model,
                 maxOutputTokens,
@@ -663,18 +699,27 @@ export const createChatOrchestrator = ({
                 const executePlannerGeneration = (
                     useJsonMode: boolean
                 ): Promise<GenerationResult> =>
-                    generationRuntime.generate({
-                        ...resolvedGenerationRequest,
-                        model: activePlannerProfile.providerModel,
-                        provider: activePlannerProfile.provider,
-                        capabilities: activePlannerProfile.capabilities,
-                        providerRouting: activePlannerProfile.providerRouting,
-                        providerOptions: activePlannerProfile.providerOptions,
-                        ...(useJsonMode && { jsonMode: true }),
-                        ...(safetyIdentifier !== undefined && {
-                            safetyIdentifier,
-                        }),
-                    });
+                    generationRuntime.generate(
+                        applyPromptCaching(
+                            {
+                                ...resolvedGenerationRequest,
+                                model: activePlannerProfile.providerModel,
+                                provider: activePlannerProfile.provider,
+                                capabilities: activePlannerProfile.capabilities,
+                                providerRouting:
+                                    activePlannerProfile.providerRouting,
+                                providerOptions:
+                                    activePlannerProfile.providerOptions,
+                                ...(useJsonMode && { jsonMode: true }),
+                                ...(safetyIdentifier !== undefined && {
+                                    safetyIdentifier,
+                                }),
+                            },
+                            activePlannerProfile,
+                            'planner',
+                            cacheSurface
+                        )
+                    );
                 const useJsonMode =
                     !forceParserCompatibility &&
                     activePlannerCapabilityFacts.jsonMode === 'supported';
@@ -749,6 +794,7 @@ export const createChatOrchestrator = ({
                     providerSettingResolution:
                         plannerResult.providerSettingResolution,
                     providerObservations: plannerResult.providerObservations,
+                    promptCache: plannerResult.promptCache,
                 };
             },
             allowTextJsonCompatibilityFallback:
@@ -1511,8 +1557,24 @@ export const createChatOrchestrator = ({
             };
         };
         const baseConversationMessages = [
-            { role: 'system' as const, content: promptLayers.systemPrompt },
-            { role: 'system' as const, content: personaPrompt },
+            {
+                role: 'system' as const,
+                content: promptLayers.systemPrompt,
+                cacheable: true,
+            },
+            ...(backendOwnedProfileOverlay === undefined
+                ? [
+                      {
+                          role: 'system' as const,
+                          content: promptLayers.personaPrompt,
+                          cacheable: true,
+                      },
+                      {
+                          role: 'system' as const,
+                          content: personaExpression.guidance,
+                      },
+                  ]
+                : [{ role: 'system' as const, content: personaPrompt }]),
             ...normalizedConversation,
         ];
         const baseConversationSnapshot = JSON.stringify({

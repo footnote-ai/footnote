@@ -38,18 +38,8 @@ export const promptKeys = [
 
 export type PromptKey = (typeof promptKeys)[number];
 
-/**
- * Tracks metadata used by downstream systems (for example cache hints).
- */
-export interface PromptCachePolicy {
-    strategy?: string;
-    ttlSeconds?: number;
-    [key: string]: unknown;
-}
-
 export interface PromptMetadata {
     description?: string;
-    cache?: PromptCachePolicy;
 }
 
 export interface PromptDefinition extends PromptMetadata {

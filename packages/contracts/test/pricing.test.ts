@@ -107,6 +107,8 @@ test('GPT-5.6 cache writes use 1.25 times the uncached input rate', () => {
     const result = estimateOpenAITextCost('gpt-5.6-terra', 200_000, 0, {
         cachedInputTokens: 0,
         cacheWriteTokens: 200_000,
+        cacheWrite30mTokens: 200_000,
+        cacheWrite12hTokens: 0,
     });
 
     assert.equal(result.inputCost, 0.25);

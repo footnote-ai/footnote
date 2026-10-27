@@ -39,6 +39,7 @@ type PlannerStepRecordSummary = {
     effectiveProfileId?: string;
     provider?: string;
     model?: string;
+    promptCache?: WorkflowAttemptRecord['promptCache'];
     usage?: StepRecord['usage'];
     cost?: StepRecord['cost'];
     mattered?: boolean;
@@ -177,6 +178,12 @@ export const buildPlannerStepRecord = ({
               cacheWriteTokens: toNonNegativeNumberOrUndefined(
                   summary.usage.cacheWriteTokens
               ),
+              cacheWrite30mTokens: toNonNegativeNumberOrUndefined(
+                  summary.usage.cacheWrite30mTokens
+              ),
+              cacheWrite12hTokens: toNonNegativeNumberOrUndefined(
+                  summary.usage.cacheWrite12hTokens
+              ),
               completionTokens: toNonNegativeNumberOrUndefined(
                   summary.usage.completionTokens
               ),
@@ -213,6 +220,9 @@ export const buildPlannerStepRecord = ({
         validatedCostOutput !== undefined &&
         validatedCostTotal !== undefined
             ? {
+                  ...(summary.cost?.cacheSavingsUsd === undefined
+                      ? {}
+                      : { cacheSavingsUsd: summary.cost.cacheSavingsUsd }),
                   inputCostUsd: validatedCostInput,
                   outputCostUsd: validatedCostOutput,
                   totalCostUsd: validatedCostTotal,
@@ -257,6 +267,9 @@ export const buildPlannerStepRecord = ({
         ...(summary.upstreamAttribution?.resolvedModel !== undefined && {
             actualModel: summary.upstreamAttribution.resolvedModel,
         }),
+        ...(summary.promptCache === undefined
+            ? {}
+            : { promptCache: summary.promptCache }),
         ...(hasUsage &&
             usage !== undefined && {
                 usage,
@@ -285,6 +298,9 @@ export const buildPlannerStepRecord = ({
                 ...(attempt.completion === undefined
                     ? {}
                     : { completion: attempt.completion }),
+                ...(attempt.promptCache === undefined
+                    ? {}
+                    : { promptCache: attempt.promptCache }),
                 ...(attempt.usage === undefined
                     ? {}
                     : { usage: attempt.usage }),

@@ -286,6 +286,9 @@ export const attachGenerationAttemptEvidence = (
             normalizedResult.model;
         return {
             ...attempt,
+            ...(normalizedResult.promptCache === undefined
+                ? {}
+                : { promptCache: normalizedResult.promptCache }),
             ...(normalizedResult.upstreamAttribution?.inferenceProvider !==
             undefined
                 ? {

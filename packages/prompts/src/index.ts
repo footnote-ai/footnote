@@ -11,7 +11,6 @@ export { renderPromptBundle } from './composition.js';
 export {
     promptKeys,
     type CreatePromptRegistryOptions,
-    type PromptCachePolicy,
     type PromptCatalog,
     type PromptDefinition,
     type PromptKey,

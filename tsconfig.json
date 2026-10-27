@@ -61,6 +61,7 @@
         "packages/**/*.ts",
         "packages/**/*.tsx",
         "scripts/**/*.ts",
+        "scripts/cache-probe.mts",
         "mcp/**/*.ts",
         "mcp/**/types/*.d.ts"
     ],

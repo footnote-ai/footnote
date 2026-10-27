@@ -6,6 +6,7 @@
  * @footnote-risk: high - This owns the live chat path, routing, fallback, and resource admission.
  * @footnote-ethics: high - Backend-owned topology and fail-open recovery determine what users are told and what evidence is retained.
  */
+import { applyPromptCaching } from '../workflowEngine/promptCaching.js';
 import {
     isGenerationRuntimeError,
     type GenerationRequest,
@@ -483,6 +484,9 @@ const toPlannerAttemptMetadata = (
             },
         }),
         ...(settings === undefined ? {} : { settings }),
+        ...(execution.promptCache === undefined
+            ? {}
+            : { promptCache: execution.promptCache }),
         ...(execution.providerObservations === undefined
             ? {}
             : { providerObservations: execution.providerObservations }),
@@ -540,6 +544,9 @@ const toAssessmentAttemptMetadata = (input: {
         completion: input.result.completion,
     }),
     ...(input.settings !== undefined && { settings: input.settings }),
+    ...(input.result.promptCache === undefined
+        ? {}
+        : { promptCache: input.result.promptCache }),
     ...(input.result.providerObservations !== undefined && {
         providerObservations: input.result.providerObservations,
     }),
@@ -703,6 +710,8 @@ const combineGenerationResultUsage = (
         promptTokens: sum((value) => value.promptTokens),
         cachedInputTokens: sum((value) => value.cachedInputTokens),
         cacheWriteTokens: sum((value) => value.cacheWriteTokens),
+        cacheWrite30mTokens: sum((value) => value.cacheWrite30mTokens),
+        cacheWrite12hTokens: sum((value) => value.cacheWrite12hTokens),
         completionTokens: sum((value) => value.completionTokens),
         reasoningTokens: sum((value) => value.reasoningTokens),
         totalTokens,
@@ -2110,6 +2119,9 @@ export const runBoundedReviewWorkflow = async (
                           result.draftResult?.providerSettingResolution
                       ),
                   }),
+            ...(result.draftResult?.promptCache === undefined
+                ? {}
+                : { promptCache: result.draftResult.promptCache }),
             ...(result.draftResult?.providerObservations === undefined
                 ? {}
                 : {
@@ -2407,17 +2419,28 @@ export const runBoundedReviewWorkflow = async (
                                   profile.capabilities
                               );
                           const result = normalizeGenerationResultEvidence(
-                              await generationRuntime.generate({
-                                  ...applyModelSettings(
-                                      boundedRequest,
-                                      settingsResolution.applied
-                                  ),
-                                  model: profile.providerModel,
-                                  provider: profile.provider,
-                                  capabilities: profile.capabilities,
-                                  providerRouting: profile.providerRouting,
-                                  providerOptions: profile.providerOptions,
-                              })
+                              await generationRuntime.generate(
+                                  applyPromptCaching(
+                                      {
+                                          ...applyModelSettings(
+                                              boundedRequest,
+                                              settingsResolution.applied
+                                          ),
+                                          model: profile.providerModel,
+                                          provider: profile.provider,
+                                          capabilities: profile.capabilities,
+                                          providerRouting:
+                                              profile.providerRouting,
+                                          providerOptions:
+                                              profile.providerOptions,
+                                      },
+                                      profile,
+                                      previousDraft === undefined
+                                          ? 'generation'
+                                          : 'revision',
+                                      contextEnvelope.diagnostics.surface
+                                  )
+                              )
                           );
                           generationAttempts.push(result);
                           generationAttemptsByIndex.set(attemptIndex, result);
@@ -2485,7 +2508,16 @@ export const runBoundedReviewWorkflow = async (
                 selectedProfile = routed.value.selected.profile;
             } else {
                 generationResult = normalizeGenerationResultEvidence(
-                    await generationRuntime.generate(boundedRequest)
+                    await generationRuntime.generate(
+                        applyPromptCaching(
+                            boundedRequest,
+                            undefined,
+                            previousDraft === undefined
+                                ? 'generation'
+                                : 'revision',
+                            contextEnvelope.diagnostics.surface
+                        )
+                    )
                 );
                 generationAttempts.push(generationResult);
                 selectedCapabilityFacts = resolveAttemptCapabilityFacts(
@@ -2596,6 +2628,9 @@ export const runBoundedReviewWorkflow = async (
             ...(attemptSettings === undefined
                 ? {}
                 : { settings: attemptSettings }),
+            ...(generationResult.promptCache === undefined
+                ? {}
+                : { promptCache: generationResult.promptCache }),
             ...(generationResult.providerObservations === undefined
                 ? {}
                 : {
@@ -2791,6 +2826,7 @@ export const runBoundedReviewWorkflow = async (
         // Native schema is authoritative, then JSON mode, then parser fallback;
         // each downgrade stays fail-open when transport metadata is unavailable.
         const runReviewGeneration = async (generationInput: {
+            profile?: ModelProfile;
             request: GenerationRequest;
             initialOutputPath: TypedModelOutputPath;
             capabilityFacts: ReturnType<typeof resolveAttemptCapabilityFacts>;
@@ -2815,7 +2851,14 @@ export const runBoundedReviewWorkflow = async (
                 try {
                     generationInput.request.signal?.throwIfAborted();
                     return normalizeGenerationResultEvidence(
-                        await generationRuntime.generate(requestForOutput)
+                        await generationRuntime.generate(
+                            applyPromptCaching(
+                                requestForOutput,
+                                generationInput.profile,
+                                'assessment',
+                                contextEnvelope.diagnostics.surface
+                            )
+                        )
                     );
                 } catch (error) {
                     generationInput.request.signal?.throwIfAborted();
@@ -2926,6 +2969,7 @@ export const runBoundedReviewWorkflow = async (
                           };
                           const result = await runReviewGeneration({
                               request: requestForProfile,
+                              profile,
                               initialOutputPath: outputPath,
                               capabilityFacts,
                               providerModel: profile.providerModel,
