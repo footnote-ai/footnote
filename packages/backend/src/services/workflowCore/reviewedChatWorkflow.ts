@@ -203,12 +203,14 @@ export type RunBoundedReviewWorkflowInput = {
     parseReviewDecision?: (text: string) => ReviewDecisionParseResult;
     captureUsage: (
         result: GenerationResult,
-        requestedModel: string | undefined
+        requestedModel: string | undefined,
+        provider?: string
     ) => ReviewWorkflowUsageSummary;
     /** Side-effect-free cost projection for nested routing attempts. */
     estimateCost?: (
         result: GenerationResult,
-        requestedModel: string | undefined
+        requestedModel: string | undefined,
+        provider?: string
     ) => ReviewWorkflowUsageSummary['estimatedCost'];
     plannerStepRecord?: StepRecord;
     plannerStepRequest?: PlannerStepRequest;
@@ -465,6 +467,9 @@ const toPlannerAttemptMetadata = (
         execution.providerSettingResolution
     );
     return {
+        ...(execution.routingChainAttempts?.length === 0
+            ? { routingAttempts: [] }
+            : withWorkflowRoutingAttempts(execution.routingChainAttempts)),
         ...(execution.reasonCode !== undefined && {
             reasonCode: execution.reasonCode,
         }),
@@ -961,10 +966,11 @@ export const runBoundedReviewWorkflow = async (
     // existing test seam without changing the workflow's usage-recording pass.
     const estimateAttemptCost = (
         result: GenerationResult,
-        requestedModel: string | undefined
+        requestedModel: string | undefined,
+        provider?: string
     ): ReviewWorkflowUsageSummary['estimatedCost'] =>
-        input.estimateCost?.(result, requestedModel) ??
-        captureUsage(result, requestedModel).estimatedCost;
+        input.estimateCost?.(result, requestedModel, provider) ??
+        captureUsage(result, requestedModel, provider).estimatedCost;
     const resolveAttemptCapabilityFacts = (
         provider: string | undefined,
         capabilities: ModelProfile['capabilities'] | undefined
@@ -2378,6 +2384,7 @@ export const runBoundedReviewWorkflow = async (
         }
         let generationResult: GenerationResult;
         const generationAttempts: GenerationResult[] = [];
+        const generationProviders = new WeakMap<GenerationResult, string>();
         const generationAttemptsByIndex = new Map<number, GenerationResult>();
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
@@ -2442,6 +2449,7 @@ export const runBoundedReviewWorkflow = async (
                                   )
                               )
                           );
+                          generationProviders.set(result, profile.provider);
                           generationAttempts.push(result);
                           generationAttemptsByIndex.set(attemptIndex, result);
                           return result;
@@ -2547,7 +2555,11 @@ export const runBoundedReviewWorkflow = async (
         }
         const usage = combineGenerationUsage(
             generationAttempts.map((attempt) =>
-                captureUsage(attempt, boundedRequest.model)
+                captureUsage(
+                    attempt,
+                    boundedRequest.model,
+                    generationProviders.get(attempt) ?? boundedRequest.provider
+                )
             ),
             routingAttempts,
             generationAttempts
@@ -2773,12 +2785,15 @@ export const runBoundedReviewWorkflow = async (
         }
         let reviewResult: GenerationResult;
         const reviewAttempts: GenerationResult[] = [];
+        const reviewProviders = new WeakMap<GenerationResult, string>();
         const reviewAttemptsByIndex = new Map<number, GenerationResult>();
         const recordStructuredOutputTransportFailure = (
             attempt: {
                 providerModel: string;
+                provider?: string;
                 model?: string;
                 usage?: GenerationUsage;
+                promptCache?: GenerationResult['promptCache'];
             },
             recordAttempt?: (attempt: RoutingChainInternalAttempt) => void
         ): void => {
@@ -2788,6 +2803,7 @@ export const runBoundedReviewWorkflow = async (
             const failureResult: GenerationResult = {
                 text: '',
                 model: attempt.model ?? attempt.providerModel,
+                promptCache: attempt.promptCache,
                 finishReason: 'structured_output_unavailable',
                 completion: {
                     status: 'failed',
@@ -2796,8 +2812,11 @@ export const runBoundedReviewWorkflow = async (
                 },
                 ...(attempt.usage !== undefined && { usage: attempt.usage }),
             };
+            if (attempt.provider !== undefined)
+                reviewProviders.set(failureResult, attempt.provider);
             reviewAttempts.push(failureResult);
             recordAttempt?.({
+                promptCache: attempt.promptCache,
                 status: 'failed_transport_fallback',
                 finishReason: failureResult.finishReason,
                 completion: failureResult.completion,
@@ -2850,7 +2869,7 @@ export const runBoundedReviewWorkflow = async (
                 const startedAtMs = Date.now();
                 try {
                     generationInput.request.signal?.throwIfAborted();
-                    return normalizeGenerationResultEvidence(
+                    const result = normalizeGenerationResultEvidence(
                         await generationRuntime.generate(
                             applyPromptCaching(
                                 requestForOutput,
@@ -2860,6 +2879,12 @@ export const runBoundedReviewWorkflow = async (
                             )
                         )
                     );
+                    const provider =
+                        generationInput.request.provider ??
+                        generationInput.profile?.provider;
+                    if (provider !== undefined)
+                        reviewProviders.set(result, provider);
+                    return result;
                 } catch (error) {
                     generationInput.request.signal?.throwIfAborted();
                     const finishedAtMs = Date.now();
@@ -2881,9 +2906,13 @@ export const runBoundedReviewWorkflow = async (
                     recordStructuredOutputTransportFailure(
                         {
                             providerModel: generationInput.providerModel,
+                            provider:
+                                generationInput.request.provider ??
+                                generationInput.profile?.provider,
                             ...(isGenerationRuntimeError(error) && {
                                 model: error.model,
                                 usage: error.usage,
+                                promptCache: error.promptCache,
                             }),
                         },
                         (attempt) =>
@@ -2904,7 +2933,10 @@ export const runBoundedReviewWorkflow = async (
                                             ? { usage: error.usage }
                                             : {}),
                                     },
-                                    generationInput.providerModel
+                                    generationInput.providerModel,
+                                    generationInput.request.provider ??
+                                        generationInput.profile?.provider ??
+                                        'unknown'
                                 ).estimatedCost,
                             })
                     );
@@ -2915,7 +2947,11 @@ export const runBoundedReviewWorkflow = async (
         const reviewUsage = (): ReviewWorkflowUsageSummary =>
             combineGenerationUsage(
                 reviewAttempts.map((attempt) =>
-                    captureUsage(attempt, bounded.model)
+                    captureUsage(
+                        attempt,
+                        bounded.model,
+                        reviewProviders.get(attempt) ?? bounded.provider
+                    )
                 ),
                 routingAttempts,
                 reviewAttempts

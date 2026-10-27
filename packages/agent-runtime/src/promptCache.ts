@@ -32,6 +32,8 @@ export const translatePromptCache = (
         );
     const receipt: PromptCacheReceipt = {
         mode: 'unsupported',
+        promptVersion: policy.promptVersion,
+        profileVersion: policy.profileVersion,
         purpose: policy.purpose,
         surface: policy.surface,
         ...(policy.ttlSeconds === undefined
@@ -46,6 +48,12 @@ export const translatePromptCache = (
         native: {},
         sdk: {},
     });
+    if (policy.enabled === false)
+        return {
+            receipt: { ...receipt, mode: 'disabled' },
+            native: {},
+            sdk: {},
+        };
     if (!validPrefix || !/^footnote:cache:v1:[a-f0-9]{64}$/.test(policy.key))
         return unsupported('no_stable_prefix');
     const model = request.model?.replace(/^openrouter\//, '') ?? '';

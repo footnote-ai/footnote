@@ -1325,6 +1325,14 @@ test('uses JSON mode after an explicit native schema transport rejection', async
                     },
                     {
                         model: request.model,
+                        promptCache: {
+                            mode: 'explicit',
+                            purpose: 'assessment',
+                            surface: 'web',
+                            stablePrefixTokensEstimate: 100,
+                            requestedTtlSeconds: 43200,
+                            appliedTtlSeconds: 43200,
+                        },
                         usage: {
                             promptTokens: 2_000,
                             completionTokens: 100,
@@ -1387,6 +1395,9 @@ test('uses JSON mode after an explicit native schema transport rejection', async
     );
     assert.equal(attempts[0]?.finishReason, 'structured_output_unavailable');
     assert.equal(attempts[0]?.completion?.status, 'failed');
+    assert.equal(attempts[0]?.promptCache?.surface, 'web');
+    assert.equal(attempts[0]?.promptCache?.purpose, 'assessment');
+    assert.equal(attempts[0]?.promptCache?.appliedTtlSeconds, 43200);
 });
 
 test('falls from JSON compatibility to parser compatibility with usage evidence', async () => {

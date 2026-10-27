@@ -1228,7 +1228,8 @@ export const createChatService = ({
 
     const estimateCostForStep = (
         result: GenerationResult,
-        requestedModel: string | undefined
+        requestedModel: string | undefined,
+        provider: string | undefined = defaultProvider
     ): ReturnType<typeof estimateBackendTextCost> => {
         const usageModel = result.model ?? requestedModel ?? defaultModel;
         return estimateBackendTextCost(
@@ -1244,14 +1245,16 @@ export const createChatService = ({
                     cacheWrite30mTokens: result.usage.cacheWrite30mTokens,
                     cacheWrite12hTokens: result.usage.cacheWrite12hTokens,
                 }),
-            }
+            },
+            provider
         );
     };
 
     const recordUsageForStep = (
         result: GenerationResult,
         requestedModel: string | undefined,
-        feature: BackendLLMCostRecord['feature'] = 'chat'
+        feature: BackendLLMCostRecord['feature'] = 'chat',
+        provider: string | undefined = defaultProvider
     ): {
         model: string;
         promptTokens: number;
@@ -1264,7 +1267,11 @@ export const createChatService = ({
         const completionTokens = result.usage?.completionTokens ?? 0;
         const totalTokens =
             result.usage?.totalTokens ?? promptTokens + completionTokens;
-        const estimatedCost = estimateCostForStep(result, requestedModel);
+        const estimatedCost = estimateCostForStep(
+            result,
+            requestedModel,
+            provider
+        );
 
         if (recordUsage) {
             try {
@@ -1538,7 +1545,12 @@ export const createChatService = ({
                         );
                         // Record every routed provider Attempt, including an
                         // inadmissible result that causes fail-open progression.
-                        recordUsageForStep(result, request.model);
+                        recordUsageForStep(
+                            result,
+                            request.model,
+                            'chat',
+                            profile.provider
+                        );
                         generationAttempts.push({ profile, result });
                         generationAttemptsByIndex.set(attemptIndex, result);
                         return result;
@@ -1737,8 +1749,13 @@ export const createChatService = ({
                     ...(sanitizedReviewModuleIds.length > 0 && {
                         reviewModuleIds: sanitizedReviewModuleIds,
                     }),
-                    captureUsage: (result, requestedModel) =>
-                        recordUsageForStep(result, requestedModel),
+                    captureUsage: (result, requestedModel, provider) =>
+                        recordUsageForStep(
+                            result,
+                            requestedModel,
+                            'chat',
+                            provider
+                        ),
                     estimateCost: estimateCostForStep,
                     plannerStepRequest,
                     plannerStepExecutor,
@@ -1777,7 +1794,8 @@ export const createChatService = ({
                             recordUsageForStep(
                                 result,
                                 profile.providerModel,
-                                feature
+                                feature,
+                                profile.provider
                             ),
                     },
                     personaExpressionGuidance:

@@ -144,8 +144,18 @@ export const estimateBackendTextCost = (
     model: string,
     promptTokens: number | undefined,
     completionTokens: number | undefined,
-    usageDetails: OpenAITextUsageDetails = {}
+    usageDetails: OpenAITextUsageDetails = {},
+    provider = 'openai'
 ): BackendTextCostEstimate => {
+    if (provider !== 'openai')
+        return {
+            inputCostUsd: 0,
+            outputCostUsd: 0,
+            totalCostUsd: 0,
+            costCompleteness: 'unknown',
+            costAppliedRules: [],
+            costIncompleteReasons: ['unpriced_model'],
+        };
     const pricingResolution = resolveOpenAITextPricingModel(model);
     if (!pricingResolution.matchedModel) {
         logger.warn(

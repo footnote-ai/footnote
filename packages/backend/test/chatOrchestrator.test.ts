@@ -18,6 +18,7 @@ import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import { runtimeConfig } from '../src/config.js';
 import { DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS } from '../src/services/chatPlanner.js';
+import { summarizePromptCaching } from '../src/services/workflowEngine/cacheMeasurements.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import { selectModelProfileForWorkflowStep } from '../src/services/modelCapabilityPolicy.js';
 import { resolveExecutionContract } from '../src/services/executionContractResolver.js';
@@ -2452,6 +2453,7 @@ test('planner native transport rejection falls back through JSON mode and parser
             profile.id === plannerProfile.id
                 ? {
                       ...profile,
+                      enabled: true,
                       provider: 'openai',
                       capabilities: {
                           ...profile.capabilities,
@@ -2520,6 +2522,7 @@ test('planner native transport rejection falls back through JSON mode and parser
                         model: request.model,
                         usage: {
                             promptTokens: 4,
+                            cachedInputTokens: 0,
                             completionTokens: 3,
                             totalTokens: 7,
                         },
@@ -2533,16 +2536,48 @@ test('planner native transport rejection falls back through JSON mode and parser
                 };
             }, 'voltagent'),
             storeTrace: async () => undefined,
-            buildResponseMetadata: () => createMetadata(),
+            buildResponseMetadata,
             defaultModel: plannerProfile.id,
             recordUsage: () => undefined,
         });
 
-        const response = await orchestrator.runChat(createChatRequest());
+        const response = await orchestrator.runChat(
+            createChatRequest({ plannerProfileId: plannerProfile.id })
+        );
         assert.equal(response.action, 'message');
         assert.ok(nativePlannerAttemptCount >= 1);
         assert.ok(jsonModePlannerAttemptCount >= 1);
         assert.ok(parserPlannerAttemptCount >= 1);
+        const workflow = response.metadata.workflow;
+        assert.ok(workflow);
+        const calls = workflow.steps
+            .filter((step) => step.stepKind === 'plan')
+            .flatMap((step) => step.attempts ?? [])
+            .flatMap((attempt) => attempt.routingAttempts ?? []);
+        assert.equal(
+            calls.length,
+            nativePlannerAttemptCount +
+                jsonModePlannerAttemptCount +
+                parserPlannerAttemptCount
+        );
+        assert.ok(
+            calls.every(
+                (call) =>
+                    call.cost !== undefined && call.durationMs !== undefined
+            )
+        );
+        assert.ok(
+            calls.every((call) => call.promptCache?.surface === 'discord')
+        );
+        const partial = summarizePromptCaching(workflow).find(
+            (summary) =>
+                summary.purpose === 'planner' &&
+                summary.readsReported > 0 &&
+                summary.readsReported < summary.attempts
+        );
+        assert.ok(partial);
+        assert.equal(partial.hitRate, undefined);
+        assert.equal(partial.cacheReadShare, undefined);
     } finally {
         runtimeConfigMutable.modelProfiles = originalModelProfiles;
         runtimeConfigMutable.openai = originalOpenAi;
@@ -3103,4 +3138,158 @@ test('orchestrator continues normal weather path when tool returns status ok', a
         (event) => event.kind === 'tool'
     );
     assert.equal(toolEvent?.clarification, undefined);
+});
+
+test('planner canonical attempts retain expansion, routed failures and exhausted-chain fallback exactly once', async () => {
+    const original = runtimeConfig.modelProfiles;
+    const mutable = runtimeConfig as unknown as {
+        modelProfiles: typeof original;
+    };
+    const base = original.catalog.find(
+        (profile) => profile.id === 'openai-text-fast'
+    )!;
+    const profiles = ['cache-fixture-a', 'cache-fixture-b'].map((id) => ({
+        ...base,
+        id,
+        enabled: true,
+        provider: 'openai' as const,
+        providerModel: 'gpt-5.6-luna',
+        promptCaching: undefined,
+    }));
+    mutable.modelProfiles = {
+        ...original,
+        plannerProfileId: profiles[0]!.id,
+        catalog: [...original.catalog, ...profiles],
+        stepRoutingChains: Object.fromEntries(
+            Object.entries(original.stepRoutingChains).map(([mode, chains]) => [
+                mode,
+                { ...chains, planner: profiles.map((profile) => profile.id) },
+            ])
+        ) as typeof original.stepRoutingChains,
+    };
+    try {
+        for (const scenario of [
+            'expansion',
+            'route',
+            'exhausted',
+            'pre-provider',
+        ] as const) {
+            let plannerCalls = 0;
+            const orchestrator = createChatOrchestrator({
+                generationRuntime: createGenerationRuntime(async (request) => {
+                    if (request.maxOutputTokens !== PLANNER_TOKEN_SENTINEL)
+                        return { text: 'fixture answer', model: request.model };
+                    plannerCalls += 1;
+                    if (scenario === 'pre-provider')
+                        throw Object.assign(new Error('fixture pre-provider'), {
+                            preProviderCallFailure: true,
+                        });
+                    if (
+                        (scenario === 'route' && plannerCalls === 1) ||
+                        (scenario === 'exhausted' && plannerCalls <= 2)
+                    ) {
+                        throw new GenerationRuntimeError(
+                            'fixture transient',
+                            { classification: 'transient' },
+                            {
+                                model: request.model,
+                                usage: { promptTokens: 10 },
+                            }
+                        );
+                    }
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            requestedCapabilityProfile: 'balanced-general',
+                            contextNeed:
+                                scenario === 'expansion' && plannerCalls === 1
+                                    ? 'needs_more_context'
+                                    : 'sufficient',
+                            contextTier: 'expanded_recent',
+                            safetyTier: 'Low',
+                            reasoning: 'fixture',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                                temperament: {
+                                    tightness: 4,
+                                    rationale: 3,
+                                    attribution: 4,
+                                    caution: 3,
+                                    extent: 4,
+                                },
+                            },
+                        }),
+                        model: request.model,
+                        usage: {
+                            promptTokens: 20,
+                            completionTokens: 1,
+                            cachedInputTokens: 0,
+                            cacheWriteTokens: 0,
+                            totalTokens: 21,
+                        },
+                    };
+                }),
+                storeTrace: async () => undefined,
+                buildResponseMetadata,
+                defaultModel: original.defaultProfileId,
+                recordUsage: () => undefined,
+            });
+            const response = await orchestrator.runChat(
+                createChatRequest({
+                    conversation: Array.from({ length: 10 }, (_, index) => ({
+                        role:
+                            index % 2 === 0
+                                ? ('user' as const)
+                                : ('assistant' as const),
+                        content: `fixture ${index}`,
+                    })),
+                })
+            );
+            assert.ok(response.metadata);
+            const calls = response.metadata
+                .workflow!.steps.filter((step) => step.stepKind === 'plan')
+                .flatMap((step) => step.attempts ?? [])
+                .flatMap((attempt) => attempt.routingAttempts ?? [])
+                .filter((call) => !call.status.startsWith('skipped'));
+            assert.equal(
+                plannerCalls,
+                scenario === 'exhausted' || scenario === 'pre-provider' ? 3 : 2,
+                scenario
+            );
+            assert.equal(
+                calls.length,
+                scenario === 'pre-provider' ? 0 : plannerCalls,
+                scenario
+            );
+            if (scenario === 'pre-provider') {
+                assert.deepEqual(
+                    summarizePromptCaching(response.metadata.workflow!).filter(
+                        (summary) => summary.purpose === 'planner'
+                    ),
+                    []
+                );
+                continue;
+            }
+            assert.ok(
+                calls.every(
+                    (call) =>
+                        call.durationMs !== undefined && call.cost !== undefined
+                ),
+                scenario
+            );
+            assert.deepEqual(
+                calls.map((call) => call.profileId),
+                scenario === 'expansion'
+                    ? [profiles[0]!.id, profiles[0]!.id]
+                    : scenario === 'route'
+                      ? profiles.map((profile) => profile.id)
+                      : [profiles[0]!.id, profiles[1]!.id, profiles[0]!.id],
+                scenario
+            );
+        }
+    } finally {
+        mutable.modelProfiles = original;
+    }
 });

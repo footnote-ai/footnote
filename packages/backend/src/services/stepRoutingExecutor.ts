@@ -81,6 +81,8 @@ export type RoutingChainInternalAttempt = Pick<
     | 'cost'
     | 'startedAtMs'
     | 'finishedAtMs'
+    | 'actualModel'
+    | 'actualProvider'
 >;
 
 export type RoutingChainExecutionResult<TSuccess> =

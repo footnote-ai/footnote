@@ -10,6 +10,9 @@ import { z } from 'zod';
 /** Backend-owned intent for one model request; keys never contain caller data. */
 export interface PromptCachePolicy {
     key: string;
+    enabled?: boolean;
+    promptVersion?: string;
+    profileVersion?: string;
     stablePrefixMessages: number;
     ttlSeconds?: number;
     purpose:
@@ -19,7 +22,15 @@ export interface PromptCachePolicy {
 
 export const PromptCacheReceiptSchema = z
     .object({
-        mode: z.enum(['automatic', 'explicit', 'unsupported']),
+        mode: z.enum(['automatic', 'explicit', 'unsupported', 'disabled']),
+        promptVersion: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        profileVersion: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
         purpose: z.enum([
             'planner',
             'generation',
@@ -57,6 +68,14 @@ export const PromptCacheSummarySchema = z
         provider: z.string().max(128),
         model: z.string().max(256),
         surface: z.enum(['web', 'discord', 'unknown']),
+        promptVersion: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        profileVersion: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
         attempts: z.number().int().nonnegative(),
         inputReported: z.number().int().nonnegative(),
         readsReported: z.number().int().nonnegative(),

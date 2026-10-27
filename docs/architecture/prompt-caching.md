@@ -56,7 +56,7 @@ and [provider retention](provider-retention.md).
 Raw provider fields are normalized before SDK placeholders can turn missing
 cache reads into zero or discard writes. Attempts retain read/write counts,
 reported 30-minute/12-hour write breakdowns, and a text-free request-side cache
-receipt. The receipt describes applied controls, not an observed cache hit.
+receipt. Purpose, surface, and separate hashes of the trusted prompt/schema and selected profile configuration remain available with deliberate controls disabled (`mode: disabled`). Summaries group by these versions without exposing the cache key or profile name. Planner transport fallbacks and context expansion retain each logical provider call separately; SDK-internal wire retries have no independent usage receipt. The receipt describes applied controls, not an observed cache hit.
 Its prefix-token count is a character-based approximation, not provider-confirmed
 eligibility. Nothing is padded in production to reach a cache threshold.
 
@@ -124,3 +124,26 @@ not prove that Footnote's controls improve spend: DeepSeek receives no explicit
 controls, its backend pricing is unknown, two ordinary generation candidate
 cells failed, and there is no direct OpenAI live result. Deliberate controls stay
 disabled by default. No deployment or production settings were changed.
+
+## Local validation
+
+The implementation was checked on October 27, 2026, with 250 passing focused
+checks: 242 runtime/backend/contracts/probe checks, two orchestrator regressions
+(including expansion, routed failure, exhausted fallback, and pre-provider
+failure scenarios), and six planner-record checks. `pnpm review`,
+`pnpm validate-openapi-links`, and the complete `pnpm -r build` passed.
+Standards and spec reviews were completed, and the accounting findings were
+fixed and re-reviewed.
+
+Broader runs reproduced existing failures on the unchanged main checkout:
+five orchestrator cases depend on the locally enabled provider catalog, one
+planner-reentry case fails, and one ModelInput fixture assertion fails. Those
+unrelated cases remain outside this change. The new native fallback regression
+now enables its synthetic profile explicitly rather than relying on credentials.
+
+`pnpm test:build` could not finish: Docker remained at image-building startup,
+and a separate bounded Docker version check could not obtain server information.
+Container packaging remains unverified. Direct OpenAI live behavior and causal
+financial savings also remain unverified; the checked-in experiment is limited
+to the synthetic OpenRouter observations above. No production enablement,
+publication, or deployment was performed.

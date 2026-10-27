@@ -111,6 +111,8 @@ test('estimateBackendTextCost reports complete GPT-5.6 cache-aware pricing', () 
     const cost = estimateBackendTextCost('gpt-5.6-terra', 200_000, 100_000, {
         cachedInputTokens: 100_000,
         cacheWriteTokens: 50_000,
+        cacheWrite30mTokens: 50_000,
+        cacheWrite12hTokens: 0,
     });
 
     assert.ok(Math.abs(cost.inputCostUsd - 0.1225) < 1e-12);
@@ -174,4 +176,30 @@ test('estimateBackendTextCost marks GPT-5.6 cost partial when cache details are 
         'cached_input_tokens_unavailable',
         'cache_write_tokens_unavailable',
     ]);
+});
+
+test('OpenRouter OpenAI model ids cannot inherit direct OpenAI pricing or savings', () => {
+    const usage = { cachedInputTokens: 800, cacheWriteTokens: 0 };
+    const direct = estimateBackendTextCost(
+        'openai/gpt-5.6-luna',
+        1000,
+        10,
+        usage,
+        'openai'
+    );
+    assert.equal(direct.costCompleteness, 'complete');
+    assert.ok(direct.cacheSavingsUsd! > 0);
+    for (const provider of ['openrouter', 'ollama', 'unknown']) {
+        const routed = estimateBackendTextCost(
+            'openai/gpt-5.6-luna',
+            1000,
+            10,
+            usage,
+            provider
+        );
+        assert.equal(routed.costCompleteness, 'unknown');
+        assert.equal(routed.cacheSavingsUsd, undefined);
+        assert.equal(routed.totalCostUsd, 0);
+        assert.deepEqual(routed.costIncompleteReasons, ['unpriced_model']);
+    }
 });

@@ -2117,6 +2117,13 @@ components:
                         - automatic
                         - explicit
                         - unsupported
+                        - disabled
+                promptVersion:
+                    type: string
+                    pattern: '^[a-f0-9]{64}$'
+                profileVersion:
+                    type: string
+                    pattern: '^[a-f0-9]{64}$'
                 purpose:
                     type: string
                     enum:
@@ -2182,6 +2189,12 @@ components:
                         - web
                         - discord
                         - unknown
+                promptVersion:
+                    type: string
+                    pattern: '^[a-f0-9]{64}$'
+                profileVersion:
+                    type: string
+                    pattern: '^[a-f0-9]{64}$'
                 attempts:
                     type: integer
                     minimum: 0

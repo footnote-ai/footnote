@@ -238,6 +238,8 @@ const publicCacheReceipt = (
         surface: receipt.surface,
         requestedTtlSeconds: receipt.requestedTtlSeconds,
         appliedTtlSeconds: receipt.appliedTtlSeconds,
+        promptVersion: receipt.promptVersion,
+        profileVersion: receipt.profileVersion,
         stablePrefixTokensEstimate: receipt.stablePrefixTokensEstimate,
     });
     return parsed.success ? parsed.data : undefined;

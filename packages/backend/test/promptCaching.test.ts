@@ -8,8 +8,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ModelProfile } from '@footnote/contracts';
-import type { GenerationRequest } from '@footnote/agent-runtime';
+import {
+    translatePromptCache,
+    GenerationRuntimeError,
+    type GenerationRequest,
+} from '@footnote/agent-runtime';
 import { applyPromptCaching } from '../src/services/workflowEngine/promptCaching.js';
+import { observePlannerCall } from '../src/services/workflowEngine/plannerMeasurements.js';
+import type { RoutingChainInternalAttempt } from '../src/services/stepRoutingExecutor.js';
 import { summarizePromptCaching } from '../src/services/workflowEngine/cacheMeasurements.js';
 import { createOpenAiChatPlannerStructuredExecutor } from '../src/services/chatPlannerStructuredOpenAi.js';
 import type { WorkflowRecord } from '@footnote/contracts/policy';
@@ -146,6 +152,7 @@ test('cache identity excludes volatile clock, caller identifiers, and evidence b
     assert.notEqual(prefixChange?.key, initial?.key);
     for (const [selected, purpose, surface] of [
         [{ ...profile, providerModel: 'gpt-5.6-terra' }, 'generation', 'web'],
+        [{ ...profile, defaultReasoningEffort: 'high' }, 'generation', 'web'],
         [profile, 'assessment', 'web'],
         [profile, 'generation', 'discord'],
     ] as const)
@@ -159,7 +166,12 @@ test('cache identity excludes volatile clock, caller identifiers, and evidence b
         { ...profile, promptCaching: { enabled: false } },
         'generation'
     );
-    assert.equal(disabled.promptCache, undefined);
+    assert.equal(disabled.promptCache?.enabled, false);
+    assert.equal(disabled.promptCache?.promptVersion, initial?.promptVersion);
+    assert.notEqual(
+        disabled.promptCache?.profileVersion,
+        initial?.profileVersion
+    );
     assert.deepEqual(disabled.messages, request.messages);
 });
 
@@ -236,4 +248,106 @@ test('cache summary counts failed and successful nested routes once and preserve
     assert.equal(summary?.cacheWriteReadRatio, undefined);
     assert.equal(summary?.cacheSavingsUsd, undefined);
     assert.equal(JSON.stringify(summary).includes('private-route'), false);
+});
+
+test('disabled controls retain version attribution without changing provider wire options', () => {
+    const observed = applyPromptCaching(
+        request,
+        { ...profile, promptCaching: undefined },
+        'generation',
+        'web'
+    );
+    const translated = translatePromptCache(observed);
+    assert.equal(translated?.receipt.mode, 'disabled');
+    assert.equal(translated?.receipt.surface, 'web');
+    assert.match(translated?.receipt.promptVersion ?? '', /^[a-f0-9]{64}$/);
+    assert.match(translated?.receipt.profileVersion ?? '', /^[a-f0-9]{64}$/);
+    assert.deepEqual(translated?.native, {});
+    assert.deepEqual(translated?.sdk, {});
+    assert.equal(translated?.breakpoint, undefined);
+});
+
+test('planner measurements retain missing, zero, failed calls, costs and durations independently', async () => {
+    const attempts: RoutingChainInternalAttempt[] = [];
+    const observed = applyPromptCaching(
+        { ...request, model: 'gpt-5.6-luna', provider: 'openai' },
+        profile,
+        'planner',
+        'web'
+    );
+    await assert.rejects(
+        observePlannerCall(
+            observed,
+            async () => {
+                throw new GenerationRuntimeError(
+                    'fixture',
+                    { classification: 'structured_output_unavailable' },
+                    { usage: { promptTokens: 10 } }
+                );
+            },
+            (attempt) => attempts.push(attempt)
+        )
+    );
+    await observePlannerCall(
+        observed,
+        async () => ({
+            model: 'gpt-5.6-luna',
+            usage: {
+                promptTokens: 12,
+                completionTokens: 1,
+                cachedInputTokens: 0,
+                cacheWriteTokens: 0,
+            },
+        }),
+        (attempt) => attempts.push(attempt)
+    );
+    assert.equal(attempts.length, 2);
+    assert.equal(attempts[0]?.usage?.cachedInputTokens, undefined);
+    assert.equal(attempts[1]?.usage?.cachedInputTokens, 0);
+    assert.equal(attempts[1]?.cost?.costCompleteness, 'complete');
+    assert.ok(
+        attempts.every(
+            (attempt) => attempt.finishedAtMs! >= attempt.startedAtMs!
+        )
+    );
+    assert.ok(
+        attempts.every((attempt) => attempt.promptCache?.purpose === 'planner')
+    );
+    await assert.rejects(
+        observePlannerCall(
+            observed,
+            async () => {
+                throw Object.assign(new Error('before provider'), {
+                    preProviderCallFailure: true,
+                });
+            },
+            (attempt) => attempts.push(attempt)
+        )
+    );
+    assert.equal(attempts.length, 2);
+});
+
+test('planner canonical receipts retain actual router attribution without direct-provider savings', async () => {
+    const attempts: RoutingChainInternalAttempt[] = [];
+    await observePlannerCall(
+        { ...request, provider: 'openrouter', model: 'openai/gpt-5.6-luna' },
+        async () => ({
+            model: 'openai/gpt-5.6-luna',
+            upstreamAttribution: {
+                resolvedModel: 'gpt-5.6-luna-2026-10-01',
+                inferenceProvider: 'fixture-router-host',
+            },
+            usage: {
+                promptTokens: 1000,
+                completionTokens: 1,
+                cachedInputTokens: 800,
+                cacheWriteTokens: 0,
+            },
+        }),
+        (attempt) => attempts.push(attempt)
+    );
+    assert.equal(attempts[0]?.actualModel, 'gpt-5.6-luna-2026-10-01');
+    assert.equal(attempts[0]?.actualProvider, 'fixture-router-host');
+    assert.equal(attempts[0]?.cost?.costCompleteness, 'unknown');
+    assert.equal(attempts[0]?.cost?.cacheSavingsUsd, undefined);
 });

@@ -259,7 +259,8 @@ export const attachGenerationAttemptEvidence = (
     options?: {
         captureCost?: (
             result: GenerationResult,
-            requestedModel: string | undefined
+            requestedModel: string | undefined,
+            provider?: string
         ) => BackendTextCostEstimate;
     }
 ): RoutingChainAttemptLog[] =>
@@ -280,7 +281,11 @@ export const attachGenerationAttemptEvidence = (
             return attempt;
         }
         const normalizedResult = normalizeGenerationResultEvidence(result);
-        const cost = options?.captureCost?.(result, attempt.model);
+        const cost = options?.captureCost?.(
+            result,
+            attempt.model,
+            attempt.provider
+        );
         const actualModel =
             normalizedResult.upstreamAttribution?.resolvedModel ??
             normalizedResult.model;

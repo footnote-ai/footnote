@@ -29,9 +29,7 @@ export const summarizePromptCaching = (
         )
             continue;
         for (const parent of step.attempts ?? []) {
-            const attempts = parent.routingAttempts?.length
-                ? parent.routingAttempts
-                : [parent];
+            const attempts = parent.routingAttempts ?? [parent];
             for (const attempt of attempts) {
                 if (
                     attempt.status.startsWith('skipped') ||
@@ -55,11 +53,21 @@ export const summarizePromptCaching = (
                     parent.requestedProvider ??
                     'unknown';
                 const model =
+                    attempt.actualModel ??
                     attempt.requestedModel ??
                     parent.requestedModel ??
                     'unknown';
                 const surface = attempt.promptCache?.surface ?? 'unknown';
-                const key = JSON.stringify([purpose, provider, model, surface]);
+                const promptVersion = attempt.promptCache?.promptVersion;
+                const profileVersion = attempt.promptCache?.profileVersion;
+                const key = JSON.stringify([
+                    purpose,
+                    provider,
+                    model,
+                    surface,
+                    promptVersion,
+                    profileVersion,
+                ]);
                 let group = groups.get(key);
                 if (group === undefined) {
                     group = {
@@ -68,6 +76,8 @@ export const summarizePromptCaching = (
                             provider,
                             model,
                             surface,
+                            promptVersion,
+                            profileVersion,
                             attempts: 0,
                             inputReported: 0,
                             readsReported: 0,
@@ -113,7 +123,8 @@ export const summarizePromptCaching = (
         summary.cacheWriteTokens = sum(
             (attempt) => attempt.usage?.cacheWriteTokens
         );
-        summary.durationMs = sum((attempt) => attempt.durationMs);
+        if (values.every((attempt) => attempt.durationMs !== undefined))
+            summary.durationMs = sum((attempt) => attempt.durationMs);
         const complete = values.every(
             (attempt) => attempt.cost?.costCompleteness === 'complete'
         );
@@ -135,7 +146,11 @@ export const summarizePromptCaching = (
             summary.inputReported === values.length &&
             summary.readsReported === values.length &&
             (summary.inputTokens ?? 0) > 0 &&
-            (summary.cacheReadTokens ?? 0) <= summary.inputTokens!
+            values.every(
+                (attempt) =>
+                    attempt.usage!.cachedInputTokens! <=
+                    attempt.usage!.promptTokens!
+            )
         )
             summary.cacheReadShare =
                 summary.cacheReadTokens! / summary.inputTokens!;

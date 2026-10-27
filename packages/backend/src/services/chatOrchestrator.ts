@@ -72,7 +72,12 @@ import {
 } from './contextIntegrations/projectContext/wiring.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { resolveStepRoutingChain } from './stepRoutingChains.js';
-import { executeStepRoutingChain } from './stepRoutingExecutor.js';
+import {
+    executeStepRoutingChain,
+    type RoutingChainInternalAttempt,
+} from './stepRoutingExecutor.js';
+import { observePlannerCall } from './workflowEngine/plannerMeasurements.js';
+import { combineBackendTextCostEstimates } from './llmCostRecorder.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
 import { toSnapshotContextEnvelope } from './conversationContextService.js';
 import { runtimeConfig } from '../config.js';
@@ -176,6 +181,16 @@ const combinePlannerUsage = (
         'totalTokens',
     ];
     for (const field of fields) {
+        if (
+            [
+                'cachedInputTokens',
+                'cacheWriteTokens',
+                'cacheWrite30mTokens',
+                'cacheWrite12hTokens',
+            ].includes(field) &&
+            (first?.[field] === undefined || second?.[field] === undefined)
+        )
+            continue;
         const value = addPlannerUsageField(first?.[field], second?.[field]);
         if (value !== undefined) {
             combined[field] = value;
@@ -287,6 +302,7 @@ export const createChatOrchestrator = ({
     const createRuntimeChatPlanner = (
         getActivePlannerProfile: () => ModelProfile,
         safetyIdentifier: string | undefined,
+        getCallRecorder: () => (attempt: RoutingChainInternalAttempt) => void,
         signal?: AbortSignal
     ) => {
         const hasStructuredPlannerProfile = catalogProfiles.some(
@@ -301,6 +317,14 @@ export const createChatOrchestrator = ({
             hasStructuredPlannerProfile &&
             generationRuntime.kind !== 'test-runtime';
 
+        const generatePlanner = (
+            request: Parameters<typeof generationRuntime.generate>[0]
+        ) =>
+            observePlannerCall(
+                request,
+                () => generationRuntime.generate(request),
+                getCallRecorder()
+            );
         return createChatPlanner({
             availableCapabilityProfiles: plannerCapabilityOptions,
             availableTrustGraphTargets:
@@ -349,39 +373,36 @@ export const createChatOrchestrator = ({
                     if (outputPath !== 'native_schema') {
                         let compatibilityResult: GenerationResult;
                         try {
-                            compatibilityResult =
-                                await generationRuntime.generate(
-                                    applyPromptCaching(
-                                        {
-                                            ...resolvedRequest,
-                                            messages:
-                                                compatibilityMessages?.() ??
-                                                resolvedRequest.messages,
-                                            model: activePlannerProfile.providerModel,
-                                            provider:
-                                                activePlannerProfile.provider,
-                                            capabilities:
-                                                activePlannerProfile.capabilities,
-                                            providerRouting:
-                                                activePlannerProfile.providerRouting,
-                                            providerOptions:
-                                                activePlannerProfile.providerOptions,
-                                            maxOutputTokens:
-                                                resolvedMaxOutputTokens,
-                                            ...(activePlannerCapabilityFacts.jsonMode ===
-                                                'supported' && {
-                                                jsonMode: true,
-                                            }),
-                                            ...(safetyIdentifier !==
-                                                undefined && {
-                                                safetyIdentifier,
-                                            }),
-                                        },
-                                        activePlannerProfile,
-                                        'planner',
-                                        request.cacheSurface
-                                    )
-                                );
+                            compatibilityResult = await generatePlanner(
+                                applyPromptCaching(
+                                    {
+                                        ...resolvedRequest,
+                                        messages:
+                                            compatibilityMessages?.() ??
+                                            resolvedRequest.messages,
+                                        model: activePlannerProfile.providerModel,
+                                        provider: activePlannerProfile.provider,
+                                        capabilities:
+                                            activePlannerProfile.capabilities,
+                                        providerRouting:
+                                            activePlannerProfile.providerRouting,
+                                        providerOptions:
+                                            activePlannerProfile.providerOptions,
+                                        maxOutputTokens:
+                                            resolvedMaxOutputTokens,
+                                        ...(activePlannerCapabilityFacts.jsonMode ===
+                                            'supported' && {
+                                            jsonMode: true,
+                                        }),
+                                        ...(safetyIdentifier !== undefined && {
+                                            safetyIdentifier,
+                                        }),
+                                    },
+                                    activePlannerProfile,
+                                    'planner',
+                                    request.cacheSurface
+                                )
+                            );
                         } catch (error) {
                             const outcome = isTypedOutputTransportUnavailable(
                                 error
@@ -404,6 +425,7 @@ export const createChatOrchestrator = ({
                                         : undefined
                                 );
                             throw Object.assign(failure, {
+                                plannerProvider: activePlannerProfile.provider,
                                 plannerModel:
                                     runtimeEvidence?.model ??
                                     activePlannerProfile.providerModel,
@@ -430,6 +452,7 @@ export const createChatOrchestrator = ({
                                         : undefined
                                 );
                             throw Object.assign(failure, {
+                                plannerProvider: activePlannerProfile.provider,
                                 plannerModel:
                                     compatibilityResult.model ??
                                     activePlannerProfile.providerModel,
@@ -502,10 +525,11 @@ export const createChatOrchestrator = ({
                         directOpenAiStructuredExecutor !== undefined
                     ) {
                         try {
-                            return await directOpenAiStructuredExecutor(
+                            return await observePlannerCall(
                                 applyPromptCaching(
                                     {
                                         ...resolvedRequest,
+                                        provider: activePlannerProfile.provider,
                                         model: activePlannerProfile.providerModel,
                                         structuredOutput:
                                             chatPlannerDecisionStructuredOutput,
@@ -518,7 +542,9 @@ export const createChatOrchestrator = ({
                                     activePlannerProfile,
                                     'planner',
                                     request.cacheSurface
-                                )
+                                ),
+                                directOpenAiStructuredExecutor,
+                                getCallRecorder()
                             );
                         } catch (error) {
                             if (error instanceof SyntaxError) {
@@ -541,6 +567,7 @@ export const createChatOrchestrator = ({
                                 ? error
                                 : undefined;
                             throw Object.assign(failure, {
+                                plannerProvider: activePlannerProfile.provider,
                                 plannerModel:
                                     runtimeEvidence?.model ??
                                     activePlannerProfile.providerModel,
@@ -552,7 +579,7 @@ export const createChatOrchestrator = ({
                     }
 
                     try {
-                        const result = await generationRuntime.generate(
+                        const result = await generatePlanner(
                             applyPromptCaching(
                                 {
                                     ...resolvedRequest,
@@ -589,6 +616,7 @@ export const createChatOrchestrator = ({
                                     cause === undefined ? undefined : { cause }
                                 );
                             throw Object.assign(failure, {
+                                plannerProvider: activePlannerProfile.provider,
                                 plannerModel:
                                     result.model ??
                                     activePlannerProfile.providerModel,
@@ -653,6 +681,7 @@ export const createChatOrchestrator = ({
                             ? error
                             : undefined;
                         throw Object.assign(failure, {
+                            plannerProvider: activePlannerProfile.provider,
                             plannerModel:
                                 runtimeEvidence?.model ??
                                 activePlannerProfile.providerModel,
@@ -699,7 +728,7 @@ export const createChatOrchestrator = ({
                 const executePlannerGeneration = (
                     useJsonMode: boolean
                 ): Promise<GenerationResult> =>
-                    generationRuntime.generate(
+                    generatePlanner(
                         applyPromptCaching(
                             {
                                 ...resolvedGenerationRequest,
@@ -829,9 +858,14 @@ export const createChatOrchestrator = ({
             },
             chatOrchestratorLogger
         );
+        let plannerCalls: RoutingChainInternalAttempt[] = [];
         const chatPlanner = createRuntimeChatPlanner(
             () => activePlannerProfile,
             safetyIdentifier,
+            () => {
+                const calls = plannerCalls;
+                return (attempt) => calls.push(attempt);
+            },
             context?.signal
         );
         const isWeatherLikeRequest = (input: string): boolean => {
@@ -1057,12 +1091,18 @@ export const createChatOrchestrator = ({
                 enabledProfilesById,
                 allProfilesById
             );
+            const callsByCandidate = new Map<
+                number,
+                RoutingChainInternalAttempt[]
+            >();
             const chainResult = await executeStepRoutingChain({
                 step: 'planner',
                 candidates: plannerCandidates,
                 enabledProfilesById,
                 requiresSearch: false,
-                runWithProfile: async (profile) => {
+                runWithProfile: async (profile, index) => {
+                    plannerCalls = [];
+                    callsByCandidate.set(index, plannerCalls);
                     context?.signal?.throwIfAborted();
                     activePlannerProfile = profile;
                     const plannerResult = await chatPlanner.planChat(
@@ -1093,6 +1133,26 @@ export const createChatOrchestrator = ({
                         : undefined,
             });
 
+            const measuredAttempts = chainResult.attempts.flatMap((route) => {
+                const calls = callsByCandidate.get(route.index);
+                return calls === undefined
+                    ? [route]
+                    : calls.map((call) => ({ ...route, ...call }));
+            });
+            const accounting = () => {
+                const calls = measuredAttempts.filter(
+                    (call) => !call.status.startsWith('skipped')
+                );
+                let usage = calls[0]?.usage;
+                for (const call of calls.slice(1))
+                    usage = combinePlannerUsage(usage, call.usage);
+                return {
+                    usage,
+                    cost: combineBackendTextCostEstimates(
+                        calls.map((call) => call.cost)
+                    ),
+                };
+            };
             if (chainResult.status === 'executed') {
                 activePlannerProfile = chainResult.selected.profile;
                 const base = toPlannerStepResult(chainResult.value);
@@ -1100,12 +1160,14 @@ export const createChatOrchestrator = ({
                     ...base,
                     execution: {
                         ...base.execution,
-                        routingChainAttempts: chainResult.attempts,
+                        ...accounting(),
+                        routingChainAttempts: measuredAttempts,
                     },
                 };
             }
 
             activePlannerProfile = plannerProfile;
+            plannerCalls = [];
             context?.signal?.throwIfAborted();
             const fallback = toPlannerStepResult(
                 await chatPlanner.planChat(
@@ -1113,11 +1175,23 @@ export const createChatOrchestrator = ({
                     input.invocationContext
                 )
             );
+            measuredAttempts.push(
+                ...plannerCalls.map((call) => ({
+                    index: plannerCandidates.length,
+                    step: 'planner' as const,
+                    profileId: plannerProfile.id,
+                    provider: plannerProfile.provider,
+                    model: plannerProfile.providerModel,
+                    chooseOneUsed: false,
+                    ...call,
+                }))
+            );
             return {
                 ...fallback,
                 execution: {
                     ...fallback.execution,
-                    routingChainAttempts: chainResult.attempts,
+                    ...accounting(),
+                    routingChainAttempts: measuredAttempts,
                 },
             };
         };

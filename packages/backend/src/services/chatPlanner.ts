@@ -227,6 +227,7 @@ type CreateChatPlannerOptions = {
 
 type PlannerFailureUsage = {
     model: string;
+    provider?: string;
     usage?: GenerationUsage;
 };
 
@@ -261,6 +262,7 @@ const readPlannerFailureUsage = (
     }
     const candidate = error as {
         plannerModel?: unknown;
+        plannerProvider?: unknown;
         plannerUsage?: unknown;
     };
     const usage = normalizeGenerationUsage(candidate.plannerUsage);
@@ -270,6 +272,10 @@ const readPlannerFailureUsage = (
                 ? candidate.plannerModel
                 : requestedModel,
         usage,
+        provider:
+            typeof candidate.plannerProvider === 'string'
+                ? candidate.plannerProvider
+                : undefined,
     };
 };
 
@@ -1966,13 +1972,17 @@ export const createChatPlanner = ({
                     }),
                     ...(plannerUsageTotals.cacheWriteTokens !== undefined && {
                         cacheWriteTokens: plannerUsageTotals.cacheWriteTokens,
+                    }),
+                    ...(plannerUsageTotals.cacheWrite30mTokens !==
+                        undefined && {
                         cacheWrite30mTokens:
                             plannerUsageTotals.cacheWrite30mTokens,
+                    }),
+                    ...(plannerUsageTotals.cacheWrite12hTokens !==
+                        undefined && {
                         cacheWrite12hTokens:
                             plannerUsageTotals.cacheWrite12hTokens,
                     }),
-                    cacheWrite30mTokens: plannerUsageTotals.cacheWrite30mTokens,
-                    cacheWrite12hTokens: plannerUsageTotals.cacheWrite12hTokens,
                     completionTokens: plannerUsageTotals.completionTokens,
                     totalTokens: plannerUsageTotals.totalTokens,
                     ...(plannerUsageTotals.reasoningTokens !== undefined && {
@@ -1987,7 +1997,8 @@ export const createChatPlanner = ({
 
         const recordPlannerUsage = (
             usageModel: string,
-            usage?: GenerationUsage
+            usage?: GenerationUsage,
+            provider?: string
         ) => {
             const normalizedUsage = normalizeGenerationUsage(usage);
             const promptTokens = normalizedUsage?.promptTokens ?? 0;
@@ -2009,7 +2020,8 @@ export const createChatPlanner = ({
                         cacheWrite12hTokens:
                             normalizedUsage.cacheWrite12hTokens,
                     }),
-                }
+                },
+                provider
             );
             if (normalizedUsage !== undefined) {
                 plannerUsageRecorded = true;
@@ -2088,11 +2100,19 @@ export const createChatPlanner = ({
                         error,
                         payload.model
                     );
-                    recordPlannerUsage(failed.model, failed.usage);
+                    recordPlannerUsage(
+                        failed.model,
+                        failed.usage,
+                        failed.provider
+                    );
                 }
                 throw error;
             }
-            recordPlannerUsage(response.model || payload.model, response.usage);
+            recordPlannerUsage(
+                response.model || payload.model,
+                response.usage,
+                response.provider
+            );
             return response;
         };
 
@@ -2278,7 +2298,8 @@ export const createChatPlanner = ({
                         );
                         recordPlannerUsage(
                             failedStructuredUsage.model,
-                            failedStructuredUsage.usage
+                            failedStructuredUsage.usage,
+                            failedStructuredUsage.provider
                         );
                     }
                     if (
@@ -2307,7 +2328,8 @@ export const createChatPlanner = ({
                 structuredOutputOutcome = 'strict_success';
                 recordPlannerUsage(
                     structuredResponse.model || defaultModel,
-                    structuredResponse.usage
+                    structuredResponse.usage,
+                    structuredResponse.provider
                 );
                 const normalization = normalizePlan(
                     request,

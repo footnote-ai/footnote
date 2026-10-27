@@ -807,6 +807,11 @@ export type WorkflowReviewParseFailureReason =
  * with older metadata readers.
  */
 export type WorkflowRoutingChainAttemptSignal = {
+    cost?: WorkflowAttemptRoutingRecord['cost'];
+    startedAtMs?: number;
+    finishedAtMs?: number;
+    actualProvider?: string;
+    actualModel?: string;
     promptCache?: PromptCacheReceipt;
     index: number;
     profileId: string;

@@ -178,12 +178,20 @@ export const buildPlannerStepRecord = ({
               cacheWriteTokens: toNonNegativeNumberOrUndefined(
                   summary.usage.cacheWriteTokens
               ),
-              cacheWrite30mTokens: toNonNegativeNumberOrUndefined(
-                  summary.usage.cacheWrite30mTokens
-              ),
-              cacheWrite12hTokens: toNonNegativeNumberOrUndefined(
-                  summary.usage.cacheWrite12hTokens
-              ),
+              ...(summary.usage.cacheWrite30mTokens === undefined
+                  ? {}
+                  : {
+                        cacheWrite30mTokens: toNonNegativeNumberOrUndefined(
+                            summary.usage.cacheWrite30mTokens
+                        ),
+                    }),
+              ...(summary.usage.cacheWrite12hTokens === undefined
+                  ? {}
+                  : {
+                        cacheWrite12hTokens: toNonNegativeNumberOrUndefined(
+                            summary.usage.cacheWrite12hTokens
+                        ),
+                    }),
               completionTokens: toNonNegativeNumberOrUndefined(
                   summary.usage.completionTokens
               ),
@@ -281,6 +289,32 @@ export const buildPlannerStepRecord = ({
         ...(summary.routingChainAttempts !== undefined && {
             routingAttempts: summary.routingChainAttempts.map((attempt) => ({
                 index: attempt.index,
+                cost: attempt.cost,
+                actualProvider: attempt.actualProvider,
+                actualModel: attempt.actualModel,
+                ...(attempt.startedAtMs === undefined
+                    ? {}
+                    : {
+                          startedAt: new Date(
+                              attempt.startedAtMs
+                          ).toISOString(),
+                      }),
+                ...(attempt.finishedAtMs === undefined
+                    ? {}
+                    : {
+                          finishedAt: new Date(
+                              attempt.finishedAtMs
+                          ).toISOString(),
+                      }),
+                ...(attempt.startedAtMs === undefined ||
+                attempt.finishedAtMs === undefined
+                    ? {}
+                    : {
+                          durationMs: Math.max(
+                              0,
+                              attempt.finishedAtMs - attempt.startedAtMs
+                          ),
+                      }),
                 profileId: attempt.profileId,
                 ...(attempt.provider === undefined
                     ? {}
