@@ -1485,11 +1485,12 @@ const normalizeVoltAgentResult = (
               }
             : undefined;
 
+    const promptCache = translatePromptCache(request);
     return {
         text: result.text,
-        ...(translatePromptCache(request) === undefined
+        ...(promptCache === undefined
             ? {}
-            : { promptCache: translatePromptCache(request)?.receipt }),
+            : { promptCache: promptCache.receipt }),
         model: toFootnoteModel(responseModel),
         ...(upstreamAttribution !== undefined && { upstreamAttribution }),
         ...(providerSettingResolution !== undefined && {

@@ -40,6 +40,11 @@ import {
 } from './lib/cache-probe-budget.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// shortcut: standard system Git installs only; add a fixed protected path if another layout is supported.
+const safeGitPath =
+    process.platform === 'win32'
+        ? String.raw`C:\Windows\System32;C:\Program Files\Git\cmd;C:\Program Files\Git\mingw64\bin;C:\Program Files\Git\usr\bin`
+        : '/usr/bin:/bin';
 const flags = process.argv.slice(2);
 if (
     flags.length > 1 ||
@@ -49,6 +54,7 @@ if (
 const live = flags[0] === '--live';
 const budget: CacheProbeBudget = { calls: 0, reservedUsd: 0 };
 const output = path.join(root, 'docs/status/prompt-cache-probe.json');
+// Do not overlap manual --live runs; they share this checkpoint and budget.
 const previous =
     live && fs.existsSync(output)
         ? (JSON.parse(fs.readFileSync(output, 'utf8')) as {
@@ -284,6 +290,12 @@ const run = async (): Promise<void> => {
         commit: execFileSync('git', ['rev-parse', 'HEAD'], {
             cwd: root,
             encoding: 'utf8',
+            env: {
+                PATH: safeGitPath,
+                ...(process.platform === 'win32' && {
+                    SystemRoot: process.env.SystemRoot ?? 'C:\\Windows',
+                }),
+            },
         }).trim(),
         fixtureVersion: 1,
         synthetic: true,
@@ -434,6 +446,9 @@ const run = async (): Promise<void> => {
                             result.upstreamAttribution?.upstreamReportedCostUsd,
                     });
                 } catch (error) {
+                    const runtimeError = isGenerationRuntimeError(error)
+                        ? error
+                        : undefined;
                     samples.push({
                         fixtureId: `v1:${cell.control}`,
                         provider: profile.provider,
@@ -443,13 +458,27 @@ const run = async (): Promise<void> => {
                         repeat: cell.repeat,
                         durationMs: Date.now() - started,
                         status: 'failed',
-                        failure: isGenerationRuntimeError(error)
-                            ? error.details.classification
-                            : 'request_failed_or_budget_exhausted',
+                        failure:
+                            runtimeError !== undefined
+                                ? runtimeError.details.classification
+                                : 'request_failed_or_budget_exhausted',
+                        ...(runtimeError?.usage !== undefined && {
+                            usage: runtimeError.usage,
+                            estimate: estimateBackendTextCost(
+                                runtimeError.model ?? profile.providerModel,
+                                runtimeError.usage.promptTokens,
+                                runtimeError.usage.completionTokens,
+                                runtimeError.usage,
+                                profile.provider
+                            ),
+                        }),
+                        ...(runtimeError?.promptCache !== undefined && {
+                            cache: runtimeError.promptCache,
+                        }),
                     });
                     if (
-                        !isGenerationRuntimeError(error) ||
-                        error.details.classification !== 'transient' ||
+                        runtimeError === undefined ||
+                        runtimeError.details.classification !== 'transient' ||
                         budget.calls >= 60
                     )
                         break;

@@ -1135,9 +1135,16 @@ export const createChatOrchestrator = ({
 
             const measuredAttempts = chainResult.attempts.flatMap((route) => {
                 const calls = callsByCandidate.get(route.index);
-                return calls === undefined
+                return calls === undefined || calls.length === 0
                     ? [route]
-                    : calls.map((call) => ({ ...route, ...call }));
+                    : calls.map((call) => ({
+                          ...route,
+                          ...call,
+                          status: route.status,
+                          ...(route.reasonCode === undefined
+                              ? {}
+                              : { reasonCode: route.reasonCode }),
+                      }));
             });
             const accounting = () => {
                 const calls = measuredAttempts.filter(

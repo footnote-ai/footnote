@@ -3260,17 +3260,31 @@ test('planner canonical attempts retain expansion, routed failures and exhausted
             );
             assert.equal(
                 calls.length,
-                scenario === 'pre-provider' ? 0 : plannerCalls,
+                scenario === 'pre-provider' ? profiles.length : plannerCalls,
                 scenario
             );
             if (scenario === 'pre-provider') {
                 assert.deepEqual(
-                    summarizePromptCaching(response.metadata.workflow!).filter(
-                        (summary) => summary.purpose === 'planner'
-                    ),
-                    []
+                    calls.map((call) => call.profileId),
+                    profiles.map((profile) => profile.id)
                 );
+                assert.ok(
+                    calls.every((call) => call.promptCache === undefined)
+                );
+                const plannerSummaries = summarizePromptCaching(
+                    response.metadata.workflow!
+                ).filter((summary) => summary.purpose === 'planner');
+                assert.equal(plannerSummaries.length, 1);
+                assert.equal(plannerSummaries[0]?.attempts, profiles.length);
+                assert.equal(plannerSummaries[0]?.inputReported, 0);
+                assert.equal(plannerSummaries[0]?.readsReported, 0);
+                assert.equal(plannerSummaries[0]?.writesReported, 0);
+                assert.equal(plannerSummaries[0]?.costCompleteness, 'unknown');
                 continue;
+            }
+            if (scenario === 'route') {
+                assert.equal(calls[0]?.status, 'failed_transient_advanced');
+                assert.equal(calls[0]?.reasonCode, 'planner_runtime_error');
             }
             assert.ok(
                 calls.every(

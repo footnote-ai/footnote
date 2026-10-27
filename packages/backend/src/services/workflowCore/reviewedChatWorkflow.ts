@@ -2056,6 +2056,7 @@ export const runBoundedReviewWorkflow = async (
                       generationRequest: presentationRequest,
                       config: presentation.config,
                       persona: presentation.persona,
+                      surface: contextEnvelope.diagnostics.surface,
                       caution: presentation.caution,
                   });
         const workflowResult: PresentationWorkflowResult = {

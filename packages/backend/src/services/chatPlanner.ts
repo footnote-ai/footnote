@@ -2490,6 +2490,7 @@ export const createChatPlanner = ({
                         textJsonResponse.providerSettingResolution;
                     providerObservations =
                         textJsonResponse.providerObservations;
+                    promptCache = textJsonResponse.promptCache;
                     plannerModel = textJsonResponse.model;
                     plannerProvider = textJsonResponse.provider;
                     rejectInvalidPlannerTextJsonResult(textJsonResponse);

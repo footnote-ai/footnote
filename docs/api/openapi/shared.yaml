@@ -223,6 +223,12 @@ components:
                                     cacheWriteTokens:
                                         type: integer
                                         minimum: 0
+                                    cacheWrite30mTokens:
+                                        type: integer
+                                        minimum: 0
+                                    cacheWrite12hTokens:
+                                        type: integer
+                                        minimum: 0
                                     completionTokens:
                                         type: integer
                                         minimum: 0
@@ -284,6 +290,12 @@ components:
                                                     type: integer
                                                     minimum: 0
                                                 cacheWriteTokens:
+                                                    type: integer
+                                                    minimum: 0
+                                                cacheWrite30mTokens:
+                                                    type: integer
+                                                    minimum: 0
+                                                cacheWrite12hTokens:
                                                     type: integer
                                                     minimum: 0
                                                 completionTokens:

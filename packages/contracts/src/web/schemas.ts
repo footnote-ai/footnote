@@ -1970,6 +1970,16 @@ const ImageGenerationMetadataSchema = z
                             .int()
                             .nonnegative()
                             .optional(),
+                        cacheWrite30mTokens: z
+                            .number()
+                            .int()
+                            .nonnegative()
+                            .optional(),
+                        cacheWrite12hTokens: z
+                            .number()
+                            .int()
+                            .nonnegative()
+                            .optional(),
                         outputTokens: z.number().int().nonnegative(),
                         totalTokens: z.number().int().nonnegative(),
                         reasoningEffort: z

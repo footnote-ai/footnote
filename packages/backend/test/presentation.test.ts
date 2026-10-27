@@ -85,12 +85,14 @@ test('generates a full candidate without provider-native search', async () => {
         },
         config,
         persona,
+        surface: 'discord',
         caution: 3,
     });
 
     assert.equal(presentation.outcome, 'candidate_generated');
     assert.equal(presentation.draftResult?.text, 'A bright release update.');
     assert.equal(requests[0]?.search, undefined);
+    assert.equal(requests[0]?.promptCache?.surface, 'discord');
     assert.equal(presentation.metadata.flow, 'candidate_review');
     assert.equal(presentation.metadata.reasonCode, 'candidate_generated');
     assert.equal(presentation.metadata.expressionStrength, 'balanced');
@@ -292,16 +294,19 @@ test('style-reference handoff keeps the original context authoritative', () => {
 });
 
 test('reports a structured candidate as unavailable without selecting it', async () => {
+    const requests: GenerationRequest[] = [];
     const presentation = await runPresentationCandidate({
-        generationRuntime: runtime(async () =>
-            result('{"answer":"not prose"}')
-        ),
+        generationRuntime: runtime(async (input) => {
+            requests.push(input);
+            return result('{"answer":"not prose"}');
+        }),
         generationRequest: request,
         config,
         persona,
     });
 
     assert.equal(presentation.outcome, 'candidate_unavailable');
+    assert.equal(requests[0]?.promptCache?.surface, 'unknown');
     assert.equal(presentation.metadata.reasonCode, 'candidate_not_admissible');
     assert.equal(presentation.draftResult?.text, '{"answer":"not prose"}');
 });

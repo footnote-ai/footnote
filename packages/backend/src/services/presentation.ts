@@ -14,6 +14,7 @@ import type {
 } from '@footnote/agent-runtime';
 import type {
     ModelProfile,
+    PromptCachePolicy,
     PresentationGenerationSettings,
     PresentationPromptVariant,
 } from '@footnote/contracts';
@@ -280,6 +281,7 @@ export const runPresentationCandidate = async (input: {
     generationRequest: GenerationRequest;
     config: PresentationConfig;
     persona: PresentationPersona;
+    surface?: PromptCachePolicy['surface'];
     caution?: PresentationCaution;
 }): Promise<PresentationResult> => {
     if (!input.config.enabled) {
@@ -344,8 +346,7 @@ export const runPresentationCandidate = async (input: {
                         },
                         input.config.profile,
                         'presentation',
-                        input.generationRequest.promptCache?.surface ??
-                            'unknown'
+                        input.surface ?? 'unknown'
                     )
                 ),
             'presentation_draft_timeout'
