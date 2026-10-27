@@ -6,6 +6,9 @@ work is done.
 
 ## Active Work
 
+- [Prompt caching](./prompt-caching-status.md) — implemented locally; direct OpenAI
+  and container verification remain pending
+
 - [Account identity and access](./account-identity-and-access.md) — lifecycle
   delivered; account UI polish remains in #769
 - [Repository context and TrustGraph](./repository-context-status.md) — one-time

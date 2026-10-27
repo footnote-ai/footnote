@@ -4,6 +4,9 @@ Footnote observes provider prompt-cache usage independently of whether deliberat
 cache controls are enabled. Cached tokens are part of input usage. They are not
 tokens avoided, and a missing cache field is not a measured zero.
 
+See [prompt caching status](../status/prompt-caching-status.md) for experiment
+results, validation, and outstanding checks.
+
 ## Configuration and request boundary
 
 Model profiles may opt into backend-owned cache policy:
@@ -56,9 +59,17 @@ and [provider retention](provider-retention.md).
 Raw provider fields are normalized before SDK placeholders can turn missing
 cache reads into zero or discard writes. Attempts retain read/write counts,
 reported 30-minute/12-hour write breakdowns, and a text-free request-side cache
-receipt. Purpose, surface, and separate hashes of the trusted prompt/schema and selected profile configuration remain available with deliberate controls disabled (`mode: disabled`). Summaries group by these versions without exposing the cache key or profile name. Planner transport fallbacks and context expansion retain each logical provider call separately; SDK-internal wire retries have no independent usage receipt. The receipt describes applied controls, not an observed cache hit.
+receipt. The receipt describes applied controls, not an observed cache hit.
 Its prefix-token count is a character-based approximation, not provider-confirmed
-eligibility. Nothing is padded in production to reach a cache threshold.
+eligibility. Production prompts are never padded to reach a cache threshold.
+
+Purpose, surface, and hashes of the trusted prompt/schema and selected profile
+configuration remain available when deliberate controls are disabled
+(`mode: disabled`). Summaries group by these versions without exposing cache keys
+or profile names.
+
+Planner transport fallbacks and context expansion retain each logical provider
+call separately. SDK-internal wire retries have no independent usage receipt.
 
 The public Trace projection derives `workflow.cacheSummary` from canonical
 Attempts, using nested routing attempts instead of also adding their parent
@@ -77,73 +88,6 @@ Router-reported charges stay separate. Unknown model pricing never establishes
 financial savings, even when cache hits are observed. Output variation and
 request latency are separate measurements, not input-cache savings.
 
-## Reproduce the bounded experiment
-
-Run `pnpm cache:probe --check` first. It reads credential availability and pricing
-without generating model output. `pnpm cache:probe --live` uses the existing
-runtime and prompt composers with synthetic fixtures for planner, generation,
-assessment, revision, and presentation, plus long-prefix, changed-suffix, and
-invalidation controls. These are adapter/prompt experiments, not full workflow
-quality evaluations or production hit-rate measurements.
-
-The allowance is 60 actual wire requests and $2 conservatively estimated spend.
-SDK retries reserve from that same allowance before network I/O; unknown rates
-or unbounded outputs stop the request. Credentials come from normal process/env
-loading and are never printed. Missing credentials leave that provider unverified.
-
-The text-free report is [the checked-in probe evidence](../status/prompt-cache-probe.json).
-Re-running live mode resumes its experiment and cumulative allowance, skipping
-already recorded cells. Do not delete the checkpoint to bypass the allowance.
-It retains raw reported counts, separately attributed router charges, pricing
-inputs, latency, failures, and the report writer source digest. Earlier resumed
-measurements can predate bookkeeping changes; the recorded commit is the
-implementation base, not a claim that an uncommitted candidate was deployed. No prompts or model
-responses are written to the report. A transient failed cell remains failed;
-later independent cells may still run within the allowance.
-
-#936 can consume these measurements without inventing browser-side accounting.
-The Trace layout, production enablement, and unavailable provider verification
-remain separate from this implementation.
-
-## Recorded experiment result
-
-The October 27 synthetic experiment used 51 wire requests including retries,
-reserving $0.149365 conservatively. OpenRouter produced 23 measured cells and
-three failed cells. Direct OpenAI was skipped because its key was unavailable.
-
-Automatic DeepSeek caching reported 768 cached tokens out of 945 planner input
-tokens, 1,024 out of 1,051 generation input tokens, and 512 out of 684 assessment
-input tokens on warm baseline calls. Short revision and presentation fixtures
-reported zero reads. Both long-prefix arms reported 10,752 cached tokens out of
-10,781 on warm calls; changing the suffix retained those reads. Changing the end
-of the stable reference still reused an earlier partial prefix, as automatic
-provider caching permits.
-
-This proves observed automatic cache reuse, including a changed suffix. It does
-not prove that Footnote's controls improve spend: DeepSeek receives no explicit
-controls, its backend pricing is unknown, two ordinary generation candidate
-cells failed, and there is no direct OpenAI live result. Deliberate controls stay
-disabled by default. No deployment or production settings were changed.
-
-## Local validation
-
-The implementation was checked on October 27, 2026, with 250 passing focused
-checks: 242 runtime/backend/contracts/probe checks, two orchestrator regressions
-(including expansion, routed failure, exhausted fallback, and pre-provider
-failure scenarios), and six planner-record checks. `pnpm review`,
-`pnpm validate-openapi-links`, and the complete `pnpm -r build` passed.
-Standards and spec reviews were completed, and the accounting findings were
-fixed and re-reviewed.
-
-Broader runs reproduced existing failures on the unchanged main checkout:
-five orchestrator cases depend on the locally enabled provider catalog, one
-planner-reentry case fails, and one ModelInput fixture assertion fails. Those
-unrelated cases remain outside this change. The new native fallback regression
-now enables its synthetic profile explicitly rather than relying on credentials.
-
-`pnpm test:build` could not finish: Docker remained at image-building startup,
-and a separate bounded Docker version check could not obtain server information.
-Container packaging remains unverified. Direct OpenAI live behavior and causal
-financial savings also remain unverified; the checked-in experiment is limited
-to the synthetic OpenRouter observations above. No production enablement,
-publication, or deployment was performed.
+These measurements are available for #936 to display. The backend owns the
+accounting; the Trace UI displays its results. Trace layout and production
+enablement are outside this implementation.
