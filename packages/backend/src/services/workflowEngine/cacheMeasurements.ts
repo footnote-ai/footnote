@@ -32,6 +32,8 @@ export const summarizePromptCaching = (
             const attempts = parent.routingAttempts ?? [parent];
             for (const attempt of attempts) {
                 if (
+                    ('providerCallStatus' in attempt &&
+                        attempt.providerCallStatus === 'not_called') ||
                     attempt.status.startsWith('skipped') ||
                     attempt.status === 'blocked'
                 )
@@ -49,6 +51,7 @@ export const summarizePromptCaching = (
                               ? 'revision'
                               : 'generation');
                 const provider =
+                    attempt.actualProvider ??
                     attempt.requestedProvider ??
                     parent.requestedProvider ??
                     'unknown';

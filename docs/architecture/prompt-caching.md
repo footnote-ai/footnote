@@ -69,7 +69,13 @@ configuration remain available when deliberate controls are disabled
 or profile names.
 
 Planner transport fallbacks and context expansion retain each logical provider
-call separately. SDK-internal wire retries have no independent usage receipt.
+call separately. Routing status and provider-call outcome are recorded as
+separate facts: a route can advance after a failed call, and can also fail
+before contacting a provider. Explicit `not_called` routes remain in canonical
+history but do not enter cache measurements. Failed provider calls do enter the
+denominator; missing usage keeps derived rates unavailable. Older records
+without a call outcome retain their previous summary behavior. SDK-internal
+wire retries have no independent usage receipt.
 
 The public Trace projection derives `workflow.cacheSummary` from canonical
 Attempts, using nested routing attempts instead of also adding their parent
@@ -78,6 +84,10 @@ accompany partial sums. Hit rate and input-share/write-read ratios are omitted
 when their required observations are incomplete. Legacy traces without Attempts
 have no inferred measurements. Public receipts omit keys, private profile names,
 omission diagnostics, prompts, evidence, and hidden reasoning.
+
+Cache summaries group by actual provider/model attribution when available,
+falling back to the requested route. Canonical attempts retain both attribution
+values so routed usage is not mislabeled as a provider call to the router.
 
 Backend `cacheSavingsUsd` is the uncached price of the same input-token count
 minus its cache-adjusted input estimate. It includes writes, can be negative,

@@ -27,6 +27,7 @@ import {
     defaultProviderAvailabilityStore,
     type ProviderAvailabilityStore,
 } from './providerAvailability.js';
+import { isPreProviderCallFailure } from './preProviderCallFailure.js';
 
 export type RoutingChainAttemptStatus =
     | 'executed'
@@ -43,6 +44,7 @@ export type RoutingChainAttemptLog = {
     provider?: string;
     model?: string;
     status: RoutingChainAttemptStatus;
+    providerCallStatus?: 'succeeded' | 'failed' | 'not_called';
     reasonCode?: ExecutionReasonCode;
     errorMessage?: string;
     temporaryUnavailableReason?: ProviderTemporaryUnavailableReason;
@@ -71,6 +73,7 @@ export type RoutingChainAttemptLog = {
 export type RoutingChainInternalAttempt = Pick<
     RoutingChainAttemptLog,
     | 'status'
+    | 'providerCallStatus'
     | 'reasonCode'
     | 'errorMessage'
     | 'temporaryUnavailableReason'
@@ -217,6 +220,7 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 step: input.step,
                 profileId: candidate.profileId,
                 status: 'skipped_ineligible',
+                providerCallStatus: 'not_called',
                 reasonCode: 'routing_chain_entry_ineligible',
                 chooseOneUsed: candidate.chooseOneUsed,
                 chooseOneCandidates: candidate.chooseOneCandidates,
@@ -243,6 +247,7 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 provider: profile.provider,
                 model: profile.providerModel,
                 status: 'skipped_ineligible',
+                providerCallStatus: 'not_called',
                 reasonCode: eligibility.reasonCode,
                 chooseOneUsed: candidate.chooseOneUsed,
                 chooseOneCandidates: candidate.chooseOneCandidates,
@@ -270,6 +275,7 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 provider: profile.provider,
                 model: profile.providerModel,
                 status: 'skipped_temporary_unavailable',
+                providerCallStatus: 'not_called',
                 reasonCode: 'routing_chain_temporary_unavailable',
                 temporaryUnavailableReason: temporaryUnavailable.reason,
                 ...(candidate.selectionSource !== undefined && {
@@ -326,6 +332,7 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                     provider: profile.provider,
                     model: profile.providerModel,
                     status: 'failed_transient_advanced',
+                    providerCallStatus: 'succeeded',
                     reasonCode: retryReasonCode,
                     errorMessage:
                         'Provider returned an inadmissible result; routing advanced to the next profile.',
@@ -349,6 +356,7 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 provider: profile.provider,
                 model: profile.providerModel,
                 status: 'executed',
+                providerCallStatus: 'succeeded',
                 chooseOneUsed: candidate.chooseOneUsed,
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
@@ -414,6 +422,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 status: transient
                     ? 'failed_transient_advanced'
                     : 'failed_non_transient_stopped',
+                providerCallStatus: isPreProviderCallFailure(error)
+                    ? 'not_called'
+                    : 'failed',
                 reasonCode,
                 errorMessage:
                     error instanceof Error ? error.message : String(error),

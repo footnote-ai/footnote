@@ -118,6 +118,10 @@ test('cache identity excludes volatile clock, caller identifiers, and evidence b
     ).promptCache;
     assert.equal(initial?.stablePrefixMessages, 1);
     assert.match(initial?.key ?? '', /^footnote:cache:v1:[a-f0-9]{64}$/);
+    assert.equal(
+        initial?.key,
+        'footnote:cache:v1:1d111d32417992aa709115cf82270059e01d9ae94db4a7c32325c2353b15a53c'
+    );
     const changed = applyPromptCaching(
         {
             ...request,
@@ -250,6 +254,120 @@ test('cache summary counts failed and successful nested routes once and preserve
     assert.equal(JSON.stringify(summary).includes('private-route'), false);
 });
 
+test('cache summary excludes not-called routes and groups by actual serving provider', () => {
+    const workflow: WorkflowRecord = {
+        workflowId: 'fixture',
+        workflowName: 'fixture',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 1,
+        maxSteps: 10,
+        steps: [
+            {
+                stepId: 'generate',
+                startedAt: '2026-10-27T00:00:00Z',
+                finishedAt: '2026-10-27T00:00:01Z',
+                durationMs: 1000,
+                stepKind: 'generate',
+                attempt: 1,
+                outcome: { status: 'executed', summary: 'fixture' },
+                attempts: [
+                    {
+                        attempt: 1,
+                        status: 'succeeded',
+                        startedAt: '2026-10-27T00:00:00Z',
+                        finishedAt: '2026-10-27T00:00:01Z',
+                        durationMs: 1000,
+                        requestedProvider: 'openrouter',
+                        requestedModel: 'router/model',
+                        actualProvider: 'aggregate-provider',
+                        actualModel: 'aggregate-model',
+                        routingAttempts: [
+                            {
+                                index: 0,
+                                profileId: 'route-a',
+                                status: 'failed_transient_advanced',
+                                providerCallStatus: 'failed',
+                                actualProvider: 'serving-provider',
+                                actualModel: 'serving-model',
+                                chooseOneUsed: false,
+                                usage: { promptTokens: 100 },
+                            },
+                            {
+                                index: 1,
+                                profileId: 'route-b',
+                                status: 'executed',
+                                providerCallStatus: 'succeeded',
+                                actualProvider: 'serving-provider',
+                                actualModel: 'serving-model',
+                                chooseOneUsed: false,
+                                usage: {
+                                    promptTokens: 100,
+                                    cachedInputTokens: 40,
+                                },
+                            },
+                            {
+                                index: 2,
+                                profileId: 'route-c',
+                                status: 'failed_transient_advanced',
+                                providerCallStatus: 'not_called',
+                                chooseOneUsed: false,
+                            },
+                            {
+                                index: 3,
+                                profileId: 'route-d',
+                                status: 'executed',
+                                providerCallStatus: 'succeeded',
+                                actualProvider: 'other-provider',
+                                actualModel: 'other-model',
+                                chooseOneUsed: false,
+                                usage: {
+                                    promptTokens: 30,
+                                    cachedInputTokens: 0,
+                                },
+                            },
+                            {
+                                index: 4,
+                                profileId: 'route-e',
+                                status: 'executed',
+                                providerCallStatus: 'succeeded',
+                                chooseOneUsed: false,
+                                usage: {
+                                    promptTokens: 10,
+                                    cachedInputTokens: 5,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    };
+
+    const summaries = summarizePromptCaching(workflow);
+    const routed = summaries.find(
+        (summary) => summary.provider === 'serving-provider'
+    );
+    const other = summaries.find(
+        (summary) => summary.provider === 'other-provider'
+    );
+    const requested = summaries.find(
+        (summary) => summary.provider === 'openrouter'
+    );
+    assert.equal(summaries.length, 3);
+    assert.equal(routed?.model, 'serving-model');
+    assert.equal(routed?.attempts, 2);
+    assert.equal(routed?.inputReported, 2);
+    assert.equal(routed?.readsReported, 1);
+    assert.equal(routed?.hitRate, undefined);
+    assert.equal(other?.model, 'other-model');
+    assert.equal(other?.attempts, 1);
+    assert.equal(other?.hitRate, 0);
+    assert.equal(requested?.model, 'router/model');
+    assert.equal(requested?.attempts, 1);
+    assert.equal(requested?.cacheReadTokens, 5);
+});
+
 test('disabled controls retain version attribution without changing provider wire options', () => {
     const observed = applyPromptCaching(
         request,
@@ -302,6 +420,8 @@ test('planner measurements retain missing, zero, failed calls, costs and duratio
         (attempt) => attempts.push(attempt)
     );
     assert.equal(attempts.length, 2);
+    assert.equal(attempts[0]?.providerCallStatus, 'failed');
+    assert.equal(attempts[1]?.providerCallStatus, 'succeeded');
     assert.equal(attempts[0]?.usage?.cachedInputTokens, undefined);
     assert.equal(attempts[1]?.usage?.cachedInputTokens, 0);
     assert.equal(attempts[1]?.cost?.costCompleteness, 'complete');

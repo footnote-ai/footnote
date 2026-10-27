@@ -31,6 +31,15 @@ disabled by default. No deployment or production settings were changed.
 
 ## Local validation
 
+The October 27 provenance follow-up adds a separate provider-call outcome to
+routing records, excludes routes explicitly marked `not_called` from cache
+summaries, and groups measurements by actual provider/model attribution when
+available. This follow-up preserves the existing route status and cache-key
+identities. The focused cache/routing/trace tests passed (29), workflow-record
+tests passed (30), and the two targeted planner fallback regressions passed.
+Contracts and backend builds, OpenAPI link validation, formatting, and
+`pnpm review --changed-only` also passed.
+
 The implementation was checked on October 27, 2026, with 250 passing focused
 checks: 242 runtime/backend/contracts/probe checks, two orchestrator regressions
 (including expansion, routed failure, exhausted fallback, and pre-provider
@@ -47,12 +56,13 @@ now enables its synthetic profile explicitly rather than relying on credentials.
 
 ## Outstanding verification
 
-`pnpm test:build` could not finish: Docker remained at image-building startup,
-and a separate bounded Docker version check could not obtain server information.
-Container packaging remains unverified. Direct OpenAI live behavior and causal
-financial savings also remain unverified; the checked-in experiment is limited
-to the synthetic OpenRouter observations above. No production enablement,
-publication, or deployment was performed.
+The follow-up retry of `pnpm test:build` remained at `Image footnote:dev-local
+Building` without further output. A separate `docker version` check also returned
+no output after about 39 seconds. Both commands were interrupted; container
+packaging remains unverified. Direct OpenAI live behavior and causal financial
+savings also remain unverified; the checked-in experiment is limited to the
+synthetic OpenRouter observations above. No production enablement, publication,
+or deployment was performed.
 
 ## Reproduce the bounded experiment
 

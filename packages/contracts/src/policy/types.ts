@@ -818,6 +818,7 @@ export type WorkflowRoutingChainAttemptSignal = {
     provider?: string;
     model?: string;
     status: string;
+    providerCallStatus?: 'succeeded' | 'failed' | 'not_called';
     reasonCode?: string;
     finishReason?: string;
     completion?: GenerationCompletion;
@@ -1014,6 +1015,7 @@ export type WorkflowAttemptRoutingRecord = {
     actualProvider?: string;
     actualModel?: string;
     status: string;
+    providerCallStatus?: 'succeeded' | 'failed' | 'not_called';
     reasonCode?: string;
     finishReason?: string;
     completion?: GenerationCompletion;

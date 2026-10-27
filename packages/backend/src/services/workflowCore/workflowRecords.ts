@@ -100,6 +100,9 @@ const toWorkflowRoutingAttempts = (
             ? {}
             : { actualModel: attempt.actualModel }),
         status: attempt.status,
+        ...(attempt.providerCallStatus === undefined
+            ? {}
+            : { providerCallStatus: attempt.providerCallStatus }),
         ...(attempt.reasonCode === undefined
             ? {}
             : { reasonCode: attempt.reasonCode }),

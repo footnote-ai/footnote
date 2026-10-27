@@ -70,6 +70,7 @@ import {
     isWorkflowOwnedPlannerInvocation,
 } from './chatPlannerInvocation.js';
 import { classifyTypedModelOutputFailure } from './typedModelOutput.js';
+import { isPreProviderCallFailure } from './preProviderCallFailure.js';
 import type { ChatPlannerInvocationContext } from './chatPlannerInvocation.js';
 import { buildRequestTimePrompt } from './prompts/conversationPromptLayers.js';
 export type {
@@ -277,27 +278,6 @@ const readPlannerFailureUsage = (
                 ? candidate.plannerProvider
                 : undefined,
     };
-};
-
-const isPreProviderCallFailure = (error: unknown): boolean => {
-    const seen = new Set<object>();
-    let current = error;
-    while (
-        typeof current === 'object' &&
-        current !== null &&
-        !seen.has(current)
-    ) {
-        seen.add(current);
-        const candidate = current as {
-            preProviderCallFailure?: unknown;
-            cause?: unknown;
-        };
-        if (candidate.preProviderCallFailure === true) {
-            return true;
-        }
-        current = candidate.cause;
-    }
-    return false;
 };
 
 /**

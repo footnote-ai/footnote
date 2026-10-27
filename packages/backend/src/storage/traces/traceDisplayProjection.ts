@@ -247,65 +247,66 @@ const publicCacheReceipt = (
 
 const projectPublicAttempt = (
     attempt: WorkflowAttemptRecord
-): WorkflowAttemptRecord => ({
-    attempt: attempt.attempt,
-    ...(publicCacheReceipt(attempt.promptCache) === undefined
-        ? {}
-        : { promptCache: publicCacheReceipt(attempt.promptCache) }),
-    status: attempt.status,
-    startedAt: attempt.startedAt,
-    finishedAt: attempt.finishedAt,
-    durationMs: attempt.durationMs,
-    ...(attempt.requestedProvider !== undefined && {
-        requestedProvider: attempt.requestedProvider,
-    }),
-    ...(attempt.requestedModel !== undefined && {
-        requestedModel: attempt.requestedModel,
-    }),
-    ...(attempt.actualProvider !== undefined && {
-        actualProvider: attempt.actualProvider,
-    }),
-    ...(attempt.actualModel !== undefined && {
-        actualModel: attempt.actualModel,
-    }),
-    ...(attempt.completion !== undefined && {
-        completion: { ...attempt.completion },
-    }),
-    // Preserve only this stable public fact; routing profiles and diagnostics stay private.
-    ...(attempt.routingAttempts?.some(
-        (routingAttempt) =>
-            routingAttempt.reasonCode === PUBLIC_FALLBACK_ROUTE_REASON_CODE
-    ) && {
-        reasonCode: PUBLIC_FALLBACK_ROUTE_REASON_CODE,
-    }),
-    ...(attempt.usage !== undefined && {
-        usage: {
-            ...(attempt.usage.promptTokens !== undefined && {
-                promptTokens: attempt.usage.promptTokens,
-            }),
-            ...(attempt.usage.cachedInputTokens !== undefined && {
-                cachedInputTokens: attempt.usage.cachedInputTokens,
-            }),
-            ...(attempt.usage.cacheWriteTokens !== undefined && {
-                cacheWriteTokens: attempt.usage.cacheWriteTokens,
-                cacheWrite30mTokens: attempt.usage.cacheWrite30mTokens,
-                cacheWrite12hTokens: attempt.usage.cacheWrite12hTokens,
-            }),
-            ...(attempt.usage.completionTokens !== undefined && {
-                completionTokens: attempt.usage.completionTokens,
-            }),
-            ...(attempt.usage.totalTokens !== undefined && {
-                totalTokens: attempt.usage.totalTokens,
-            }),
-            ...(attempt.usage.reasoningTokens !== undefined && {
-                reasoningTokens: attempt.usage.reasoningTokens,
-            }),
-        },
-    }),
-    ...(attempt.cost !== undefined && {
-        cost: projectPublicCost(attempt.cost),
-    }),
-});
+): WorkflowAttemptRecord => {
+    const promptCache = publicCacheReceipt(attempt.promptCache);
+    return {
+        attempt: attempt.attempt,
+        ...(promptCache === undefined ? {} : { promptCache }),
+        status: attempt.status,
+        startedAt: attempt.startedAt,
+        finishedAt: attempt.finishedAt,
+        durationMs: attempt.durationMs,
+        ...(attempt.requestedProvider !== undefined && {
+            requestedProvider: attempt.requestedProvider,
+        }),
+        ...(attempt.requestedModel !== undefined && {
+            requestedModel: attempt.requestedModel,
+        }),
+        ...(attempt.actualProvider !== undefined && {
+            actualProvider: attempt.actualProvider,
+        }),
+        ...(attempt.actualModel !== undefined && {
+            actualModel: attempt.actualModel,
+        }),
+        ...(attempt.completion !== undefined && {
+            completion: { ...attempt.completion },
+        }),
+        // Preserve only this stable public fact; routing profiles and diagnostics stay private.
+        ...(attempt.routingAttempts?.some(
+            (routingAttempt) =>
+                routingAttempt.reasonCode === PUBLIC_FALLBACK_ROUTE_REASON_CODE
+        ) && {
+            reasonCode: PUBLIC_FALLBACK_ROUTE_REASON_CODE,
+        }),
+        ...(attempt.usage !== undefined && {
+            usage: {
+                ...(attempt.usage.promptTokens !== undefined && {
+                    promptTokens: attempt.usage.promptTokens,
+                }),
+                ...(attempt.usage.cachedInputTokens !== undefined && {
+                    cachedInputTokens: attempt.usage.cachedInputTokens,
+                }),
+                ...(attempt.usage.cacheWriteTokens !== undefined && {
+                    cacheWriteTokens: attempt.usage.cacheWriteTokens,
+                    cacheWrite30mTokens: attempt.usage.cacheWrite30mTokens,
+                    cacheWrite12hTokens: attempt.usage.cacheWrite12hTokens,
+                }),
+                ...(attempt.usage.completionTokens !== undefined && {
+                    completionTokens: attempt.usage.completionTokens,
+                }),
+                ...(attempt.usage.totalTokens !== undefined && {
+                    totalTokens: attempt.usage.totalTokens,
+                }),
+                ...(attempt.usage.reasoningTokens !== undefined && {
+                    reasoningTokens: attempt.usage.reasoningTokens,
+                }),
+            },
+        }),
+        ...(attempt.cost !== undefined && {
+            cost: projectPublicCost(attempt.cost),
+        }),
+    };
+};
 
 const projectPublicResultReference = (
     reference: WorkflowResultReference

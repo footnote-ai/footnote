@@ -73,7 +73,56 @@ test('executeStepRoutingChain advances on transient errors and succeeds on next 
         assert.equal(result.attempts.length, 2);
         assert.equal(result.attempts[0]?.status, 'failed_transient_advanced');
         assert.equal(result.attempts[1]?.status, 'executed');
+        assert.equal(result.attempts[0]?.providerCallStatus, 'failed');
+        assert.equal(result.attempts[1]?.providerCallStatus, 'succeeded');
     }
+});
+
+test('executeStepRoutingChain identifies pre-provider failures through nested causes', async () => {
+    const first = makeProfile({
+        id: 'openai-pre-provider',
+        provider: 'openai',
+        providerModel: 'gpt-5.4-mini',
+        canUseSearch: true,
+    });
+    const second = makeProfile({
+        id: 'ollama-provider-call',
+        provider: 'ollama',
+        providerModel: 'gpt-oss:20b-cloud',
+        canUseSearch: true,
+    });
+    const cause = Object.assign(new Error('setup failed'), {
+        preProviderCallFailure: true,
+    });
+    const error = Object.assign(new Error('temporary timeout'), { cause });
+    const result = await executeStepRoutingChain({
+        step: 'planner',
+        candidates: [
+            { profileId: first.id, chooseOneUsed: false },
+            { profileId: second.id, chooseOneUsed: false },
+        ],
+        enabledProfilesById: new Map([
+            [first.id, first],
+            [second.id, second],
+        ]),
+        requiresSearch: false,
+        runWithProfile: async (profile) => {
+            if (profile.id === first.id) throw error;
+            return profile.id;
+        },
+    });
+
+    assert.equal(result.status, 'executed');
+    assert.deepEqual(
+        result.attempts.map(({ status, providerCallStatus }) => [
+            status,
+            providerCallStatus,
+        ]),
+        [
+            ['failed_transient_advanced', 'not_called'],
+            ['executed', 'succeeded'],
+        ]
+    );
 });
 
 test('executeStepRoutingChain preserves explicit versus configured fallback provenance', async () => {

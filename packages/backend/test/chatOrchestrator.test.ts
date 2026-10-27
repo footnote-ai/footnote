@@ -2560,6 +2560,18 @@ test('planner native transport rejection falls back through JSON mode and parser
                 jsonModePlannerAttemptCount +
                 parserPlannerAttemptCount
         );
+        assert.equal(
+            calls.filter((call) => call.providerCallStatus === 'failed').length,
+            nativePlannerAttemptCount + jsonModePlannerAttemptCount
+        );
+        assert.equal(
+            calls.filter((call) => call.providerCallStatus === 'succeeded')
+                .length,
+            parserPlannerAttemptCount
+        );
+        assert.ok(
+            calls.some((call) => call.status === 'failed_transient_advanced')
+        );
         assert.ok(
             calls.every(
                 (call) =>
@@ -3274,12 +3286,12 @@ test('planner canonical attempts retain expansion, routed failures and exhausted
                 const plannerSummaries = summarizePromptCaching(
                     response.metadata.workflow!
                 ).filter((summary) => summary.purpose === 'planner');
-                assert.equal(plannerSummaries.length, 1);
-                assert.equal(plannerSummaries[0]?.attempts, profiles.length);
-                assert.equal(plannerSummaries[0]?.inputReported, 0);
-                assert.equal(plannerSummaries[0]?.readsReported, 0);
-                assert.equal(plannerSummaries[0]?.writesReported, 0);
-                assert.equal(plannerSummaries[0]?.costCompleteness, 'unknown');
+                assert.equal(plannerSummaries.length, 0);
+                assert.ok(
+                    calls.every(
+                        (call) => call.providerCallStatus === 'not_called'
+                    )
+                );
                 continue;
             }
             if (scenario === 'route') {

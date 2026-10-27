@@ -24,12 +24,13 @@ export const applyPromptCaching = <T extends GenerationRequest>(
     );
     const stablePrefixMessages =
         boundary < 0 ? request.messages.length : boundary;
+    const stablePrefix = request.messages
+        .slice(0, stablePrefixMessages)
+        .map((message) => message.content);
     const version = (value: unknown) =>
         createHash('sha256').update(JSON.stringify(value)).digest('hex');
     const promptVersion = version({
-        prompt: request.messages
-            .slice(0, stablePrefixMessages)
-            .map((message) => message.content),
+        prompt: stablePrefix,
         schema: request.structuredOutput,
         search: request.search !== undefined,
     });
@@ -57,9 +58,7 @@ export const applyPromptCaching = <T extends GenerationRequest>(
                 profileVersion,
                 purpose,
                 surface,
-                prefix: request.messages
-                    .slice(0, stablePrefixMessages)
-                    .map((message) => message.content),
+                prefix: stablePrefix,
                 schema: request.structuredOutput,
                 search: request.search !== undefined,
             })

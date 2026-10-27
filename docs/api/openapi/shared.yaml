@@ -212,33 +212,7 @@ components:
                             model:
                                 type: string
                             usage:
-                                type: object
-                                properties:
-                                    promptTokens:
-                                        type: integer
-                                        minimum: 0
-                                    cachedInputTokens:
-                                        type: integer
-                                        minimum: 0
-                                    cacheWriteTokens:
-                                        type: integer
-                                        minimum: 0
-                                    cacheWrite30mTokens:
-                                        type: integer
-                                        minimum: 0
-                                    cacheWrite12hTokens:
-                                        type: integer
-                                        minimum: 0
-                                    completionTokens:
-                                        type: integer
-                                        minimum: 0
-                                    totalTokens:
-                                        type: integer
-                                        minimum: 0
-                                    reasoningTokens:
-                                        type: integer
-                                        minimum: 0
-                                additionalProperties: false
+                                $ref: '#/components/schemas/WorkflowGenerationUsage'
                             routingChainAttempts:
                                 type: array
                                 items:
@@ -255,6 +229,12 @@ components:
                                             type: string
                                         status:
                                             type: string
+                                        providerCallStatus:
+                                            type: string
+                                            enum:
+                                                - succeeded
+                                                - failed
+                                                - not_called
                                         reasonCode:
                                             type: string
                                         finishReason:
@@ -281,33 +261,7 @@ components:
                                                 - visibleTextLength
                                             additionalProperties: false
                                         usage:
-                                            type: object
-                                            properties:
-                                                promptTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                cachedInputTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                cacheWriteTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                cacheWrite30mTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                cacheWrite12hTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                completionTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                totalTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                reasoningTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                            additionalProperties: false
+                                            $ref: '#/components/schemas/WorkflowGenerationUsage'
                                         chooseOneUsed:
                                             type: boolean
                                         chooseOneSelectedIndex:

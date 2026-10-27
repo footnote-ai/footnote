@@ -14,6 +14,7 @@ import {
 } from '@footnote/agent-runtime';
 import type { RoutingChainInternalAttempt } from '../stepRoutingExecutor.js';
 import { estimateBackendTextCost } from '../llmCostRecorder.js';
+import { isPreProviderCallFailure } from '../preProviderCallFailure.js';
 
 /** Observes one logical provider call; SDK-internal wire retries remain unreported. */
 export const observePlannerCall = async <
@@ -41,6 +42,8 @@ export const observePlannerCall = async <
           }
         | undefined;
     let status: RoutingChainInternalAttempt['status'] = 'executed';
+    let providerCallStatus: RoutingChainInternalAttempt['providerCallStatus'] =
+        'succeeded';
     let preProviderFailure = false;
     try {
         const result = await execute(request);
@@ -48,22 +51,9 @@ export const observePlannerCall = async <
         return result;
     } catch (error) {
         status = 'failed_transport_fallback';
+        providerCallStatus = 'failed';
         if (typeof error === 'object' && error !== null) evidence = error;
-        let cause: unknown = error;
-        const seen = new Set<object>();
-        while (
-            typeof cause === 'object' &&
-            cause !== null &&
-            !seen.has(cause)
-        ) {
-            seen.add(cause);
-            const failure = cause as {
-                preProviderCallFailure?: boolean;
-                cause?: unknown;
-            };
-            preProviderFailure ||= failure.preProviderCallFailure === true;
-            cause = failure.cause;
-        }
+        preProviderFailure = isPreProviderCallFailure(error);
         throw error;
     } finally {
         if (!preProviderFailure) {
@@ -72,6 +62,7 @@ export const observePlannerCall = async <
             );
             record({
                 status,
+                providerCallStatus,
                 startedAtMs,
                 finishedAtMs: Date.now(),
                 usage,

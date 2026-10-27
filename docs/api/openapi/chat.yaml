@@ -1193,6 +1193,12 @@ components:
                 status:
                     type: string
                     minLength: 1
+                providerCallStatus:
+                    type: string
+                    enum:
+                        - succeeded
+                        - failed
+                        - not_called
                 reasonCode:
                     type: string
                     minLength: 1

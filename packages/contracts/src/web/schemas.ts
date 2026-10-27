@@ -1162,6 +1162,9 @@ const WorkflowAttemptRoutingRecordSchema = z
         actualProvider: z.string().min(1).optional(),
         actualModel: z.string().min(1).optional(),
         status: z.string().min(1),
+        providerCallStatus: z
+            .enum(['succeeded', 'failed', 'not_called'])
+            .optional(),
         reasonCode: z.string().min(1).optional(),
         finishReason: z.string().min(1).optional(),
         completion: GenerationCompletionSchema.optional(),

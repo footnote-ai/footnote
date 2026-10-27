@@ -107,6 +107,81 @@ test('public cache receipts withhold diagnostics and summaries are derived from 
     );
 });
 
+test('canonical workflow contracts accept provider call status on routing records', () => {
+    const workflow = {
+        workflowId: 'provider-call-status',
+        workflowName: 'fixture',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 1,
+        maxSteps: 1,
+        steps: [
+            {
+                stepId: 'plan',
+                stepKind: 'generate',
+                attempt: 1,
+                startedAt: '2026-10-27T00:00:00Z',
+                finishedAt: '2026-10-27T00:00:01Z',
+                durationMs: 1000,
+                outcome: { status: 'executed', summary: 'Planned.' },
+                attempts: [
+                    {
+                        attempt: 1,
+                        status: 'succeeded',
+                        startedAt: '2026-10-27T00:00:00Z',
+                        finishedAt: '2026-10-27T00:00:01Z',
+                        durationMs: 1000,
+                        routingAttempts: [
+                            {
+                                index: 0,
+                                profileId: 'fixture-route',
+                                status: 'executed',
+                                providerCallStatus: 'failed',
+                                chooseOneUsed: false,
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    };
+    const parsed = TraceDisplayMetadataSchema.safeParse({
+        responseId: 'provider-call-status',
+        provenance: 'Inferred',
+        safetyTier: 'Low',
+        tradeoffCount: 0,
+        chainHash: 'hash',
+        licenseContext: 'MIT',
+        modelVersion: 'gpt-5.6-luna',
+        staleAfter: '2026-10-27T00:00:01Z',
+        citations: [],
+        trace_target: {
+            tightness: 3,
+            rationale: 3,
+            attribution: 3,
+            caution: 3,
+            extent: 3,
+        },
+        trace_final: {
+            tightness: 3,
+            rationale: 3,
+            attribution: 3,
+            caution: 3,
+            extent: 3,
+        },
+        workflow,
+        displayIntegrity: { status: 'complete', unavailableFields: [] },
+    });
+    assert.equal(parsed.success, true, JSON.stringify(parsed.error));
+    if (parsed.success) {
+        assert.equal(
+            parsed.data.workflow?.steps[0]?.attempts?.[0]?.routingAttempts?.[0]
+                ?.providerCallStatus,
+            'failed'
+        );
+    }
+});
+
 test('public trace retains cost completeness for Steps and Attempts', () => {
     for (const costCompleteness of [
         'complete',

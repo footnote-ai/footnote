@@ -1136,7 +1136,7 @@ export const createChatOrchestrator = ({
             const measuredAttempts = chainResult.attempts.flatMap((route) => {
                 const calls = callsByCandidate.get(route.index);
                 return calls === undefined || calls.length === 0
-                    ? [route]
+                    ? [{ ...route, providerCallStatus: 'not_called' as const }]
                     : calls.map((call) => ({
                           ...route,
                           ...call,
