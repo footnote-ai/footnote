@@ -207,9 +207,6 @@ test('planner forwards the selected Ollama profile control', async () => {
     }
 });
 
-const withDefaultPersonaExpressionGuidance = (personaPrompt: string): string =>
-    `${personaPrompt}\n\n${buildPersonaExpressionGuidance('balanced')}`;
-
 test('web requests go through planner and are coerced to message when planner picks react', async () => {
     let callCount = 0;
     let plannerMessages: Array<{ role: string; content: string }> = [];
@@ -287,9 +284,11 @@ test('web requests go through planner and are coerced to message when planner pi
     );
     assert.equal(
         finalMessages[1]?.content,
-        withDefaultPersonaExpressionGuidance(
-            renderConversationPromptLayers('web-chat').personaPrompt
-        )
+        renderConversationPromptLayers('web-chat').personaPrompt
+    );
+    assert.equal(
+        finalMessages[2]?.content,
+        buildPersonaExpressionGuidance('balanced')
     );
     assert.match(
         finalMessages[finalMessages.length - 1]?.content ?? '',
@@ -500,9 +499,11 @@ test('message plans pass planner generation options into chatService', async () 
     );
     assert.equal(
         finalMessages[1]?.content,
-        withDefaultPersonaExpressionGuidance(
-            renderConversationPromptLayers('discord-chat').personaPrompt
-        )
+        renderConversationPromptLayers('discord-chat').personaPrompt
+    );
+    assert.equal(
+        finalMessages[2]?.content,
+        buildPersonaExpressionGuidance('balanced')
     );
 });
 
@@ -2093,7 +2094,11 @@ test('orchestrator fails open when weather tool throws and still generates a res
 });
 
 test('discord requests ignore runtime profile overlay when no botPersonaId is provided', async () => {
-    let finalMessages: Array<{ role: string; content: string }> = [];
+    let finalMessages: Array<{
+        role: string;
+        content: string;
+        cacheable?: boolean;
+    }> = [];
     const originalProfile = runtimeConfig.profile;
     const runtimeConfigMutable = runtimeConfig as unknown as {
         profile: BotProfileConfig;
@@ -2170,25 +2175,48 @@ test('discord requests ignore runtime profile overlay when no botPersonaId is pr
                 botProfileDisplayName: 'Footnote',
             }).systemPrompt
         );
+        const layers = renderConversationPromptLayers('discord-chat', {
+            botProfileDisplayName: 'Footnote',
+        });
+        assert.equal(finalMessages[1]?.content, layers.personaPrompt);
+        assert.equal(finalMessages[1]?.cacheable, true);
         assert.equal(
-            finalMessages[1]?.content ?? '',
-            withDefaultPersonaExpressionGuidance(
-                renderConversationPromptLayers('discord-chat', {
-                    botProfileDisplayName: 'Footnote',
-                }).personaPrompt
-            )
+            finalMessages[2]?.content,
+            buildPersonaExpressionGuidance('balanced')
         );
+        assert.equal(finalMessages[2]?.cacheable, undefined);
         assert.doesNotMatch(
             finalMessages[1]?.content ?? '',
             /BEGIN Bot Profile Overlay/
         );
+        await orchestrator.runChat(
+            createChatRequest({
+                surface: 'web',
+                trigger: { kind: 'submit' },
+            })
+        );
+        const webLayers = renderConversationPromptLayers('web-chat', {
+            botProfileDisplayName: 'Footnote',
+        });
+        assert.equal(finalMessages[0]?.content, webLayers.systemPrompt);
+        assert.equal(finalMessages[1]?.content, webLayers.personaPrompt);
+        assert.equal(finalMessages[1]?.cacheable, true);
+        assert.equal(
+            finalMessages[2]?.content,
+            buildPersonaExpressionGuidance('balanced')
+        );
+        assert.equal(finalMessages[2]?.cacheable, undefined);
     } finally {
         runtimeConfigMutable.profile = originalProfile;
     }
 });
 
-test('discord profileId does not change backend runtime profile overlay', async () => {
-    let finalMessages: Array<{ role: string; content: string }> = [];
+test('discord persona selection uses the backend-owned profile overlay', async () => {
+    let finalMessages: Array<{
+        role: string;
+        content: string;
+        cacheable?: boolean;
+    }> = [];
     const originalProfile = runtimeConfig.profile;
     const runtimeConfigMutable = runtimeConfig as unknown as {
         profile: BotProfileConfig;
@@ -2252,18 +2280,20 @@ test('discord profileId does not change backend runtime profile overlay', async 
 
         await orchestrator.runChat(
             createChatRequest({
+                botPersonaId: 'myuri',
                 conversation: [{ role: 'user', content: 'Who are you?' }],
             })
         );
 
-        assert.equal(
+        assert.match(
             finalMessages[1]?.content ?? '',
-            withDefaultPersonaExpressionGuidance(
-                renderConversationPromptLayers('discord-chat', {
-                    botProfileDisplayName: 'Footnote',
-                }).personaPrompt
-            )
+            /BEGIN Bot Profile Overlay/
         );
+        assert.match(
+            finalMessages[1]?.content ?? '',
+            /active persona is Myuri, warm, lively, perceptive/
+        );
+        assert.equal(finalMessages[1]?.cacheable, undefined);
     } finally {
         runtimeConfigMutable.profile = originalProfile;
     }
@@ -3185,6 +3215,7 @@ test('planner canonical attempts retain expansion, routed failures and exhausted
             'route',
             'exhausted',
             'pre-provider',
+            'not-called-cache',
         ] as const) {
             let plannerCalls = 0;
             const orchestrator = createChatOrchestrator({
@@ -3192,7 +3223,10 @@ test('planner canonical attempts retain expansion, routed failures and exhausted
                     if (request.maxOutputTokens !== PLANNER_TOKEN_SENTINEL)
                         return { text: 'fixture answer', model: request.model };
                     plannerCalls += 1;
-                    if (scenario === 'pre-provider')
+                    if (
+                        scenario === 'pre-provider' ||
+                        (scenario === 'not-called-cache' && plannerCalls === 1)
+                    )
                         throw Object.assign(new Error('fixture pre-provider'), {
                             preProviderCallFailure: true,
                         });
@@ -3237,7 +3271,8 @@ test('planner canonical attempts retain expansion, routed failures and exhausted
                         usage: {
                             promptTokens: 20,
                             completionTokens: 1,
-                            cachedInputTokens: 0,
+                            cachedInputTokens:
+                                scenario === 'not-called-cache' ? 8 : 0,
                             cacheWriteTokens: 0,
                             totalTokens: 21,
                         },
@@ -3301,15 +3336,36 @@ test('planner canonical attempts retain expansion, routed failures and exhausted
             assert.ok(
                 calls.every(
                     (call) =>
-                        call.durationMs !== undefined && call.cost !== undefined
+                        call.providerCallStatus === 'not_called' ||
+                        (call.durationMs !== undefined &&
+                            call.cost !== undefined)
                 ),
                 scenario
             );
+            if (scenario === 'not-called-cache') {
+                const plannerStep = response.metadata.workflow!.steps.find(
+                    (step) => step.stepKind === 'plan'
+                );
+                const routingAttempts = plannerStep?.attempts?.flatMap(
+                    (attempt) => attempt.routingAttempts ?? []
+                );
+                assert.equal(
+                    routingAttempts?.filter(
+                        (call) => call.providerCallStatus === 'not_called'
+                    ).length,
+                    1
+                );
+                const summary = summarizePromptCaching(
+                    response.metadata.workflow!
+                ).find((entry) => entry.purpose === 'planner');
+                assert.equal(summary?.cacheReadTokens, 8);
+                assert.equal(summary?.costCompleteness, 'complete');
+            }
             assert.deepEqual(
                 calls.map((call) => call.profileId),
                 scenario === 'expansion'
                     ? [profiles[0]!.id, profiles[0]!.id]
-                    : scenario === 'route'
+                    : scenario === 'route' || scenario === 'not-called-cache'
                       ? profiles.map((profile) => profile.id)
                       : [profiles[0]!.id, profiles[1]!.id, profiles[0]!.id],
                 scenario

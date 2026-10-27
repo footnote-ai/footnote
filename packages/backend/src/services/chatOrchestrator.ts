@@ -1148,7 +1148,9 @@ export const createChatOrchestrator = ({
             });
             const accounting = () => {
                 const calls = measuredAttempts.filter(
-                    (call) => !call.status.startsWith('skipped')
+                    (call) =>
+                        !call.status.startsWith('skipped') &&
+                        call.providerCallStatus !== 'not_called'
                 );
                 let usage = calls[0]?.usage;
                 for (const call of calls.slice(1))
@@ -1643,7 +1645,7 @@ export const createChatOrchestrator = ({
                 content: promptLayers.systemPrompt,
                 cacheable: true,
             },
-            ...(backendOwnedProfileOverlay === undefined
+            ...(backendOwnedProfileOverlay == null
                 ? [
                       {
                           role: 'system' as const,

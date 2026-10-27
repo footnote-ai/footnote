@@ -64,6 +64,13 @@ savings also remain unverified; the checked-in experiment is limited to the
 synthetic OpenRouter observations above. No production enablement, publication,
 or deployment was performed.
 
+The October 27 PR follow-up retry again found no Docker server response, and
+`pnpm test:build` remained at image building without further output before it
+was interrupted. Compose packaging is still unverified. The planner accounting,
+prompt-layer, and Git preflight regression tests pass; `pnpm review
+--changed-only` reports no errors or warnings. A full rerun of the focused test
+files did not finish in this session, so full-file status remains unverified.
+
 ## Reproduce the bounded experiment
 
 Run `pnpm cache:probe --check` first. It reads credential availability and pricing

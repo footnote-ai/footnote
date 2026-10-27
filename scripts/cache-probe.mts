@@ -6,7 +6,6 @@
  * @footnote-ethics: high - Reports contain measurements, never prompts, responses, credentials, or caller data.
  */
 import 'dotenv/config';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,17 +37,12 @@ import {
     type CacheProbeBudget,
     type CacheProbePricing,
 } from './lib/cache-probe-budget.js';
+import {
+    readCacheProbeCommit,
+    resolveCacheProbeGit,
+} from './lib/cache-probe-git.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// shortcut: standard system Git installs only; add a fixed protected path if another layout is supported.
-const safeGitExecutable =
-    process.platform === 'win32'
-        ? String.raw`C:\Program Files\Git\cmd\git.exe`
-        : '/usr/bin/git';
-const safeGitPath =
-    process.platform === 'win32'
-        ? String.raw`C:\Windows\System32;C:\Program Files\Git\cmd;C:\Program Files\Git\mingw64\bin;C:\Program Files\Git\usr\bin`
-        : '/usr/bin:/bin';
 const flags = process.argv.slice(2);
 if (
     flags.length > 1 ||
@@ -56,6 +50,8 @@ if (
 )
     throw new Error('Usage: pnpm cache:probe [--check | --live]');
 const live = flags[0] === '--live';
+const gitExecutable = resolveCacheProbeGit(process.platform);
+const commit = readCacheProbeCommit(gitExecutable, root);
 const budget: CacheProbeBudget = { calls: 0, reservedUsd: 0 };
 const output = path.join(root, 'docs/status/prompt-cache-probe.json');
 // Do not overlap manual --live runs; they share this checkpoint and budget.
@@ -291,16 +287,7 @@ const run = async (): Promise<void> => {
             )
             .digest('hex'),
         capturedAt: new Date().toISOString(),
-        commit: execFileSync(safeGitExecutable, ['rev-parse', 'HEAD'], {
-            cwd: root,
-            encoding: 'utf8',
-            env: {
-                PATH: safeGitPath,
-                ...(process.platform === 'win32' && {
-                    SystemRoot: process.env.SystemRoot ?? 'C:\\Windows',
-                }),
-            },
-        }).trim(),
+        commit,
         fixtureVersion: 1,
         synthetic: true,
         limits: { maxCalls: 60, maxEstimatedUsd: 2 },
