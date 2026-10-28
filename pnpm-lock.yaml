@@ -23,8 +23,8 @@ catalogs:
       specifier: ^1.6.1
       version: 1.6.1
     '@openai/agents':
-      specifier: ^0.20.0
-      version: 0.20.0
+      specifier: ^0.21.0
+      version: 0.21.0
     '@resvg/resvg-js':
       specifier: ^2.6.2
       version: 2.6.2
@@ -137,8 +137,8 @@ catalogs:
       specifier: ^0.0.2
       version: 0.0.2
     openai:
-      specifier: ^7.32.0
-      version: 7.32.0
+      specifier: ^7.43.0
+      version: 7.43.0
     openid-client:
       specifier: ^6.8.8
       version: 6.8.8
@@ -337,7 +337,7 @@ importers:
         version: 1.5.5(zod@4.6.5)
       openai:
         specifier: 'catalog:'
-        version: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+        version: 7.43.0(google-auth-library@10.9.0(supports-color@10.2.2))(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       ws:
         specifier: 'catalog:'
         version: 8.22.0(bufferutil@4.1.0)
@@ -359,7 +359,7 @@ importers:
     dependencies:
       '@footnote/agent-runtime':
         specifier: workspace:*
-        version: file:packages/agent-runtime(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)
+        version: file:packages/agent-runtime(bufferutil@4.1.0)(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)
       '@footnote/config-spec':
         specifier: workspace:*
         version: link:../config-spec
@@ -459,7 +459,7 @@ importers:
         version: link:../prompts
       '@openai/agents':
         specifier: 'catalog:'
-        version: 0.20.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+        version: 0.21.0(bufferutil@4.1.0)(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       '@sapphire/shapeshift':
         specifier: 'catalog:'
         version: 4.0.0
@@ -498,7 +498,7 @@ importers:
         version: 0.0.2
       openai:
         specifier: 'catalog:'
-        version: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+        version: 7.43.0(google-auth-library@10.9.0(supports-color@10.2.2))(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       opusscript:
         specifier: 'catalog:'
         version: 0.1.1
@@ -1695,26 +1695,26 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@openai/agents-core@0.20.0':
-    resolution: {integrity: sha512-9nJJ3iyQTwO2kmrZJPMqnHI61g3xp2DgtpW4V0cgNtYot5jocDqAMN5+dkjtsBo64U3Wbl7rIAV0q5kvycoIIA==}
+  '@openai/agents-core@0.21.0':
+    resolution: {integrity: sha512-P2jJhc85xrKpe9GUOHAVfPHqK52my49fD1CI0LnfYEvBUwZxJXQI6lgSwby9nWhvQECveM9OvBUglAXuArsHXw==}
     peerDependencies:
       zod: ^4.0.0
     peerDependenciesMeta:
       zod:
         optional: true
 
-  '@openai/agents-openai@0.20.0':
-    resolution: {integrity: sha512-6jAwFlUvlRiN/OBwTZa8xUSwbXb5nxGtSUG6kKEW19Zo70kN+CLqaVLTHy8cQpnQiTEMPuAICAXklRx7kTfE9Q==}
+  '@openai/agents-openai@0.21.0':
+    resolution: {integrity: sha512-Y1u1ek6FwKx8j+T7gRYcm4kKyN0irqsyZm0XUDZ+g+8s15tu4EhNwNJ92zOHGx7Vjkr2RugWBxTeNspHjw/lQw==}
     peerDependencies:
       zod: ^4.0.0
 
-  '@openai/agents-realtime@0.20.0':
-    resolution: {integrity: sha512-KK3w9k9rkqv5mC25vykWTe/1IIcOMsqwJs9mB0aX9Z2Us487xGduZgqr+ENEzthjZbQvTi/+qUv/tfoZeN/p/w==}
+  '@openai/agents-realtime@0.21.0':
+    resolution: {integrity: sha512-nI0jGkSdivlXzS7HXAB1EVplaeSyoAvfM2ofHheJDJdshs3UQl3x405nmTflKWye+wQrqemK4uxL06NIhgvjHg==}
     peerDependencies:
       zod: ^4.0.0
 
-  '@openai/agents@0.20.0':
-    resolution: {integrity: sha512-k3fm1qJ5VjYvBI1juwZGDdhtpd7CZqJlt+6zIMcmzHD1mIQoW9HhXN8Wv9G9PpemWz9ykaxj6CIQkY8kMAuWjA==}
+  '@openai/agents@0.21.0':
+    resolution: {integrity: sha512-NpJ74/dGbpYZiRYF474pCaBpxqh4A8+WHbZmaEZVQpRqieZAVH+MV4fesR9MtRGUZfpW5B91zuHzIilQp2iSxQ==}
     peerDependencies:
       zod: ^4.0.0
 
@@ -4536,13 +4536,14 @@ packages:
       zod:
         optional: true
 
-  openai@7.32.0:
-    resolution: {integrity: sha512-avqxu/jl1gsVBCBgFNPr9sTh+wZppQphuhhFy1zEvAJxEaJ4t0ery6hZdOT9kws/EcNTARoQcZs2IT3bliE1SA==}
+  openai@7.43.0:
+    resolution: {integrity: sha512-fBjKaDFG8AVfkGYoIo/E+xNRlNk7nx2nQ9GoQtXfePzPjg4QcT6nejkhXayJnEwSpFGfthOrAPI2KXj5yAqg9A==}
     engines: {node: '>=22.0.0'}
     peerDependencies:
       '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
       '@smithy/hash-node': '>=4.3.0 <5'
       '@smithy/signature-v4': '>=5.4.0 <6'
+      google-auth-library: '>=9.15.1 <11'
       undici: ^6.28.0
       ws: ^8.21.0
       zod: ^3.25 || ^4.0
@@ -4552,6 +4553,8 @@ packages:
       '@smithy/hash-node':
         optional: true
       '@smithy/signature-v4':
+        optional: true
+      google-auth-library:
         optional: true
       undici:
         optional: true
@@ -6506,7 +6509,7 @@ snapshots:
     dependencies:
       '@expressive-code/core': 0.44.2
 
-  '@footnote/agent-runtime@file:packages/agent-runtime(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)':
+  '@footnote/agent-runtime@file:packages/agent-runtime(bufferutil@4.1.0)(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)':
     dependencies:
       '@ai-sdk/openai-compatible': 2.0.59(zod@4.6.5)
       '@ai-sdk/provider-utils': 4.0.38(zod@4.6.5)
@@ -6514,7 +6517,7 @@ snapshots:
       '@voltagent/core': 2.11.0(@ai-sdk/provider-utils@4.0.38(zod@4.6.5))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.6.5))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       ai: 6.0.224(zod@4.6.5)
       ollama-ai-provider-v2: 1.5.5(zod@4.6.5)
-      openai: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      openai: 7.43.0(google-auth-library@10.9.0(supports-color@10.2.2))(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.5
     transitivePeerDependencies:
@@ -6527,6 +6530,7 @@ snapshots:
       - bufferutil
       - debug
       - encoding
+      - google-auth-library
       - graphql
       - supports-color
       - undici
@@ -6838,11 +6842,11 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
 
-  '@openai/agents-core@0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
+  '@openai/agents-core@0.21.0(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
     dependencies:
       '@standard-schema/spec': 1.1.0
       debug: 4.4.3(supports-color@10.2.2)
-      openai: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      openai: 7.43.0(google-auth-library@10.9.0(supports-color@10.2.2))(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
     optionalDependencies:
       '@modelcontextprotocol/client': 2.3.1
       zod: 4.6.5
@@ -6850,26 +6854,28 @@ snapshots:
       - '@aws-sdk/credential-provider-node'
       - '@smithy/hash-node'
       - '@smithy/signature-v4'
+      - google-auth-library
       - supports-color
       - undici
       - ws
 
-  '@openai/agents-openai@0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
+  '@openai/agents-openai@0.21.0(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
     dependencies:
-      '@openai/agents-core': 0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
-      openai: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      '@openai/agents-core': 0.21.0(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      openai: 7.43.0(google-auth-library@10.9.0(supports-color@10.2.2))(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       zod: 4.6.5
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
       - '@smithy/hash-node'
       - '@smithy/signature-v4'
+      - google-auth-library
       - supports-color
       - undici
       - ws
 
-  '@openai/agents-realtime@0.20.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(zod@4.6.5)':
+  '@openai/agents-realtime@0.21.0(bufferutil@4.1.0)(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)(zod@4.6.5)':
     dependencies:
-      '@openai/agents-core': 0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      '@openai/agents-core': 0.21.0(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       '@types/ws': 8.18.2
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.5
@@ -6878,22 +6884,24 @@ snapshots:
       - '@smithy/hash-node'
       - '@smithy/signature-v4'
       - bufferutil
+      - google-auth-library
       - supports-color
       - undici
       - utf-8-validate
 
-  '@openai/agents@0.20.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
+  '@openai/agents@0.21.0(bufferutil@4.1.0)(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)':
     dependencies:
-      '@openai/agents-core': 0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
-      '@openai/agents-openai': 0.20.0(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
-      '@openai/agents-realtime': 0.20.0(bufferutil@4.1.0)(supports-color@10.2.2)(undici@6.28.0)(zod@4.6.5)
-      openai: 7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      '@openai/agents-core': 0.21.0(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      '@openai/agents-openai': 0.21.0(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
+      '@openai/agents-realtime': 0.21.0(bufferutil@4.1.0)(google-auth-library@10.9.0(supports-color@10.2.2))(supports-color@10.2.2)(undici@6.28.0)(zod@4.6.5)
+      openai: 7.43.0(google-auth-library@10.9.0(supports-color@10.2.2))(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5)
       zod: 4.6.5
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
       - '@smithy/hash-node'
       - '@smithy/signature-v4'
       - bufferutil
+      - google-auth-library
       - supports-color
       - undici
       - utf-8-validate
@@ -10229,8 +10237,9 @@ snapshots:
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 3.25.76
 
-  openai@7.32.0(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5):
+  openai@7.43.0(google-auth-library@10.9.0(supports-color@10.2.2))(undici@6.28.0)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.5):
     optionalDependencies:
+      google-auth-library: 10.9.0(supports-color@10.2.2)
       undici: 6.28.0
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.5
