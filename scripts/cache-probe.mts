@@ -38,6 +38,7 @@ import {
     type CacheProbePricing,
 } from './lib/cache-probe-budget.js';
 import {
+    assertCacheProbeCheckpointMatches,
     readCacheProbeCommit,
     resolveCacheProbeGit,
 } from './lib/cache-probe-git.js';
@@ -52,6 +53,17 @@ if (
 const live = flags[0] === '--live';
 const gitExecutable = resolveCacheProbeGit(process.platform);
 const commit = readCacheProbeCommit(gitExecutable, root);
+const reportSourceDigest = createHash('sha256')
+    .update(
+        [
+            'scripts/cache-probe.mts',
+            'packages/agent-runtime/src/voltagentRuntime.ts',
+            'packages/backend/src/services/workflowEngine/promptCaching.ts',
+        ]
+            .map((file) => fs.readFileSync(path.join(root, file), 'utf8'))
+            .join('\n')
+    )
+    .digest('hex');
 const budget: CacheProbeBudget = { calls: 0, reservedUsd: 0 };
 const output = path.join(root, 'docs/status/prompt-cache-probe.json');
 // Do not overlap manual --live runs; they share this checkpoint and budget.
@@ -59,11 +71,18 @@ const previous =
     live && fs.existsSync(output)
         ? (JSON.parse(fs.readFileSync(output, 'utf8')) as {
               experimentId: string;
+              commit: string;
+              reportSourceDigest: string;
               budget: CacheProbeBudget;
               samples: typeof samples;
           })
         : undefined;
 if (previous !== undefined) {
+    assertCacheProbeCheckpointMatches(
+        previous,
+        commit,
+        reportSourceDigest
+    );
     if (
         !Number.isSafeInteger(previous.budget.calls) ||
         previous.budget.calls < 0 ||
@@ -273,19 +292,7 @@ const run = async (): Promise<void> => {
     }
     const checkpoint = () => ({
         experimentId,
-        reportSourceDigest: createHash('sha256')
-            .update(
-                [
-                    'scripts/cache-probe.mts',
-                    'packages/agent-runtime/src/voltagentRuntime.ts',
-                    'packages/backend/src/services/workflowEngine/promptCaching.ts',
-                ]
-                    .map((file) =>
-                        fs.readFileSync(path.join(root, file), 'utf8')
-                    )
-                    .join('\n')
-            )
-            .digest('hex'),
+        reportSourceDigest,
         capturedAt: new Date().toISOString(),
         commit,
         fixtureVersion: 1,

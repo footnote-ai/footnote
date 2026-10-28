@@ -625,6 +625,9 @@ const GenerationRoutingChainAttemptSchema = z
         provider: z.string().min(1).optional(),
         model: z.string().min(1).optional(),
         status: z.string().min(1).max(100),
+        providerCallStatus: z
+            .enum(['succeeded', 'failed', 'not_called'])
+            .optional(),
         reasonCode: z.string().min(1).max(100).optional(),
         finishReason: z.string().max(100).optional(),
         completion: GenerationCompletionSchema.optional(),

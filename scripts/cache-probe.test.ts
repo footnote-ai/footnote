@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { reserveCacheProbeRequest } from './lib/cache-probe-budget.js';
 import {
+    assertCacheProbeCheckpointMatches,
     readCacheProbeCommit,
     resolveCacheProbeGit,
 } from './lib/cache-probe-git.js';
@@ -81,5 +82,30 @@ test('cache probe reports a failed revision lookup before starting the probe', (
                 path.join('missing', 'repo')
             ),
         /could not read the current Git revision/
+    );
+});
+
+test('cache probe refuses to resume checkpoints from another source revision', () => {
+    const checkpoint = { commit: 'commit-a', reportSourceDigest: 'digest-a' };
+    assert.doesNotThrow(() =>
+        assertCacheProbeCheckpointMatches(checkpoint, 'commit-a', 'digest-a')
+    );
+    assert.throws(
+        () =>
+            assertCacheProbeCheckpointMatches(
+                checkpoint,
+                'commit-b',
+                'digest-a'
+            ),
+        /different source revision/
+    );
+    assert.throws(
+        () =>
+            assertCacheProbeCheckpointMatches(
+                checkpoint,
+                'commit-a',
+                'digest-b'
+            ),
+        /different source revision/
     );
 });

@@ -54,3 +54,17 @@ export const readCacheProbeCommit = (
         );
     }
 };
+
+export const assertCacheProbeCheckpointMatches = (
+    checkpoint: { commit: string; reportSourceDigest: string },
+    commit: string,
+    reportSourceDigest: string
+): void => {
+    if (
+        checkpoint.commit !== commit ||
+        checkpoint.reportSourceDigest !== reportSourceDigest
+    )
+        throw new Error(
+            'Cache probe checkpoint belongs to a different source revision.'
+        );
+};

@@ -830,6 +830,22 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                     reasoningTokens: 6,
                     totalTokens: 30,
                 },
+                routingChainAttempts: [
+                    {
+                        index: 0,
+                        profileId: 'openai-text-medium',
+                        status: 'executed',
+                        providerCallStatus: 'succeeded',
+                        chooseOneUsed: false,
+                    },
+                    {
+                        index: 1,
+                        profileId: 'openrouter-text-medium',
+                        status: 'skipped',
+                        providerCallStatus: 'not_called',
+                        chooseOneUsed: false,
+                    },
+                ],
                 durationMs: 20,
             },
         ],
