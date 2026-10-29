@@ -1,6 +1,6 @@
 # Realtime conversation with background reasoning
 
-Status: proposed; design review required before implementation. Updated 2026-10-29.
+Status: first call-state slice implemented with synthetic events; remaining design proposed. Updated 2026-10-29.
 Primary owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
 Conversation continuity and retention remain governed by
 [#559](https://github.com/footnote-ai/footnote/issues/559).
@@ -19,6 +19,9 @@ conversation projection, speech resolver, and execution records. Do not add a
 conversation database, event bus, agent framework, or general-purpose coordinator.
 The [alignment tracker](../status/realtime-voice-alignment.md) records what exists;
 everything below describes proposed behavior unless explicitly identified as current.
+The first slice now has a backend-local state boundary and synthetic tests; see
+the [implemented foundation](../status/realtime-voice-alignment.md#synthetic-call-state-foundation).
+It does not connect provider events, start Runs, or deliver speech.
 
 The intended Talker is a lightweight conversational model: it listens and speaks
 naturally, manages turn-taking and interruptions, and maintains attention while

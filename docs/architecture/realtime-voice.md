@@ -195,5 +195,7 @@ ownership relative to ordinary chat.
 
 The proposed [conversation with background reasoning](../proposals/realtime-talker-reasoner.md)
 reuses the existing Workflow and conversation projection boundaries. It is a
-proposal under #558, not implemented Talker–Reasoner behavior. Cross-surface
+proposal under #558. A backend-local, synthetic call-state foundation now reuses
+conversation projection; it is not connected to provider events or Workflow Runs.
+The tracker describes its limits. Cross-surface
 continuity, consent, and retention remain under #559.
