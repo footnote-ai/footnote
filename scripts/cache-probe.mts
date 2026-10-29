@@ -116,10 +116,10 @@ const preflight = {
         Date.now() - Date.parse(pricingVerifiedAt) >= 0 &&
         Date.now() - Date.parse(pricingVerifiedAt) < 15 * 60 * 1000,
     ratesMatchApproved:
-        rate.input === 0.2 &&
-        rate.cachedInput === 0.02 &&
-        rate.output === 1.2 &&
-        rate.cacheWriteMultiplier === 1.25,
+        Math.abs(rate.input - 0.2) < 1e-12 &&
+        Math.abs(rate.cachedInput - 0.02) < 1e-12 &&
+        Math.abs(rate.output - 1.2) < 1e-12 &&
+        Math.abs(rate.cacheWriteMultiplier - 1.25) < 1e-12,
 };
 const profile: ModelProfile = {
     id: 'cache-probe-openai',
