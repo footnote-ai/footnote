@@ -68,7 +68,7 @@ catalog:
     astro: ^7.3.8
     better-sqlite3: ^12.10.0
     bufferutil: ^4.1.0
-    body-parser: ^2.2.2
+    body-parser: ^2.4.0
     cloudinary: ^2.11.0
     concurrently: ^10.0.5
     copyfiles: ^2.4.1
