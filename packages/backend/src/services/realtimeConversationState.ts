@@ -132,7 +132,7 @@ export class RealtimeConversationState {
         }
         let next: RealtimeConversationParticipant[];
         try {
-            next = participants.map((participant) => ({
+            next = Array.from(participants, (participant) => ({
                 id: requireBoundedText(participant.id, 'participant id'),
                 displayName: requireBoundedText(
                     participant.displayName,
@@ -203,10 +203,19 @@ export class RealtimeConversationState {
             this.holdDeliveryForAmbiguousSpeech();
             return { accepted: false, reason: 'speaker_unresolved', handle };
         }
+        if (typeof input.content !== 'string') {
+            if (input.role === 'user') this.holdDeliveryForAmbiguousSpeech();
+            throw new TypeError(
+                'Finalized realtime turn content must be a string.'
+            );
+        }
         const content = input.content.trim();
-        if (!content)
+        if (!content) {
+            if (input.role === 'user') this.holdDeliveryForAmbiguousSpeech();
             throw new TypeError('Finalized realtime turn content is empty.');
+        }
         if (utf8Bytes(content) > MAX_CONTEXT_BYTES) {
+            if (input.role === 'user') this.holdDeliveryForAmbiguousSpeech();
             return { accepted: false, reason: 'turn_too_large', handle };
         }
 
@@ -252,15 +261,6 @@ export class RealtimeConversationState {
     /** Checks lifecycle freshness only; it does not establish review or speech approval. */
     isDeliveryFresh(handle: RealtimeFreshnessHandle): boolean {
         return this.isCurrent(handle) && this.intent?.status === 'pending';
-    }
-
-    /** Resumes the same pending reasoning intent after an interruption. */
-    resumeIntent(handle: RealtimeFreshnessHandle): boolean {
-        if (this.isCurrent(handle) && this.intent?.status === 'interrupted') {
-            this.intent.status = 'pending';
-            return true;
-        }
-        return false;
     }
 
     snapshot(): RealtimeConversationSnapshot {

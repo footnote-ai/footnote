@@ -78,7 +78,25 @@ test('intent changes gate delivery while interruption preserves the reasoning re
     assert.equal(interruption.accepted, true);
     assert.equal(state.isCurrent(question.handle), true);
     assert.equal(state.isDeliveryFresh(question.handle), false);
-    assert.equal(state.resumeIntent(question.handle), true);
+    const revision = state.snapshot().revision;
+    const assistantContinuation = state.appendFinalizedTurn({
+        role: 'assistant',
+        speakerId: 'assistant',
+        content: 'I will keep looking.',
+        intent: 'continue',
+    });
+    assert.equal(assistantContinuation.accepted, true);
+    assert.equal(state.snapshot().intent?.status, 'interrupted');
+    assert.equal(state.isDeliveryFresh(question.handle), false);
+
+    const continuation = state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'alex',
+        content: 'yes, keep looking',
+        intent: 'continue',
+    });
+    assert.equal(continuation.accepted, true);
+    assert.equal(state.snapshot().revision, revision);
     assert.equal(state.isDeliveryFresh(question.handle), true);
 
     const cancelled = state.appendFinalizedTurn({
@@ -100,6 +118,55 @@ test('intent changes gate delivery while interruption preserves the reasoning re
     assert.equal(replacement.accepted, true);
     assert.equal(state.snapshot().intent?.status, 'pending');
     assert.notEqual(state.snapshot().intent?.turnId, question.turnId);
+});
+
+test('continue cannot revive a superseded or cancelled intent', () => {
+    const state = new RealtimeConversationState('session');
+    state.setAudience(consentingAudience(['alex']));
+    const original = state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'alex',
+        content: 'first question',
+        intent: 'question',
+    });
+    assert.equal(original.accepted, true);
+    const superseding = state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'alex',
+        content: 'replacement question',
+        intent: 'supersede',
+    });
+    assert.equal(superseding.accepted, true);
+    assert.equal(state.isCurrent(original.handle), false);
+    const supersededRevision = state.snapshot().revision;
+    const lateSupersededContinue = state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'alex',
+        content: 'continue the old question',
+        intent: 'continue',
+    });
+    assert.equal(lateSupersededContinue.accepted, true);
+    assert.equal(state.snapshot().revision, supersededRevision);
+    assert.equal(state.snapshot().intent?.status, 'pending');
+
+    state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'alex',
+        content: 'stop',
+        intent: 'cancel',
+    });
+    const revision = state.snapshot().revision;
+    const cancelledStatus = state.snapshot().intent?.status;
+    const lateContinue = state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'alex',
+        content: 'continue anyway',
+        intent: 'continue',
+    });
+    assert.equal(lateContinue.accepted, true);
+    assert.equal(state.snapshot().revision, revision);
+    assert.equal(state.snapshot().intent?.status, cancelledStatus);
+    assert.equal(state.isDeliveryFresh(lateContinue.handle), false);
 });
 
 test('explicit supersession advances freshness and assistant turns cannot replace intent', () => {
@@ -143,6 +210,65 @@ test('explicit supersession advances freshness and assistant turns cannot replac
             }),
         /intent is invalid/
     );
+});
+
+test('an oversized attributed correction holds the prior delivery without replacing intent', () => {
+    const state = new RealtimeConversationState('session');
+    state.setAudience(consentingAudience(['alex']));
+    const question = state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'alex',
+        content: 'compare the current options',
+        intent: 'question',
+    });
+    assert.equal(question.accepted, true);
+    if (!question.accepted) return;
+
+    const correction = state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'alex',
+        content: 'x'.repeat(16 * 1024 + 1),
+        intent: 'supersede',
+    });
+    assert.deepEqual(
+        correction.accepted ? null : correction.reason,
+        'turn_too_large'
+    );
+    assert.equal(state.isCurrent(question.handle), true);
+    assert.equal(state.isDeliveryFresh(question.handle), false);
+    assert.equal(state.snapshot().intent?.turnId, question.turnId);
+    assert.equal(state.snapshot().intent?.status, 'interrupted');
+});
+
+test('empty or malformed attributed cancel and interrupt content holds prior delivery', () => {
+    const rejectedTurns = [
+        { content: '', intent: 'cancel' as const },
+        { content: 42 as never, intent: 'interrupt' as const },
+    ];
+    for (const rejectedTurn of rejectedTurns) {
+        const state = new RealtimeConversationState('session');
+        state.setAudience(consentingAudience(['alex']));
+        const question = state.appendFinalizedTurn({
+            role: 'user',
+            speakerId: 'alex',
+            content: 'current question',
+            intent: 'question',
+        });
+        assert.equal(question.accepted, true);
+        if (!question.accepted) continue;
+
+        assert.throws(() =>
+            state.appendFinalizedTurn({
+                role: 'user',
+                speakerId: 'alex',
+                ...rejectedTurn,
+            })
+        );
+        assert.equal(state.isCurrent(question.handle), true);
+        assert.equal(state.isDeliveryFresh(question.handle), false);
+        assert.equal(state.snapshot().intent?.turnId, question.turnId);
+        assert.equal(state.snapshot().intent?.status, 'interrupted');
+    }
 });
 
 test('consent revocation and regrant never restore the earlier audience context', () => {
@@ -337,7 +463,37 @@ test('multiple consenting speakers are labeled and invalid rosters revoke state'
     assert.deepEqual(state.snapshot().context.messages, []);
 });
 
-test('ambiguous speech holds delivery until an explicit resume', () => {
+test('sparse audience rosters revoke prior context and fail closed', () => {
+    const state = new RealtimeConversationState('session');
+    state.setAudience(consentingAudience(['alex']));
+    const question = state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'alex',
+        content: 'private context',
+        intent: 'question',
+    });
+    assert.equal(question.accepted, true);
+    if (!question.accepted) return;
+
+    const sparseRoster = new Array<
+        ReturnType<typeof consentingAudience>[number]
+    >(1);
+    assert.throws(() => state.setAudience(sparseRoster));
+    assert.equal(state.isCurrent(question.handle), false);
+    assert.deepEqual(state.snapshot().context.messages, []);
+    const rejected = state.appendFinalizedTurn({
+        role: 'assistant',
+        speakerId: 'assistant',
+        content: 'must not be accepted',
+    });
+    assert.equal(rejected.accepted, false);
+    assert.equal(
+        rejected.accepted ? null : rejected.reason,
+        'audience_consent_required'
+    );
+});
+
+test('ambiguous speech cannot be routed under a guessed speaker identity', () => {
     const state = new RealtimeConversationState('session');
     state.setAudience(consentingAudience(['alex']));
     const question = state.appendFinalizedTurn({

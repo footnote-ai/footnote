@@ -70,9 +70,10 @@ and Run/Trace records are unchanged. No live handler calls it yet.
   handles; rejoining or restoring consent cannot restore that content.
 - The window retains at most 12 turns and 16 KiB of UTF-8 content. Participant
   metadata is separately bounded to 32 people and 128 characters per field.
-  Oversized turns are rejected; snapshots are detached from mutable state.
-- Interruptions hold delivery while preserving the reasoning revision. Resuming
-  checks the current handle. Closing is idempotent, clears retained content, and
+  Oversized turns are rejected; rejected user content holds delivery rather than
+  leaving an earlier answer eligible. Snapshots are detached from mutable state.
+- Interruptions hold delivery while preserving the reasoning revision. An explicit
+  attributed continuation resumes it. Closing is idempotent, clears retained content, and
   rejects later turns.
 
 `backend/test/realtimeConversationState.test.ts` exercises these rules with
