@@ -20,12 +20,21 @@ conversation database, event bus, agent framework, or general-purpose coordinato
 The [alignment tracker](../status/realtime-voice-alignment.md) records what exists;
 everything below describes proposed behavior unless explicitly identified as current.
 
-The first enforceable version uses fixed conversational acknowledgements and
-synthesis of approved text. A model may help recognize intent or attention, but
-cannot authorize a Run, select privileged context, or emit an independent answer.
-Natural delivery does not require continuous filler or a speculative answer.
-Free-form Talker paraphrasing is deferred until its output can pass the same
-authority boundary as other generated content.
+The intended Talker is a lightweight conversational model: it listens and speaks
+naturally, manages turn-taking and interruptions, and maintains attention while
+the Workflow reasons independently. It must not wait for a complete STT →
+Workflow → TTS cycle to acknowledge or respond to conversational cues. It cannot
+authorize a Run, select privileged context, or invent a substantive answer.
+
+Fixed acknowledgements and synthesis of approved text are an infrastructure
+validation path for correlation, authority, freshness, and playback. They are
+not the final Talker design or evidence that its responsiveness has been achieved.
+Natural conversational output and substantive answer delivery need distinct
+controls: the former may acknowledge, clarify, or report backend-known status;
+the latter may convey only approved material. How a chosen model/adapter
+enforces that distinction is an explicit design and evaluation gate, not a
+problem solved by prompting. Free-form paraphrasing of substantive results
+remains deferred until it preserves the approval boundary.
 
 ## What the references establish
 
@@ -79,12 +88,12 @@ not an audience authorization boundary.
 ```mermaid
 flowchart TD
     D[Discord capture, participants, playback] <--> V[Backend live voice session]
-    V <--> T[Talker adapter: listen and acknowledge]
+    V <--> T[Conversational Talker: speech, listening, turn-taking]
     V --> C[Bounded conversation projection]
     C --> W[Existing Workflow Run: retrieve, generate, assess]
     W --> G[Backend approval and freshness gate]
     G --> Q[One pending delivery in live session]
-    Q --> S[Approved text to speech at a safe turn boundary]
+    Q --> S[Controlled approved-result delivery at a safe turn boundary]
     S --> D
     W --> R[Existing Run and operator evidence]
     S --> R
@@ -126,6 +135,8 @@ evidence roles, source reporting, and backend-owned prompt ordering.
 
 The following are session delivery states, not additions to the Workflow's
 canonical status enums. A Run's observed facts must remain intact.
+Fixed wording below describes infrastructure validation or a bounded fallback;
+the target Talker may express the same permitted conversational intent naturally.
 
 | State                        | Backend behavior                                                                                                                    | What the conversation may hear                                                                                                      |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -189,12 +200,17 @@ approved text as a synthetic `user` message and assume a voice model will
 repeat it faithfully. The existing `input_text.create` does exactly that kind
 of user-message insertion; it is not an authorized result-update channel.
 
-Only backend-created deliveries may enter the speaking path. Fixed
-acknowledgements carry no factual answer. If a provider can emit autonomous
-speech, disable/suppress that output before enabling this mode; instructions
-alone cannot enforce this boundary. A provider that cannot support controlled
-delivery needs a separate STT plus TTS path, or remains unsupported. A failure
-of that control leaves the optional voice mode unavailable while text stays usable.
+Only backend-admitted conversational output and approved substantive deliveries
+may enter the speaking path. During infrastructure validation, use fixed
+acknowledgements and controlled synthesis. The intended conversational Talker
+may realize acknowledgements, clarifications, and backend-known status naturally,
+but must not convert those into unapproved factual answers. Its control path
+must enforce that distinction and preserve the approved result's meaning;
+instructions alone cannot establish enforcement. Uncontrolled answer audio must
+be suppressed. If a provider cannot support the required control, STT plus TTS
+can validate infrastructure but does not qualify it as the target Talker. A
+failure of that control leaves the optional voice mode unavailable while text
+stays usable.
 
 Keep a private correlation tuple: session, initiating turn, intent revision,
 Reasoner Run, selected Result/response, and delivery identity. Reuse existing
@@ -237,8 +253,28 @@ tests; these are not performance claims. A cancellation-ignoring Run continues
 to occupy its capacity until it settles. If its deadline expires without a
 confirmed stop, stop admitting replacement work; do not release capacity merely
 because its result expired. Count listening, acknowledgement/synthesis, and
-reasoning costs separately without duplicating
-the same provider usage. Unknown usage remains unknown.
+reasoning costs separately without duplicating the same provider usage. Unknown
+usage remains unknown.
+
+An independent deadline watchdog must turn that occupied slot into an explicit
+degraded state even if the Run's promise never settles. At the deadline, revoke
+delivery, request cancellation, and mark voice reasoning unavailable. Give one
+bounded status at the next safe speaking opportunity: the earlier work has
+stalled, so new questions cannot currently start. Continue listening and handling
+stop/leave/status cues; reject new reasoning requests promptly with that reason
+rather than silently waiting or growing a queue. Text remains independently
+available under its own admission rules, not as an automatic retry of the Run.
+
+Expose metadata-only pending age, deadline, cancellation-request time, occupied
+capacity, and the degraded reason through existing operator diagnostics. Do not
+report a confirmed stop or final Run failure without evidence. Recovery requires
+settlement or a confirmed stop; then clear the reservation and report reasoning
+available again. Closing or reconnecting a call must not bypass the unresolved
+work reservation: retain only the minimal capacity/correlation metadata after
+session content is cleared. If stopping cannot be confirmed, keep reasoning
+explicitly unavailable and require operator recovery. A process restart alone
+does not prove remote work or billing stopped. Choose the finite watchdog and
+notification bounds in slice 2 and test them with a never-settling fake Run.
 
 ## Concrete exchanges
 
@@ -257,6 +293,12 @@ the same provider usage. Unknown usage remains unknown.
 - **No approved result:** Retrieval times out and assessment cannot approve a
   substantive fallback. The call says it could not complete the answer. The
   Talker does not fill the gap with a guess; ordinary text remains available.
+- **Cancellation stalls:** A superseded Run ignores abort and never resolves.
+  The watchdog marks reasoning unavailable and reports the stall once. New
+  questions receive an immediate unavailable status; listening and call controls
+  still work. Reconnecting does not start another Run against the held capacity.
+  Only confirmed settlement/stop restores admission; otherwise an operator must
+  recover it. No unapproved answer fills the gap.
 
 ## Provider feasibility is a separate decision
 
@@ -280,7 +322,9 @@ the OpenAI Realtime adapter only when a direct key is present; an OpenRouter key
 does not activate it. Prefer a bounded STT → existing Workflow → controlled TTS
 experiment if documented persistent Realtime support remains unavailable. That
 tests delivery/latency, not full-duplex Realtime equivalence, and needs adapter
-work: the existing TTS boundary returns a complete base64 artifact.
+work: the existing TTS boundary returns a complete base64 artifact. This is an
+infrastructure validation path, not the final Talker architecture. It must not
+be used to close the conversational latency/turn-taking acceptance criteria.
 
 Evaluate the intersection of provider/model features and the concrete adapter:
 finalized input and speaker association, controlled speech, cancellation,
@@ -295,14 +339,14 @@ only capabilities actually required by the selected experiment.
 Each row is an independently reviewable slice after design approval. These are
 proposed child scopes, not newly created issues or duplicate umbrellas.
 
-| Order / owner                                                                                              | Scope                                                                                                                                                                                                                               | Acceptance evidence                                                                                                                                                                                                                 |
-| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 · #558; lifecycle constrained by #559                                                                    | Add in-call stable turn identity, intent revision, participant updates, and bounded projection beside existing session correlation. Exclude turns outside current audience/consent scope before projection; keep content transient. | Unit fixtures for identity, speaker ambiguity, trimming, audience/consent exclusions, teardown, and no text/voice ID merging. No provider or runtime rollout.                                                                       |
-| 2 · #558                                                                                                   | Add one in-process pending execution handle and one delivery slot around the existing backend workflow service. Enforce answer-only/read-only action scope, voice-safe persistence, and canonical ID binding on completion.         | Deferred-promise tests show audio handling remains responsive; duplicate, failure, disconnect, and cancellation-ignoring cases stay bounded; no content persisted or disallowed tool/terminal action executed.                      |
-| 3 · #558; use #709's accepted authority boundaries                                                         | Define explicit final-result eligibility, supersession/TTL rules, cancellation, and delivery evidence. No partial drafts.                                                                                                           | Fake-clock/race tests reject unassessed fallback, wrong audience/session/revision, stale and duplicate results; persistence failure cannot authorize speech. #709 is closed for its existing scope, not proof of voice enforcement. |
-| 4 · #558; #534 owns speech defaults                                                                        | Extend the current Realtime boundary only for finalized input, controlled backend updates, interruption, and playback status needed by the chosen adapter.                                                                          | Fake-runtime/backend/Discord tests prove no autonomous answer escapes and local queued audio stops on barge-in. Capability absence is explicit.                                                                                     |
-| 5 · Separate bounded provider/latency evaluation issue linked to #558; reuse #552/#957 for cache economics | Start with offline simulations, then an explicitly authorized OpenRouter experiment if feasible. Separate STT/TTS pipeline from persistent Realtime claims.                                                                         | Measure speech-end→acknowledgement audio, admission→approved result, ready→playback, complete answer latency, interruption stop delay, stale suppression, usage and total cost. No paid work is authorized by this proposal.        |
-| 6 · #559                                                                                                   | Settle consent, audience changes, retention/deletion/export, cross-surface IDs, and historical playback settings in an ADR before broader continuity.                                                                               | Approved defaults and bounded child issues; tests prove transfer is opt-in and revocable. No new conversation framework assumed.                                                                                                    |
+| Order / owner                                                                                              | Scope                                                                                                                                                                                                                               | Acceptance evidence                                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 · #558; lifecycle constrained by #559                                                                    | Add in-call stable turn identity, intent revision, participant updates, and bounded projection beside existing session correlation. Exclude turns outside current audience/consent scope before projection; keep content transient. | Unit fixtures for identity, speaker ambiguity, trimming, audience/consent exclusions, teardown, and no text/voice ID merging. No provider or runtime rollout.                                                                                                                                      |
+| 2 · #558                                                                                                   | Add one in-process pending execution handle and one delivery slot around the existing backend workflow service. Enforce answer-only/read-only action scope, voice-safe persistence, and canonical ID binding on completion.         | Deferred-promise tests show audio handling remains responsive; duplicate, failure, disconnect, and never-settling cancellation cases prove watchdog degradation, prompt rejection, observable recovery, and no reconnect bypass; no content persisted or disallowed tool/terminal action executed. |
+| 3 · #558; use #709's accepted authority boundaries                                                         | Define explicit final-result eligibility, supersession/TTL rules, cancellation, and delivery evidence. No partial drafts.                                                                                                           | Fake-clock/race tests reject unassessed fallback, wrong audience/session/revision, stale and duplicate results; persistence failure cannot authorize speech. #709 is closed for its existing scope, not proof of voice enforcement.                                                                |
+| 4 · #558; #534 owns speech defaults                                                                        | Extend the current Realtime boundary for a conversational Talker: listening and natural conversational output during reasoning, controlled approved-result updates, interruption, and playback status.                              | Fake-runtime/backend/Discord tests prove no autonomous answer escapes and local queued audio stops on barge-in. Capability absence is explicit; fixed TTS alone cannot complete this slice.                                                                                                        |
+| 5 · Separate bounded provider/latency evaluation issue linked to #558; reuse #552/#957 for cache economics | Start with offline simulations, then an explicitly authorized OpenRouter experiment if feasible. Separate STT/TTS pipeline from persistent Realtime claims.                                                                         | Measure speech-end→acknowledgement audio, admission→approved result, ready→playback, complete answer latency, interruption stop delay, stale suppression, usage and total cost. No paid work is authorized by this proposal.                                                                       |
+| 6 · #559                                                                                                   | Settle consent, audience changes, retention/deletion/export, cross-surface IDs, and historical playback settings in an ADR before broader continuity.                                                                               | Approved defaults and bounded child issues; tests prove transfer is opt-in and revocable. No new conversation framework assumed.                                                                                                                                                                   |
 
 Public Trace exposure or a general durable job service, if later needed, warrants
 its own concrete issue. #955 supplies caching policy/instrumentation and richer
@@ -316,6 +360,14 @@ adapter exposes the necessary controls. The current contract does not, so do
 not assume it is sufficient. A full Talker–Reasoner agent framework, durable
 queue, conversation store, or streaming knowledge-chunk protocol adds lifecycle
 and privacy obligations without solving the first missing boundary. Defer them.
+
+Progression from controlled TTS validation to a conversational Talker is part of
+#558, not an optional polish phase. Before calling the target design delivered,
+demonstrate listening and natural conversational responses during a pending Run,
+barge-in recovery, coherent approved-result incorporation, and separate
+conversational versus answer latency measurements. A successful serial audio
+pipeline does not satisfy those criteria. The lightweight model and adapter
+remain open choices; approval and provider feasibility remain hard gates.
 
 Approval is needed for the proposed strict speech eligibility mapping, the
 single-call lifecycle/defaults, and which provider experiment to pursue later.

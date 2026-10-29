@@ -58,6 +58,21 @@ one result slot, explicit freshness/approval gates, and controlled speech of
 approved text. No general conversation coordinator is needed. These are design
 recommendations awaiting review, not accepted runtime behavior.
 
+The target is a lightweight conversational Talker that listens, speaks naturally,
+and manages turn-taking while reasoning proceeds independently. Fixed
+acknowledgements and approved-text TTS validate infrastructure only; they do not
+complete the conversational experience or demonstrate its latency advantage.
+The model/adapter must enforce the boundary between conversational status and
+approved substantive answers before target-mode rollout.
+
+The initial single-slot limit requires a finite watchdog and observable degraded
+behavior when cancellation does not settle: revoke delivery, report reasoning
+unavailable, promptly reject new reasoning requests, and retain listening/call
+controls. Record pending age, cancellation state and occupied capacity without
+content. Reconnect must not bypass the held reservation; confirmed stop or
+settlement restores admission, otherwise operator recovery is required. This is
+proposed behavior awaiting implementation, not an existing watchdog guarantee.
+
 Before implementation, settle the exact final-review eligibility mapping,
 voice-safe persistence exclusions and answer-only/read-only action admission
 when reusing chat services, in-call speaker and audience rules, numeric resource
