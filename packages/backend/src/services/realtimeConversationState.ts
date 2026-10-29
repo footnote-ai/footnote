@@ -17,14 +17,14 @@ const MAX_CONTEXT_TURNS = 12;
 const MAX_CONTEXT_BYTES = 16 * 1024;
 const MAX_AUDIENCE_PARTICIPANTS = 32;
 const MAX_PARTICIPANT_FIELD_LENGTH = 128;
-const INTENT_ACTIONS: RealtimeIntentAction[] = [
+const INTENT_ACTIONS = new Set<RealtimeIntentAction>([
     'question',
     'supersede',
     'continue',
     'cancel',
     'interrupt',
     'attention',
-];
+]);
 
 /** Trusted adapter-derived human audience members; bot identities are not consent subjects. */
 export type RealtimeConversationParticipant = Pick<
@@ -174,72 +174,33 @@ export class RealtimeConversationState {
         const handle = this.freshnessHandle();
         if (this.closed)
             return { accepted: false, reason: 'session_closed', handle };
-        if (
-            input.intent !== undefined &&
-            !INTENT_ACTIONS.includes(input.intent)
-        ) {
-            throw new TypeError('Finalized realtime turn intent is invalid.');
-        }
-        if (input.role !== 'user' && input.role !== 'assistant') {
-            throw new TypeError('Finalized realtime turn role is invalid.');
-        }
-        if (
-            !this.audience.length ||
-            this.audience.some((person) => !person.processingConsent)
-        ) {
+        this.validateTurnShape(input);
+        if (!this.hasConsentingAudience()) {
             return {
                 accepted: false,
                 reason: 'audience_consent_required',
                 handle,
             };
         }
-        const speakerId =
-            typeof input.speakerId === 'string' ? input.speakerId.trim() : '';
-        const participant =
-            input.role === 'user'
-                ? this.audience.find((person) => person.id === speakerId)
-                : undefined;
-        if (input.role === 'user' && !participant) {
-            this.holdDeliveryForAmbiguousSpeech();
+        const speaker = this.resolveSpeaker(input.role, input.speakerId);
+        if (!speaker) {
             return { accepted: false, reason: 'speaker_unresolved', handle };
         }
-        if (typeof input.content !== 'string') {
-            if (input.role === 'user') this.holdDeliveryForAmbiguousSpeech();
-            throw new TypeError(
-                'Finalized realtime turn content must be a string.'
-            );
-        }
-        const content = input.content.trim();
+        const content = this.normalizeTurnContent(input.role, input.content);
         if (!content) {
-            if (input.role === 'user') this.holdDeliveryForAmbiguousSpeech();
-            throw new TypeError('Finalized realtime turn content is empty.');
-        }
-        if (utf8Bytes(content) > MAX_CONTEXT_BYTES) {
-            if (input.role === 'user') this.holdDeliveryForAmbiguousSpeech();
             return { accepted: false, reason: 'turn_too_large', handle };
         }
 
         const turnId = randomUUID();
         const stored: StoredTurn = {
             role: input.role,
-            speakerId: input.role === 'assistant' ? 'assistant' : speakerId,
-            speakerLabel:
-                input.role === 'assistant'
-                    ? 'Footnote'
-                    : participant!.displayName,
+            speakerId: speaker.id,
+            speakerLabel: speaker.label,
             content,
             turnId,
         };
         if (input.role === 'user') this.applyIntent(input.intent, turnId);
-        this.turns.push(stored);
-        this.contextBytes += utf8Bytes(content);
-        while (
-            this.turns.length > MAX_CONTEXT_TURNS ||
-            this.contextBytes > MAX_CONTEXT_BYTES
-        ) {
-            const removed = this.turns.shift();
-            if (removed) this.contextBytes -= utf8Bytes(removed.content);
-        }
+        this.retainTurn(stored);
         return {
             accepted: true,
             turnId,
@@ -289,6 +250,73 @@ export class RealtimeConversationState {
             instanceId: this.instanceId,
             revision: this.revision,
         };
+    }
+
+    private validateTurnShape(input: FinalizedRealtimeTurn): void {
+        if (input.intent !== undefined && !INTENT_ACTIONS.has(input.intent)) {
+            throw new TypeError('Finalized realtime turn intent is invalid.');
+        }
+        if (input.role !== 'user' && input.role !== 'assistant') {
+            throw new TypeError('Finalized realtime turn role is invalid.');
+        }
+    }
+
+    private hasConsentingAudience(): boolean {
+        return (
+            this.audience.length > 0 &&
+            this.audience.every((participant) => participant.processingConsent)
+        );
+    }
+
+    private resolveSpeaker(
+        role: FinalizedRealtimeTurn['role'],
+        speakerId: string
+    ): { id: string; label: string } | undefined {
+        if (role === 'assistant') return { id: 'assistant', label: 'Footnote' };
+        const normalizedId =
+            typeof speakerId === 'string' ? speakerId.trim() : '';
+        const participant = this.audience.find(
+            (person) => person.id === normalizedId
+        );
+        if (!participant) {
+            this.holdDeliveryForAmbiguousSpeech();
+            return undefined;
+        }
+        return { id: participant.id, label: participant.displayName };
+    }
+
+    private normalizeTurnContent(
+        role: FinalizedRealtimeTurn['role'],
+        rawContent: string
+    ): string | undefined {
+        if (typeof rawContent !== 'string') {
+            if (role === 'user') this.holdDeliveryForAmbiguousSpeech();
+            throw new TypeError(
+                'Finalized realtime turn content must be a string.'
+            );
+        }
+        const content = rawContent.trim();
+        if (!content) {
+            if (role === 'user') this.holdDeliveryForAmbiguousSpeech();
+            throw new TypeError('Finalized realtime turn content is empty.');
+        }
+        if (utf8Bytes(content) > MAX_CONTEXT_BYTES) {
+            if (role === 'user') this.holdDeliveryForAmbiguousSpeech();
+            return undefined;
+        }
+        return content;
+    }
+
+    private retainTurn(turn: StoredTurn): void {
+        this.turns.push(turn);
+        this.contextBytes += utf8Bytes(turn.content);
+        while (
+            this.turns.length > MAX_CONTEXT_TURNS ||
+            this.contextBytes > MAX_CONTEXT_BYTES
+        ) {
+            const removed = this.turns.shift();
+            if (removed) this.contextBytes -= utf8Bytes(removed.content);
+        }
     }
 
     private applyIntent(
