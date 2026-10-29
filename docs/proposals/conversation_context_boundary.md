@@ -2,6 +2,22 @@
 
 **Last Updated:** 2026-05-10
 
+## Implementation and Realtime follow-up
+
+As of 2026-10-29, `conversationContextService.ts` implements canonical messages
+and a backend-owned participant/turn envelope, bounded recent history,
+conditional speaker-label projection, timestamp sanitization, and redacted
+snapshot diagnostics. Invalid identity/content shapes raise assembly errors;
+the proposal's general fail-open wording is not permission to bypass validation.
+The segment/reduction sketches below are not an implemented session store.
+
+This remains a request context boundary, not a conversation lifecycle manager.
+The [Realtime proposal](./realtime-talker-reasoner.md) describes reusing its
+projection for ephemeral voice turns and keeping pending Run/delivery state
+beside the live session. See the [alignment tracker](../status/realtime-voice-alignment.md)
+for current implementation evidence. Cross-surface continuity and retention
+remain decisions for #559.
+
 ---
 
 ## Overview
