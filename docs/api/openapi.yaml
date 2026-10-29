@@ -2236,8 +2236,8 @@ paths:
                 - packages/backend/src/http/publicRoutes.ts#registerPublicRoutes
             summary: Check backend HTTP availability
             description: >
-                Returns plain-text `ok` when the backend HTTP server can handle requests.
-                Does not indicate readiness of Discord, model providers, TrustGraph, or optional services.
+                Returns plain-text `ok` when the backend HTTP server can handle requests. Does not indicate readiness of
+                Discord, model providers, TrustGraph, or optional services.
             tags:
                 - System
             responses:

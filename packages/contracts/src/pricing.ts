@@ -391,9 +391,9 @@ export const openAITextPricingTable: Record<
         },
     },
     'gpt-5.6-luna': {
-        input: 0.1,
-        cachedInput: 0.01,
-        output: 0.6,
+        input: 0.2,
+        cachedInput: 0.02,
+        output: 1.2,
         cacheWriteMultiplier: 1.25,
         longContext: {
             inputTokenThreshold: 272_000,

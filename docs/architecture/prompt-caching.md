@@ -101,3 +101,21 @@ request latency are separate measurements, not input-cache savings.
 These measurements are available for #936 to display. The backend owns the
 accounting; the Trace UI displays its results. Trace layout and production
 enablement are outside this implementation.
+
+## Incremental economic verification
+
+The probe now compares automatic caching against Footnote's existing deliberate
+controls in six alternating matched pairs, including cold writes. It uses real
+shared prompt layers without padding, early per-arm isolation markers, and
+equivalent serialized workloads. Provider-reported raw usage/model receipts,
+write tiers, and complete pricing are required for a conclusive result. Input
+savings are independent of output-token variation and theoretical
+`cacheSavingsUsd`; invoice reconciliation remains separate.
+
+The original automatic-cache experiment stays immutable. A separately identified
+comparison reserves at most $0.15 across 16 wire requests, with 12 planned calls.
+Reservations are durable before dispatch, concurrent runs are excluded, and any
+spent/interrupted checkpoint is terminal. Missing direct credentials block the
+experiment rather than selecting another provider. See the
+[status and procedure](../status/prompt-caching-status.md#paired-economic-comparison)
+for the report, pricing verification, interpretation, and remaining closure gates.

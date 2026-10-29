@@ -13,6 +13,7 @@ import {
 } from '../src/voltagentRuntime.js';
 import type { GenerationRequest } from '../src/index.js';
 import { translatePromptCache } from '../src/promptCache.js';
+import { prepareCacheProbeWire } from '../../../scripts/lib/cache-probe-comparison.js';
 import {
     AgentRegistry,
     createVoltAgentObservability,
@@ -184,6 +185,70 @@ test('real hosted adapters serialize explicit stable-prefix breakpoints and keep
                 JSON.stringify(clock).includes('prompt_cache_breakpoint'),
                 false
             );
+            if (provider === 'openai') {
+                const mockedProvider = globalThis.fetch;
+                const wires: ReturnType<typeof prepareCacheProbeWire>[] = [];
+                try {
+                    for (const arm of ['automatic', 'deliberate'] as const) {
+                        const marker =
+                            arm === 'automatic' ? 'A fixture' : 'B fixture';
+                        globalThis.fetch = async (input, init) => {
+                            const wire = prepareCacheProbeWire(
+                                String(init?.body),
+                                arm,
+                                marker
+                            );
+                            wires.push(wire);
+                            return mockedProvider(input, {
+                                ...init,
+                                body: wire.body,
+                            });
+                        };
+                        await runtime.generate({
+                            ...request,
+                            maxOutputTokens: 64,
+                            messages: [
+                                {
+                                    role: 'system',
+                                    content: marker + '\ntrusted stable rules',
+                                    cacheable: true,
+                                },
+                                {
+                                    role: 'system',
+                                    content: 'trusted persona',
+                                    cacheable: true,
+                                },
+                                {
+                                    role: 'system',
+                                    content: 'changing UTC clock',
+                                },
+                                { role: 'user', content: 'question' },
+                            ],
+                            promptCache: {
+                                ...request.promptCache!,
+                                stablePrefixMessages: 2,
+                                ttlSeconds: 1800,
+                            },
+                        });
+                    }
+                    assert.equal(wires.length, 2);
+                    assert.equal(
+                        wires[0]!.equivalenceDigest,
+                        wires[1]!.equivalenceDigest
+                    );
+                    assert.notEqual(
+                        wires[0]!.prefixDigest,
+                        wires[1]!.prefixDigest
+                    );
+                    assert.equal(
+                        wires[0]!.body.includes('prompt_cache'),
+                        false
+                    );
+                    assert.equal(wires[1]!.controls, 'explicit_30m');
+                } finally {
+                    globalThis.fetch = mockedProvider;
+                }
+            }
         }
     } finally {
         await observability.shutdown();

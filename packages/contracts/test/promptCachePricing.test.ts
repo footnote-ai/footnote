@@ -16,8 +16,8 @@ test('12-hour cache writes use the 2.5x total rate and can produce negative savi
         cacheWrite30mTokens: 0,
         cacheWrite12hTokens: 80000,
     });
-    assert.ok(Math.abs(estimate.inputCost - 0.0211) < 1e-10);
-    assert.ok(Math.abs((estimate.cacheSavingsUsd ?? NaN) - -0.0111) < 1e-10);
+    assert.ok(Math.abs(estimate.inputCost - 0.0422) < 1e-10);
+    assert.ok(Math.abs((estimate.cacheSavingsUsd ?? NaN) - -0.0222) < 1e-10);
     assert.equal(estimate.completeness, 'complete');
 });
 
@@ -35,5 +35,5 @@ test('missing cache-write tier detail never claims complete savings for modern m
         cachedInputTokens: 50000,
         cacheWriteTokens: 0,
     });
-    assert.ok(Math.abs((measuredZero.cacheSavingsUsd ?? NaN) - 0.0045) < 1e-10);
+    assert.ok(Math.abs((measuredZero.cacheSavingsUsd ?? NaN) - 0.009) < 1e-10);
 });

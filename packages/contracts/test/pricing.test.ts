@@ -62,9 +62,9 @@ test('GPT-5.6 tiers use their documented base and cached token rates', () => {
         },
         {
             model: 'gpt-5.6-luna',
-            expectedInputCost: 0.011,
-            expectedOutputCost: 0.06,
-            expectedTotalCost: 0.071,
+            expectedInputCost: 0.022,
+            expectedOutputCost: 0.12,
+            expectedTotalCost: 0.142,
         },
     ] as const;
 
@@ -123,9 +123,9 @@ test('GPT-5.6 long-context multipliers apply to the full request above 272K inpu
         cacheWriteTokens: 100_000,
     });
 
-    assert.ok(Math.abs(result.inputCost - 0.047) < 1e-12);
-    assert.ok(Math.abs(result.outputCost - 0.09) < 1e-12);
-    assert.ok(Math.abs(result.totalCost - 0.137) < 1e-12);
+    assert.ok(Math.abs(result.inputCost - 0.094) < 1e-12);
+    assert.ok(Math.abs(result.outputCost - 0.18) < 1e-12);
+    assert.ok(Math.abs(result.totalCost - 0.274) < 1e-12);
     assert.deepEqual(result.appliedRules, [
         'prompt_cache_read_discount',
         'prompt_cache_write_multiplier',
