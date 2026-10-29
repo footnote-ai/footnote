@@ -117,8 +117,10 @@ const preflight = {
         Date.now() - Date.parse(pricingVerifiedAt) < 15 * 60 * 1000,
     ratesMatchApproved:
         Math.abs(rate.input - 0.2) < 1e-12 &&
+        rate.cachedInput !== undefined &&
         Math.abs(rate.cachedInput - 0.02) < 1e-12 &&
         Math.abs(rate.output - 1.2) < 1e-12 &&
+        rate.cacheWriteMultiplier !== undefined &&
         Math.abs(rate.cacheWriteMultiplier - 1.25) < 1e-12,
 };
 const profile: ModelProfile = {
