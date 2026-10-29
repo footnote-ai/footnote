@@ -13,7 +13,6 @@ import yaml from 'js-yaml';
 
 import type {
     CreatePromptRegistryOptions,
-    PromptCachePolicy,
     PromptDefinition,
     PromptKey,
     PromptRegistry,
@@ -279,7 +278,6 @@ class SharedPromptRegistry implements PromptRegistry {
         return {
             content,
             description: definition.description,
-            cache: definition.cache,
         };
     }
 
@@ -550,31 +548,10 @@ const flattenPromptTree = (
                     continue;
                 }
 
-                const rawCache = candidate.cache;
-                if (
-                    rawCache !== undefined &&
-                    (typeof rawCache !== 'object' ||
-                        rawCache === null ||
-                        Array.isArray(rawCache))
-                ) {
-                    reportPromptValidationIssue(
-                        context,
-                        'Ignoring invalid prompt override entry.',
-                        {
-                            promptKey: key,
-                            reason: 'cache must be an object when provided',
-                            receivedType:
-                                rawCache === null ? 'null' : typeof rawCache,
-                        }
-                    );
-                    continue;
-                }
-
                 result = mergePromptCatalog(result, {
                     [key]: {
                         template,
                         description: rawDescription,
-                        cache: rawCache as PromptCachePolicy | undefined,
                     },
                 });
                 continue;

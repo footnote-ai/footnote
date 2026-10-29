@@ -172,8 +172,12 @@ export interface OpenAITextCostBreakdown {
 }
 
 export interface OpenAITextCostEstimate extends OpenAITextCostBreakdown {
+    /** Uncached input cost minus estimated input cost, including cache writes. */
+    cacheSavingsUsd?: number;
     cachedInputTokens?: number;
     cacheWriteTokens?: number;
+    cacheWrite30mTokens?: number;
+    cacheWrite12hTokens?: number;
     completeness: OpenAITextCostCompleteness;
     appliedRules: OpenAITextCostAppliedRule[];
     incompleteReasons: OpenAITextCostIncompleteReason[];
@@ -199,6 +203,7 @@ export type OpenAITextCostIncompleteReason =
     | 'unpriced_model'
     | 'cached_input_tokens_unavailable'
     | 'cache_write_tokens_unavailable'
+    | 'cache_write_tier_unavailable'
     | 'invalid_input_token_breakdown'
     | 'provider_usage_unavailable'
     | 'estimated_tts_token_quantity'
@@ -207,6 +212,8 @@ export type OpenAITextCostIncompleteReason =
 export interface OpenAITextUsageDetails {
     cachedInputTokens?: number;
     cacheWriteTokens?: number;
+    cacheWrite30mTokens?: number;
+    cacheWrite12hTokens?: number;
     /**
      * Whether the provider returned a token-usage payload. Callers that did
      * not receive one must keep the estimate visibly incomplete rather than
@@ -384,9 +391,9 @@ export const openAITextPricingTable: Record<
         },
     },
     'gpt-5.6-luna': {
-        input: 0.1,
-        cachedInput: 0.01,
-        output: 0.6,
+        input: 0.2,
+        cachedInput: 0.02,
+        output: 1.2,
         cacheWriteMultiplier: 1.25,
         longContext: {
             inputTokenThreshold: 272_000,
@@ -839,6 +846,27 @@ export const estimateOpenAITextCost = (
 
     const knownCachedInputTokens = Math.max(0, cachedInputTokens ?? 0);
     const knownCacheWriteTokens = Math.max(0, cacheWriteTokens ?? 0);
+    const shortWrites = usageDetails.cacheWrite30mTokens;
+    const longWrites = usageDetails.cacheWrite12hTokens;
+    const tieredWrites = pricing.cacheWriteMultiplier !== undefined;
+    const validTiers =
+        Number.isSafeInteger(shortWrites) &&
+        Number.isSafeInteger(longWrites) &&
+        shortWrites! >= 0 &&
+        longWrites! >= 0 &&
+        shortWrites! + longWrites! === knownCacheWriteTokens;
+    if (
+        tieredWrites &&
+        knownCacheWriteTokens > 0 &&
+        knownCachedInputTokens + knownCacheWriteTokens <= inputTokens &&
+        !validTiers
+    ) {
+        incompleteReasons.push(
+            shortWrites === undefined || longWrites === undefined
+                ? 'cache_write_tier_unavailable'
+                : 'invalid_input_token_breakdown'
+        );
+    }
     const knownSpecialInputTokens =
         knownCachedInputTokens + knownCacheWriteTokens;
     const hasValidSpecialInputBreakdown =
@@ -891,7 +919,9 @@ export const estimateOpenAITextCost = (
     const cacheWriteInputCost =
         (billableCacheWriteTokens / 1_000_000) *
         pricing.input *
-        (pricing.cacheWriteMultiplier ?? 1);
+        (validTiers && tieredWrites && knownCacheWriteTokens > 0
+            ? (shortWrites! * 1.25 + longWrites! * 2.5) / knownCacheWriteTokens
+            : (pricing.cacheWriteMultiplier ?? 1));
     const inputCost =
         (ordinaryInputCost + cachedInputCost + cacheWriteInputCost) *
         inputMultiplier;
@@ -906,6 +936,15 @@ export const estimateOpenAITextCost = (
         inputCost,
         outputCost,
         totalCost: inputCost + outputCost,
+        ...(incompleteReasons.length === 0 && pricing.cachedInput !== undefined
+            ? {
+                  cacheSavingsUsd:
+                      (inputTokens / 1_000_000) *
+                          pricing.input *
+                          inputMultiplier -
+                      inputCost,
+              }
+            : {}),
         completeness: incompleteReasons.length === 0 ? 'complete' : 'partial',
         appliedRules,
         incompleteReasons,

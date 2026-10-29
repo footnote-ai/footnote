@@ -117,6 +117,8 @@ export interface ModelProfile {
     providerRouting?: ModelProfileProviderRouting;
     /** Provider-native settings applied only when the profile advertises support. */
     providerOptions?: ModelProfileProviderOptions;
+    /** Opt-in backend caching. Omitted configuration leaves provider defaults intact. */
+    promptCaching?: { enabled: boolean; ttlSeconds?: number };
     /** Fallback effort used only when the caller does not request one. */
     defaultReasoningEffort?: SupportedReasoningEffort;
     /** Optional backend-owned presentation settings for this profile. */
@@ -257,6 +259,13 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
         capabilities: ModelProfileCapabilitiesSchema,
         providerRouting: ModelProfileProviderRoutingSchema.optional(),
         providerOptions: ModelProfileProviderOptionsSchema.optional(),
+        promptCaching: z
+            .object({
+                enabled: z.boolean(),
+                ttlSeconds: z.number().int().positive().max(86400).optional(),
+            })
+            .strict()
+            .optional(),
         defaultReasoningEffort: z.enum(supportedReasoningEfforts).optional(),
         presentationGeneration: PresentationGenerationSettingsSchema.optional(),
         maxInputTokens: z.number().int().positive().optional(),

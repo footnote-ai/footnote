@@ -2236,8 +2236,8 @@ paths:
                 - packages/backend/src/http/publicRoutes.ts#registerPublicRoutes
             summary: Check backend HTTP availability
             description: >
-                Returns plain-text `ok` when the backend HTTP server can handle requests.
-                Does not indicate readiness of Discord, model providers, TrustGraph, or optional services.
+                Returns plain-text `ok` when the backend HTTP server can handle requests. Does not indicate readiness of
+                Discord, model providers, TrustGraph, or optional services.
             tags:
                 - System
             responses:
@@ -3075,6 +3075,12 @@ components:
                         cacheWriteTokens:
                             type: integer
                             minimum: 0
+                        cacheWrite30mTokens:
+                            type: integer
+                            minimum: 0
+                        cacheWrite12hTokens:
+                            type: integer
+                            minimum: 0
                         completionTokens:
                             type: integer
                             minimum: 0
@@ -3101,6 +3107,11 @@ components:
                             type: number
                             minimum: 0
                             description: Backend-computed cost estimate in USD.
+                        cacheSavingsUsd:
+                            type: number
+                            description: >-
+                                Complete backend input-cost counterfactual including writes. May be negative; not a
+                                bill.
                         costCompleteness:
                             type: string
                             enum:
@@ -3127,6 +3138,7 @@ components:
                                     - unpriced_model
                                     - cached_input_tokens_unavailable
                                     - cache_write_tokens_unavailable
+                                    - cache_write_tier_unavailable
                                     - invalid_input_token_breakdown
                                     - provider_usage_unavailable
                     required:
@@ -3231,6 +3243,12 @@ components:
                 cacheWriteTokens:
                     type: integer
                     minimum: 0
+                cacheWrite30mTokens:
+                    type: integer
+                    minimum: 0
+                cacheWrite12hTokens:
+                    type: integer
+                    minimum: 0
                 completionTokens:
                     type: integer
                     minimum: 0
@@ -3244,6 +3262,8 @@ components:
         WorkflowAttemptRoutingRecord:
             type: object
             properties:
+                promptCache:
+                    $ref: '#/components/schemas/PromptCacheReceipt'
                 index:
                     type: integer
                     minimum: 0
@@ -3265,6 +3285,12 @@ components:
                 status:
                     type: string
                     minLength: 1
+                providerCallStatus:
+                    type: string
+                    enum:
+                        - succeeded
+                        - failed
+                        - not_called
                 reasonCode:
                     type: string
                     minLength: 1
@@ -3321,6 +3347,11 @@ components:
                             type: number
                             minimum: 0
                             description: Backend-computed cost estimate in USD.
+                        cacheSavingsUsd:
+                            type: number
+                            description: >-
+                                Complete backend input-cost counterfactual including writes. May be negative; not a
+                                bill.
                         costCompleteness:
                             type: string
                             enum:
@@ -3347,6 +3378,7 @@ components:
                                     - unpriced_model
                                     - cached_input_tokens_unavailable
                                     - cache_write_tokens_unavailable
+                                    - cache_write_tier_unavailable
                                     - invalid_input_token_breakdown
                                     - provider_usage_unavailable
                     required:
@@ -3502,6 +3534,8 @@ components:
                 - packages/contracts/src/web/schemas.ts#WorkflowAttemptRecordSchema
             type: object
             properties:
+                promptCache:
+                    $ref: '#/components/schemas/PromptCacheReceipt'
                 attempt:
                     type: integer
                     minimum: 1
@@ -3617,6 +3651,11 @@ components:
                             type: number
                             minimum: 0
                             description: Backend-computed cost estimate in USD.
+                        cacheSavingsUsd:
+                            type: number
+                            description: >-
+                                Complete backend input-cost counterfactual including writes. May be negative; not a
+                                bill.
                         costCompleteness:
                             type: string
                             enum:
@@ -3643,6 +3682,7 @@ components:
                                     - unpriced_model
                                     - cached_input_tokens_unavailable
                                     - cache_write_tokens_unavailable
+                                    - cache_write_tier_unavailable
                                     - invalid_input_token_breakdown
                                     - provider_usage_unavailable
                     required:
@@ -3677,6 +3717,11 @@ components:
                 - packages/contracts/src/web/schemas.ts#WorkflowRecordSchema
             type: object
             properties:
+                cacheSummary:
+                    description: Backend-derived cache observations; coverage counts distinguish partial measurements.
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptCacheSummary'
                 runId:
                     type: string
                     minLength: 1
@@ -4184,6 +4229,155 @@ components:
                 - status
                 - reasonCodes
             additionalProperties: false
+        PromptCacheReceipt:
+            type: object
+            properties:
+                mode:
+                    type: string
+                    enum:
+                        - automatic
+                        - explicit
+                        - unsupported
+                        - disabled
+                promptVersion:
+                    type: string
+                    pattern: '^[a-f0-9]{64}$'
+                profileVersion:
+                    type: string
+                    pattern: '^[a-f0-9]{64}$'
+                purpose:
+                    type: string
+                    enum:
+                        - planner
+                        - generation
+                        - assessment
+                        - revision
+                        - presentation
+                surface:
+                    type: string
+                    enum:
+                        - web
+                        - discord
+                        - unknown
+                requestedTtlSeconds:
+                    type: integer
+                    exclusiveMinimum: 0
+                    maximum: 86400
+                appliedTtlSeconds:
+                    type: integer
+                    exclusiveMinimum: 0
+                    maximum: 86400
+                omissionReason:
+                    type: string
+                    enum:
+                        - unsupported_provider_or_model
+                        - unsupported_retention
+                        - no_stable_prefix
+                stablePrefixTokensEstimate:
+                    type: integer
+                    minimum: 0
+                    maximum: 9007199254740991
+            required:
+                - mode
+                - purpose
+                - surface
+                - stablePrefixTokensEstimate
+            additionalProperties: false
+            x-codeRefs:
+                - packages/contracts/src/prompt-caching.ts#PromptCacheReceiptSchema
+        PromptCacheSummary:
+            type: object
+            properties:
+                purpose:
+                    type: string
+                    enum:
+                        - planner
+                        - generation
+                        - assessment
+                        - revision
+                        - presentation
+                        - unknown
+                provider:
+                    type: string
+                    maxLength: 128
+                model:
+                    type: string
+                    maxLength: 256
+                surface:
+                    type: string
+                    enum:
+                        - web
+                        - discord
+                        - unknown
+                promptVersion:
+                    type: string
+                    pattern: '^[a-f0-9]{64}$'
+                profileVersion:
+                    type: string
+                    pattern: '^[a-f0-9]{64}$'
+                attempts:
+                    type: integer
+                    minimum: 0
+                    maximum: 9007199254740991
+                inputReported:
+                    type: integer
+                    minimum: 0
+                    maximum: 9007199254740991
+                readsReported:
+                    type: integer
+                    minimum: 0
+                    maximum: 9007199254740991
+                writesReported:
+                    type: integer
+                    minimum: 0
+                    maximum: 9007199254740991
+                inputTokens:
+                    type: integer
+                    minimum: 0
+                    maximum: 9007199254740991
+                cacheReadTokens:
+                    type: integer
+                    minimum: 0
+                    maximum: 9007199254740991
+                cacheWriteTokens:
+                    type: integer
+                    minimum: 0
+                    maximum: 9007199254740991
+                cacheReadShare:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+                hitRate:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+                cacheWriteReadRatio:
+                    type: number
+                    minimum: 0
+                cacheSavingsUsd:
+                    type: number
+                costCompleteness:
+                    type: string
+                    enum:
+                        - complete
+                        - partial
+                        - unknown
+                durationMs:
+                    type: number
+                    minimum: 0
+            required:
+                - purpose
+                - provider
+                - model
+                - surface
+                - attempts
+                - inputReported
+                - readsReported
+                - writesReported
+                - costCompleteness
+            additionalProperties: false
+            x-codeRefs:
+                - packages/contracts/src/prompt-caching.ts#PromptCacheSummarySchema
         InternalImageRequest:
             oneOf:
                 - $ref: '#/components/schemas/InternalImageGenerateTaskRequest'
@@ -7220,27 +7414,7 @@ components:
                             model:
                                 type: string
                             usage:
-                                type: object
-                                properties:
-                                    promptTokens:
-                                        type: integer
-                                        minimum: 0
-                                    cachedInputTokens:
-                                        type: integer
-                                        minimum: 0
-                                    cacheWriteTokens:
-                                        type: integer
-                                        minimum: 0
-                                    completionTokens:
-                                        type: integer
-                                        minimum: 0
-                                    totalTokens:
-                                        type: integer
-                                        minimum: 0
-                                    reasoningTokens:
-                                        type: integer
-                                        minimum: 0
-                                additionalProperties: false
+                                $ref: '#/components/schemas/WorkflowGenerationUsage'
                             routingChainAttempts:
                                 type: array
                                 items:
@@ -7257,6 +7431,12 @@ components:
                                             type: string
                                         status:
                                             type: string
+                                        providerCallStatus:
+                                            type: string
+                                            enum:
+                                                - succeeded
+                                                - failed
+                                                - not_called
                                         reasonCode:
                                             type: string
                                         finishReason:
@@ -7283,27 +7463,7 @@ components:
                                                 - visibleTextLength
                                             additionalProperties: false
                                         usage:
-                                            type: object
-                                            properties:
-                                                promptTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                cachedInputTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                cacheWriteTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                completionTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                totalTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                reasoningTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                            additionalProperties: false
+                                            $ref: '#/components/schemas/WorkflowGenerationUsage'
                                         chooseOneUsed:
                                             type: boolean
                                         chooseOneSelectedIndex:

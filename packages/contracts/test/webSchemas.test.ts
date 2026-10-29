@@ -830,6 +830,22 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                     reasoningTokens: 6,
                     totalTokens: 30,
                 },
+                routingChainAttempts: [
+                    {
+                        index: 0,
+                        profileId: 'openai-text-medium',
+                        status: 'executed',
+                        providerCallStatus: 'succeeded',
+                        chooseOneUsed: false,
+                    },
+                    {
+                        index: 1,
+                        profileId: 'openrouter-text-medium',
+                        status: 'skipped',
+                        providerCallStatus: 'not_called',
+                        chooseOneUsed: false,
+                    },
+                ],
                 durationMs: 20,
             },
         ],
@@ -855,6 +871,78 @@ test('ResponseMetadataSchema rejects unknown generation usage fields', () => {
     });
 
     assert.equal(parsed.success, false);
+});
+
+test('ResponseMetadataSchema accepts cache write retention tiers in image prompt costs', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        imageGeneration: {
+            version: 'v1',
+            prompts: {
+                original: 'image prompt',
+                active: 'image prompt',
+                revised: null,
+                maxInputChars: 100,
+                policyTruncated: false,
+            },
+            request: {
+                textModel: 'gpt-5-mini',
+                reasoningEffort: null,
+                imageModel: 'gpt-image-1',
+                quality: 'low',
+                size: 'auto',
+                aspectRatio: 'auto',
+                background: 'auto',
+                style: '',
+                allowPromptAdjustment: false,
+                outputFormat: 'png',
+                outputCompression: 100,
+            },
+            linkage: { followUpResponseId: null },
+            result: {
+                outputResponseId: null,
+                finalStyle: '',
+                generationTimeMs: 0,
+            },
+            usage: {
+                inputTokens: 10,
+                outputTokens: 2,
+                totalTokens: 12,
+                imageCount: 1,
+                partialImageCount: 0,
+            },
+            costComponents: {
+                prompt: {
+                    model: 'gpt-5-mini',
+                    inputTokens: 10,
+                    cacheWrite30mTokens: 3,
+                    cacheWrite12hTokens: 4,
+                    outputTokens: 2,
+                    totalTokens: 12,
+                    reasoningEffort: null,
+                    inputCost: 0,
+                    outputCost: 0,
+                    totalCost: 0,
+                    completeness: 'complete',
+                    incompleteReasons: [],
+                },
+                render: {
+                    model: 'gpt-image-1',
+                    imageCount: 1,
+                    partialImageCount: 0,
+                    quality: 'low',
+                    size: 'auto',
+                    perImageCost: 0,
+                    totalCost: 0,
+                    completeness: 'complete',
+                    incompleteReasons: [],
+                },
+            },
+            costs: { text: 0, image: 0, total: 0, perImage: 0 },
+        },
+    });
+
+    assert.equal(parsed.success, true);
 });
 
 test('ResponseMetadataSchema accepts one payload with distinct mode, TRACE, planner, controls, and provenance categories', () => {

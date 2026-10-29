@@ -35,6 +35,153 @@ const baseTrace = {
     secretPrompt: 'must not be returned',
 };
 
+test('public cache receipts withhold diagnostics and summaries are derived from Attempts', () => {
+    const workflow: WorkflowRecord = {
+        workflowId: 'cache-fixture',
+        workflowName: 'fixture',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 1,
+        maxSteps: 1,
+        steps: [
+            {
+                stepId: 'generate',
+                stepKind: 'generate',
+                attempt: 1,
+                startedAt: '2026-10-27T00:00:00Z',
+                finishedAt: '2026-10-27T00:00:01Z',
+                durationMs: 1000,
+                outcome: { status: 'executed', summary: 'Generated.' },
+                attempts: [
+                    {
+                        attempt: 1,
+                        status: 'succeeded',
+                        startedAt: '2026-10-27T00:00:00Z',
+                        finishedAt: '2026-10-27T00:00:01Z',
+                        durationMs: 1000,
+                        profileId: 'private-profile',
+                        requestedProvider: 'openai',
+                        requestedModel: 'gpt-5.6-luna',
+                        usage: {
+                            promptTokens: 100,
+                            cachedInputTokens: 80,
+                            cacheWriteTokens: 0,
+                        },
+                        promptCache: {
+                            mode: 'explicit',
+                            purpose: 'generation',
+                            surface: 'web',
+                            stablePrefixTokensEstimate: 20,
+                            omissionReason: 'unsupported_retention',
+                        },
+                    },
+                ],
+            },
+        ],
+    };
+    const result = projectTraceMetadataForDisplay(
+        { ...baseTrace, workflow },
+        baseTrace.responseId
+    );
+    assert.equal(
+        result?.workflow?.steps[0].attempts?.[0].promptCache?.mode,
+        'explicit'
+    );
+    assert.equal(
+        result?.workflow?.steps[0].attempts?.[0].promptCache?.omissionReason,
+        undefined
+    );
+    assert.equal(result?.workflow?.cacheSummary?.[0].inputTokens, 100);
+    assert.equal(result?.workflow?.cacheSummary?.[0].cacheReadShare, 0.8);
+    assert.equal(
+        result?.workflow?.cacheSummary?.[0].cacheSavingsUsd,
+        undefined
+    );
+    assert.equal(
+        JSON.stringify(result?.workflow).includes('private-profile'),
+        false
+    );
+    assert.equal(
+        JSON.stringify(result?.workflow).includes('unsupported_retention'),
+        false
+    );
+});
+
+test('canonical workflow contracts accept provider call status on routing records', () => {
+    const workflow = {
+        workflowId: 'provider-call-status',
+        workflowName: 'fixture',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 1,
+        maxSteps: 1,
+        steps: [
+            {
+                stepId: 'plan',
+                stepKind: 'generate',
+                attempt: 1,
+                startedAt: '2026-10-27T00:00:00Z',
+                finishedAt: '2026-10-27T00:00:01Z',
+                durationMs: 1000,
+                outcome: { status: 'executed', summary: 'Planned.' },
+                attempts: [
+                    {
+                        attempt: 1,
+                        status: 'succeeded',
+                        startedAt: '2026-10-27T00:00:00Z',
+                        finishedAt: '2026-10-27T00:00:01Z',
+                        durationMs: 1000,
+                        routingAttempts: [
+                            {
+                                index: 0,
+                                profileId: 'fixture-route',
+                                status: 'executed',
+                                providerCallStatus: 'failed',
+                                chooseOneUsed: false,
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    };
+    const parsed = TraceDisplayMetadataSchema.safeParse({
+        responseId: 'provider-call-status',
+        provenance: 'Inferred',
+        safetyTier: 'Low',
+        tradeoffCount: 0,
+        chainHash: 'hash',
+        licenseContext: 'MIT',
+        modelVersion: 'gpt-5.6-luna',
+        staleAfter: '2026-10-27T00:00:01Z',
+        citations: [],
+        trace_target: {
+            tightness: 3,
+            rationale: 3,
+            attribution: 3,
+            caution: 3,
+            extent: 3,
+        },
+        trace_final: {
+            tightness: 3,
+            rationale: 3,
+            attribution: 3,
+            caution: 3,
+            extent: 3,
+        },
+        workflow,
+        displayIntegrity: { status: 'complete', unavailableFields: [] },
+    });
+    assert.equal(parsed.success, true, JSON.stringify(parsed.error));
+    if (parsed.success) {
+        assert.equal(
+            parsed.data.workflow?.steps[0]?.attempts?.[0]?.routingAttempts?.[0]
+                ?.providerCallStatus,
+            'failed'
+        );
+    }
+});
+
 test('public trace retains cost completeness for Steps and Attempts', () => {
     for (const costCompleteness of [
         'complete',

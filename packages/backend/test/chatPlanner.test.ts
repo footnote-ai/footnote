@@ -443,6 +443,8 @@ test('chatPlanner preserves complete planner usage through accounting', async ()
                 promptTokens: 2_400,
                 cachedInputTokens: 1_792,
                 cacheWriteTokens: 128,
+                cacheWrite30mTokens: 128,
+                cacheWrite12hTokens: 0,
                 completionTokens: 200,
                 totalTokens: 2_664,
                 reasoningTokens: 64,
@@ -457,6 +459,8 @@ test('chatPlanner preserves complete planner usage through accounting', async ()
         promptTokens: 2_400,
         cachedInputTokens: 1_792,
         cacheWriteTokens: 128,
+        cacheWrite30mTokens: 128,
+        cacheWrite12hTokens: 0,
         completionTokens: 200,
         totalTokens: 2_664,
         reasoningTokens: 64,
@@ -679,6 +683,12 @@ test('chatPlanner skips accounting only for marked pre-provider-call failures', 
 });
 
 test('chatPlanner preserves usage from a failed structured attempt before fallback', async () => {
+    const fallbackReceipt = {
+        mode: 'explicit' as const,
+        purpose: 'planner' as const,
+        surface: 'discord' as const,
+        stablePrefixTokensEstimate: 12,
+    };
     const decision = {
         action: 'message',
         modality: 'text',
@@ -711,6 +721,7 @@ test('chatPlanner preserves usage from a failed structured attempt before fallba
         executePlanner: async () => ({
             text: JSON.stringify(decision),
             model: 'gpt-5-mini',
+            promptCache: fallbackReceipt,
             usage: {
                 promptTokens: 3,
                 completionTokens: 2,
@@ -728,6 +739,7 @@ test('chatPlanner preserves usage from a failed structured attempt before fallba
         completionTokens: 6,
         totalTokens: 19,
     });
+    assert.deepEqual(execution.promptCache, fallbackReceipt);
 });
 
 test('chatPlanner omits invalid usage from a failed structured attempt', async () => {

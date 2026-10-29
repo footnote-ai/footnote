@@ -38,7 +38,7 @@ try {
 export default [
     js.configs.recommended,
     {
-        files: ['**/*.ts', '**/*.tsx'],
+        files: ['**/*.ts', '**/*.tsx', 'scripts/cache-probe.mts'],
         languageOptions: {
             parser: tsparser,
             parserOptions: {

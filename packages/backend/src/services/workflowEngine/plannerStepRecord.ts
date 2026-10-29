@@ -39,6 +39,7 @@ type PlannerStepRecordSummary = {
     effectiveProfileId?: string;
     provider?: string;
     model?: string;
+    promptCache?: WorkflowAttemptRecord['promptCache'];
     usage?: StepRecord['usage'];
     cost?: StepRecord['cost'];
     mattered?: boolean;
@@ -177,6 +178,20 @@ export const buildPlannerStepRecord = ({
               cacheWriteTokens: toNonNegativeNumberOrUndefined(
                   summary.usage.cacheWriteTokens
               ),
+              ...(summary.usage.cacheWrite30mTokens === undefined
+                  ? {}
+                  : {
+                        cacheWrite30mTokens: toNonNegativeNumberOrUndefined(
+                            summary.usage.cacheWrite30mTokens
+                        ),
+                    }),
+              ...(summary.usage.cacheWrite12hTokens === undefined
+                  ? {}
+                  : {
+                        cacheWrite12hTokens: toNonNegativeNumberOrUndefined(
+                            summary.usage.cacheWrite12hTokens
+                        ),
+                    }),
               completionTokens: toNonNegativeNumberOrUndefined(
                   summary.usage.completionTokens
               ),
@@ -213,6 +228,9 @@ export const buildPlannerStepRecord = ({
         validatedCostOutput !== undefined &&
         validatedCostTotal !== undefined
             ? {
+                  ...(summary.cost?.cacheSavingsUsd === undefined
+                      ? {}
+                      : { cacheSavingsUsd: summary.cost.cacheSavingsUsd }),
                   inputCostUsd: validatedCostInput,
                   outputCostUsd: validatedCostOutput,
                   totalCostUsd: validatedCostTotal,
@@ -257,6 +275,9 @@ export const buildPlannerStepRecord = ({
         ...(summary.upstreamAttribution?.resolvedModel !== undefined && {
             actualModel: summary.upstreamAttribution.resolvedModel,
         }),
+        ...(summary.promptCache === undefined
+            ? {}
+            : { promptCache: summary.promptCache }),
         ...(hasUsage &&
             usage !== undefined && {
                 usage,
@@ -268,6 +289,32 @@ export const buildPlannerStepRecord = ({
         ...(summary.routingChainAttempts !== undefined && {
             routingAttempts: summary.routingChainAttempts.map((attempt) => ({
                 index: attempt.index,
+                cost: attempt.cost,
+                actualProvider: attempt.actualProvider,
+                actualModel: attempt.actualModel,
+                ...(attempt.startedAtMs === undefined
+                    ? {}
+                    : {
+                          startedAt: new Date(
+                              attempt.startedAtMs
+                          ).toISOString(),
+                      }),
+                ...(attempt.finishedAtMs === undefined
+                    ? {}
+                    : {
+                          finishedAt: new Date(
+                              attempt.finishedAtMs
+                          ).toISOString(),
+                      }),
+                ...(attempt.startedAtMs === undefined ||
+                attempt.finishedAtMs === undefined
+                    ? {}
+                    : {
+                          durationMs: Math.max(
+                              0,
+                              attempt.finishedAtMs - attempt.startedAtMs
+                          ),
+                      }),
                 profileId: attempt.profileId,
                 ...(attempt.provider === undefined
                     ? {}
@@ -276,6 +323,9 @@ export const buildPlannerStepRecord = ({
                     ? {}
                     : { requestedModel: attempt.model }),
                 status: attempt.status,
+                ...(attempt.providerCallStatus === undefined
+                    ? {}
+                    : { providerCallStatus: attempt.providerCallStatus }),
                 ...(attempt.reasonCode === undefined
                     ? {}
                     : { reasonCode: attempt.reasonCode }),
@@ -285,6 +335,9 @@ export const buildPlannerStepRecord = ({
                 ...(attempt.completion === undefined
                     ? {}
                     : { completion: attempt.completion }),
+                ...(attempt.promptCache === undefined
+                    ? {}
+                    : { promptCache: attempt.promptCache }),
                 ...(attempt.usage === undefined
                     ? {}
                     : { usage: attempt.usage }),

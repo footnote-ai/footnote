@@ -259,7 +259,8 @@ export const attachGenerationAttemptEvidence = (
     options?: {
         captureCost?: (
             result: GenerationResult,
-            requestedModel: string | undefined
+            requestedModel: string | undefined,
+            provider?: string
         ) => BackendTextCostEstimate;
     }
 ): RoutingChainAttemptLog[] =>
@@ -280,12 +281,19 @@ export const attachGenerationAttemptEvidence = (
             return attempt;
         }
         const normalizedResult = normalizeGenerationResultEvidence(result);
-        const cost = options?.captureCost?.(result, attempt.model);
+        const cost = options?.captureCost?.(
+            result,
+            attempt.model,
+            attempt.provider
+        );
         const actualModel =
             normalizedResult.upstreamAttribution?.resolvedModel ??
             normalizedResult.model;
         return {
             ...attempt,
+            ...(normalizedResult.promptCache === undefined
+                ? {}
+                : { promptCache: normalizedResult.promptCache }),
             ...(normalizedResult.upstreamAttribution?.inferenceProvider !==
             undefined
                 ? {
@@ -332,6 +340,9 @@ export const toGenerationRoutingAttemptSignals = (
             : { provider: attempt.provider }),
         ...(attempt.model === undefined ? {} : { model: attempt.model }),
         status: attempt.status,
+        ...(attempt.providerCallStatus === undefined
+            ? {}
+            : { providerCallStatus: attempt.providerCallStatus }),
         ...(attempt.reasonCode === undefined
             ? {}
             : { reasonCode: attempt.reasonCode }),

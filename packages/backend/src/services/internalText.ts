@@ -384,12 +384,23 @@ export const createInternalNewsTaskService = ({
             recordUsage({
                 feature: 'news',
                 model: usageModel,
+                provider: defaultProfile.provider,
                 promptTokens,
                 ...(generationResult.usage?.cachedInputTokens !== undefined && {
                     cachedInputTokens: generationResult.usage.cachedInputTokens,
                 }),
                 ...(generationResult.usage?.cacheWriteTokens !== undefined && {
                     cacheWriteTokens: generationResult.usage.cacheWriteTokens,
+                }),
+                ...(generationResult.usage?.cacheWrite30mTokens !==
+                    undefined && {
+                    cacheWrite30mTokens:
+                        generationResult.usage.cacheWrite30mTokens,
+                }),
+                ...(generationResult.usage?.cacheWrite12hTokens !==
+                    undefined && {
+                    cacheWrite12hTokens:
+                        generationResult.usage.cacheWrite12hTokens,
                 }),
                 completionTokens,
                 totalTokens,
@@ -408,7 +419,18 @@ export const createInternalNewsTaskService = ({
                             cacheWriteTokens:
                                 generationResult.usage.cacheWriteTokens,
                         }),
-                    }
+                        ...(generationResult.usage?.cacheWrite30mTokens !==
+                            undefined && {
+                            cacheWrite30mTokens:
+                                generationResult.usage.cacheWrite30mTokens,
+                        }),
+                        ...(generationResult.usage?.cacheWrite12hTokens !==
+                            undefined && {
+                            cacheWrite12hTokens:
+                                generationResult.usage.cacheWrite12hTokens,
+                        }),
+                    },
+                    defaultProfile.provider
                 ),
                 timestamp: Date.now(),
             });

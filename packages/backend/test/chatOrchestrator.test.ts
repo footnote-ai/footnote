@@ -18,6 +18,7 @@ import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import { runtimeConfig } from '../src/config.js';
 import { DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS } from '../src/services/chatPlanner.js';
+import { summarizePromptCaching } from '../src/services/workflowEngine/cacheMeasurements.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import { selectModelProfileForWorkflowStep } from '../src/services/modelCapabilityPolicy.js';
 import { resolveExecutionContract } from '../src/services/executionContractResolver.js';
@@ -206,9 +207,6 @@ test('planner forwards the selected Ollama profile control', async () => {
     }
 });
 
-const withDefaultPersonaExpressionGuidance = (personaPrompt: string): string =>
-    `${personaPrompt}\n\n${buildPersonaExpressionGuidance('balanced')}`;
-
 test('web requests go through planner and are coerced to message when planner picks react', async () => {
     let callCount = 0;
     let plannerMessages: Array<{ role: string; content: string }> = [];
@@ -286,9 +284,11 @@ test('web requests go through planner and are coerced to message when planner pi
     );
     assert.equal(
         finalMessages[1]?.content,
-        withDefaultPersonaExpressionGuidance(
-            renderConversationPromptLayers('web-chat').personaPrompt
-        )
+        renderConversationPromptLayers('web-chat').personaPrompt
+    );
+    assert.equal(
+        finalMessages[2]?.content,
+        buildPersonaExpressionGuidance('balanced')
     );
     assert.match(
         finalMessages[finalMessages.length - 1]?.content ?? '',
@@ -499,9 +499,11 @@ test('message plans pass planner generation options into chatService', async () 
     );
     assert.equal(
         finalMessages[1]?.content,
-        withDefaultPersonaExpressionGuidance(
-            renderConversationPromptLayers('discord-chat').personaPrompt
-        )
+        renderConversationPromptLayers('discord-chat').personaPrompt
+    );
+    assert.equal(
+        finalMessages[2]?.content,
+        buildPersonaExpressionGuidance('balanced')
     );
 });
 
@@ -2092,7 +2094,11 @@ test('orchestrator fails open when weather tool throws and still generates a res
 });
 
 test('discord requests ignore runtime profile overlay when no botPersonaId is provided', async () => {
-    let finalMessages: Array<{ role: string; content: string }> = [];
+    let finalMessages: Array<{
+        role: string;
+        content: string;
+        cacheable?: boolean;
+    }> = [];
     const originalProfile = runtimeConfig.profile;
     const runtimeConfigMutable = runtimeConfig as unknown as {
         profile: BotProfileConfig;
@@ -2169,25 +2175,48 @@ test('discord requests ignore runtime profile overlay when no botPersonaId is pr
                 botProfileDisplayName: 'Footnote',
             }).systemPrompt
         );
+        const layers = renderConversationPromptLayers('discord-chat', {
+            botProfileDisplayName: 'Footnote',
+        });
+        assert.equal(finalMessages[1]?.content, layers.personaPrompt);
+        assert.equal(finalMessages[1]?.cacheable, true);
         assert.equal(
-            finalMessages[1]?.content ?? '',
-            withDefaultPersonaExpressionGuidance(
-                renderConversationPromptLayers('discord-chat', {
-                    botProfileDisplayName: 'Footnote',
-                }).personaPrompt
-            )
+            finalMessages[2]?.content,
+            buildPersonaExpressionGuidance('balanced')
         );
+        assert.equal(finalMessages[2]?.cacheable, undefined);
         assert.doesNotMatch(
             finalMessages[1]?.content ?? '',
             /BEGIN Bot Profile Overlay/
         );
+        await orchestrator.runChat(
+            createChatRequest({
+                surface: 'web',
+                trigger: { kind: 'submit' },
+            })
+        );
+        const webLayers = renderConversationPromptLayers('web-chat', {
+            botProfileDisplayName: 'Footnote',
+        });
+        assert.equal(finalMessages[0]?.content, webLayers.systemPrompt);
+        assert.equal(finalMessages[1]?.content, webLayers.personaPrompt);
+        assert.equal(finalMessages[1]?.cacheable, true);
+        assert.equal(
+            finalMessages[2]?.content,
+            buildPersonaExpressionGuidance('balanced')
+        );
+        assert.equal(finalMessages[2]?.cacheable, undefined);
     } finally {
         runtimeConfigMutable.profile = originalProfile;
     }
 });
 
-test('discord profileId does not change backend runtime profile overlay', async () => {
-    let finalMessages: Array<{ role: string; content: string }> = [];
+test('discord persona selection uses the backend-owned profile overlay', async () => {
+    let finalMessages: Array<{
+        role: string;
+        content: string;
+        cacheable?: boolean;
+    }> = [];
     const originalProfile = runtimeConfig.profile;
     const runtimeConfigMutable = runtimeConfig as unknown as {
         profile: BotProfileConfig;
@@ -2251,18 +2280,20 @@ test('discord profileId does not change backend runtime profile overlay', async 
 
         await orchestrator.runChat(
             createChatRequest({
+                botPersonaId: 'myuri',
                 conversation: [{ role: 'user', content: 'Who are you?' }],
             })
         );
 
-        assert.equal(
+        assert.match(
             finalMessages[1]?.content ?? '',
-            withDefaultPersonaExpressionGuidance(
-                renderConversationPromptLayers('discord-chat', {
-                    botProfileDisplayName: 'Footnote',
-                }).personaPrompt
-            )
+            /BEGIN Bot Profile Overlay/
         );
+        assert.match(
+            finalMessages[1]?.content ?? '',
+            /active persona is Myuri, warm, lively, perceptive/
+        );
+        assert.equal(finalMessages[1]?.cacheable, undefined);
     } finally {
         runtimeConfigMutable.profile = originalProfile;
     }
@@ -2452,6 +2483,7 @@ test('planner native transport rejection falls back through JSON mode and parser
             profile.id === plannerProfile.id
                 ? {
                       ...profile,
+                      enabled: true,
                       provider: 'openai',
                       capabilities: {
                           ...profile.capabilities,
@@ -2520,6 +2552,7 @@ test('planner native transport rejection falls back through JSON mode and parser
                         model: request.model,
                         usage: {
                             promptTokens: 4,
+                            cachedInputTokens: 0,
                             completionTokens: 3,
                             totalTokens: 7,
                         },
@@ -2533,16 +2566,60 @@ test('planner native transport rejection falls back through JSON mode and parser
                 };
             }, 'voltagent'),
             storeTrace: async () => undefined,
-            buildResponseMetadata: () => createMetadata(),
+            buildResponseMetadata,
             defaultModel: plannerProfile.id,
             recordUsage: () => undefined,
         });
 
-        const response = await orchestrator.runChat(createChatRequest());
+        const response = await orchestrator.runChat(
+            createChatRequest({ plannerProfileId: plannerProfile.id })
+        );
         assert.equal(response.action, 'message');
         assert.ok(nativePlannerAttemptCount >= 1);
         assert.ok(jsonModePlannerAttemptCount >= 1);
         assert.ok(parserPlannerAttemptCount >= 1);
+        const workflow = response.metadata.workflow;
+        assert.ok(workflow);
+        const calls = workflow.steps
+            .filter((step) => step.stepKind === 'plan')
+            .flatMap((step) => step.attempts ?? [])
+            .flatMap((attempt) => attempt.routingAttempts ?? []);
+        assert.equal(
+            calls.length,
+            nativePlannerAttemptCount +
+                jsonModePlannerAttemptCount +
+                parserPlannerAttemptCount
+        );
+        assert.equal(
+            calls.filter((call) => call.providerCallStatus === 'failed').length,
+            nativePlannerAttemptCount + jsonModePlannerAttemptCount
+        );
+        assert.equal(
+            calls.filter((call) => call.providerCallStatus === 'succeeded')
+                .length,
+            parserPlannerAttemptCount
+        );
+        assert.ok(
+            calls.some((call) => call.status === 'failed_transient_advanced')
+        );
+        assert.ok(
+            calls.every(
+                (call) =>
+                    call.cost !== undefined && call.durationMs !== undefined
+            )
+        );
+        assert.ok(
+            calls.every((call) => call.promptCache?.surface === 'discord')
+        );
+        const partial = summarizePromptCaching(workflow).find(
+            (summary) =>
+                summary.purpose === 'planner' &&
+                summary.readsReported > 0 &&
+                summary.readsReported < summary.attempts
+        );
+        assert.ok(partial);
+        assert.equal(partial.hitRate, undefined);
+        assert.equal(partial.cacheReadShare, undefined);
     } finally {
         runtimeConfigMutable.modelProfiles = originalModelProfiles;
         runtimeConfigMutable.openai = originalOpenAi;
@@ -3103,4 +3180,198 @@ test('orchestrator continues normal weather path when tool returns status ok', a
         (event) => event.kind === 'tool'
     );
     assert.equal(toolEvent?.clarification, undefined);
+});
+
+test('planner canonical attempts retain expansion, routed failures and exhausted-chain fallback exactly once', async () => {
+    const original = runtimeConfig.modelProfiles;
+    const mutable = runtimeConfig as unknown as {
+        modelProfiles: typeof original;
+    };
+    const base = original.catalog.find(
+        (profile) => profile.id === 'openai-text-fast'
+    )!;
+    const profiles = ['cache-fixture-a', 'cache-fixture-b'].map((id) => ({
+        ...base,
+        id,
+        enabled: true,
+        provider: 'openai' as const,
+        providerModel: 'gpt-5.6-luna',
+        promptCaching: undefined,
+    }));
+    mutable.modelProfiles = {
+        ...original,
+        plannerProfileId: profiles[0]!.id,
+        catalog: [...original.catalog, ...profiles],
+        stepRoutingChains: Object.fromEntries(
+            Object.entries(original.stepRoutingChains).map(([mode, chains]) => [
+                mode,
+                { ...chains, planner: profiles.map((profile) => profile.id) },
+            ])
+        ) as typeof original.stepRoutingChains,
+    };
+    try {
+        for (const scenario of [
+            'expansion',
+            'route',
+            'exhausted',
+            'pre-provider',
+            'not-called-cache',
+        ] as const) {
+            let plannerCalls = 0;
+            const orchestrator = createChatOrchestrator({
+                generationRuntime: createGenerationRuntime(async (request) => {
+                    if (request.maxOutputTokens !== PLANNER_TOKEN_SENTINEL)
+                        return { text: 'fixture answer', model: request.model };
+                    plannerCalls += 1;
+                    if (
+                        scenario === 'pre-provider' ||
+                        (scenario === 'not-called-cache' && plannerCalls === 1)
+                    )
+                        throw Object.assign(new Error('fixture pre-provider'), {
+                            preProviderCallFailure: true,
+                        });
+                    if (
+                        (scenario === 'route' && plannerCalls === 1) ||
+                        (scenario === 'exhausted' && plannerCalls <= 2)
+                    ) {
+                        throw new GenerationRuntimeError(
+                            'fixture transient',
+                            { classification: 'transient' },
+                            {
+                                model: request.model,
+                                usage: { promptTokens: 10 },
+                            }
+                        );
+                    }
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            requestedCapabilityProfile: 'balanced-general',
+                            contextNeed:
+                                scenario === 'expansion' && plannerCalls === 1
+                                    ? 'needs_more_context'
+                                    : 'sufficient',
+                            contextTier: 'expanded_recent',
+                            safetyTier: 'Low',
+                            reasoning: 'fixture',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                                temperament: {
+                                    tightness: 4,
+                                    rationale: 3,
+                                    attribution: 4,
+                                    caution: 3,
+                                    extent: 4,
+                                },
+                            },
+                        }),
+                        model: request.model,
+                        usage: {
+                            promptTokens: 20,
+                            completionTokens: 1,
+                            cachedInputTokens:
+                                scenario === 'not-called-cache' ? 8 : 0,
+                            cacheWriteTokens: 0,
+                            totalTokens: 21,
+                        },
+                    };
+                }),
+                storeTrace: async () => undefined,
+                buildResponseMetadata,
+                defaultModel: original.defaultProfileId,
+                recordUsage: () => undefined,
+            });
+            const response = await orchestrator.runChat(
+                createChatRequest({
+                    conversation: Array.from({ length: 10 }, (_, index) => ({
+                        role:
+                            index % 2 === 0
+                                ? ('user' as const)
+                                : ('assistant' as const),
+                        content: `fixture ${index}`,
+                    })),
+                })
+            );
+            assert.ok(response.metadata);
+            const calls = response.metadata
+                .workflow!.steps.filter((step) => step.stepKind === 'plan')
+                .flatMap((step) => step.attempts ?? [])
+                .flatMap((attempt) => attempt.routingAttempts ?? [])
+                .filter((call) => !call.status.startsWith('skipped'));
+            assert.equal(
+                plannerCalls,
+                scenario === 'exhausted' || scenario === 'pre-provider' ? 3 : 2,
+                scenario
+            );
+            assert.equal(
+                calls.length,
+                scenario === 'pre-provider' ? profiles.length : plannerCalls,
+                scenario
+            );
+            if (scenario === 'pre-provider') {
+                assert.deepEqual(
+                    calls.map((call) => call.profileId),
+                    profiles.map((profile) => profile.id)
+                );
+                assert.ok(
+                    calls.every((call) => call.promptCache === undefined)
+                );
+                const plannerSummaries = summarizePromptCaching(
+                    response.metadata.workflow!
+                ).filter((summary) => summary.purpose === 'planner');
+                assert.equal(plannerSummaries.length, 0);
+                assert.ok(
+                    calls.every(
+                        (call) => call.providerCallStatus === 'not_called'
+                    )
+                );
+                continue;
+            }
+            if (scenario === 'route') {
+                assert.equal(calls[0]?.status, 'failed_transient_advanced');
+                assert.equal(calls[0]?.reasonCode, 'planner_runtime_error');
+            }
+            assert.ok(
+                calls.every(
+                    (call) =>
+                        call.providerCallStatus === 'not_called' ||
+                        (call.durationMs !== undefined &&
+                            call.cost !== undefined)
+                ),
+                scenario
+            );
+            if (scenario === 'not-called-cache') {
+                const plannerStep = response.metadata.workflow!.steps.find(
+                    (step) => step.stepKind === 'plan'
+                );
+                const routingAttempts = plannerStep?.attempts?.flatMap(
+                    (attempt) => attempt.routingAttempts ?? []
+                );
+                assert.equal(
+                    routingAttempts?.filter(
+                        (call) => call.providerCallStatus === 'not_called'
+                    ).length,
+                    1
+                );
+                const summary = summarizePromptCaching(
+                    response.metadata.workflow!
+                ).find((entry) => entry.purpose === 'planner');
+                assert.equal(summary?.cacheReadTokens, 8);
+                assert.equal(summary?.costCompleteness, 'complete');
+            }
+            assert.deepEqual(
+                calls.map((call) => call.profileId),
+                scenario === 'expansion'
+                    ? [profiles[0]!.id, profiles[0]!.id]
+                    : scenario === 'route' || scenario === 'not-called-cache'
+                      ? profiles.map((profile) => profile.id)
+                      : [profiles[0]!.id, profiles[1]!.id, profiles[0]!.id],
+                scenario
+            );
+        }
+    } finally {
+        mutable.modelProfiles = original;
+    }
 });

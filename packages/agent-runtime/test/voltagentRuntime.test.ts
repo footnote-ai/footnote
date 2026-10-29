@@ -790,6 +790,8 @@ test('voltagent runtime preserves safe incomplete reasoning metadata without res
                                 reason: 'max_output_tokens',
                             },
                             usage: {
+                                input_tokens: 2400,
+                                total_tokens: 3600,
                                 output_tokens: 1200,
                                 output_tokens_details: {
                                     reasoning_tokens: 1200,
@@ -1772,6 +1774,17 @@ test('default VoltAgent executor maps usage from the installed AI SDK token fiel
             response: {
                 modelId: 'openai/gpt-5-mini',
                 id: 'response_1',
+                body: {
+                    usage: {
+                        input_tokens: 21,
+                        output_tokens: 9,
+                        total_tokens: 30,
+                        input_tokens_details: {
+                            cached_tokens: 5,
+                            cache_write_tokens: 3,
+                        },
+                    },
+                },
                 timestamp: new Date(0),
                 messages: [],
             },

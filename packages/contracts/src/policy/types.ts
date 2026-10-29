@@ -10,6 +10,10 @@ import type {
     GitHubContextReference,
 } from './contextIntegrations.js';
 import type { ProjectContextMetadata } from './projectContext.js';
+import type {
+    PromptCacheReceipt,
+    PromptCacheSummary,
+} from '../prompt-caching.js';
 import type { PresentationGenerationSettings } from '../model-profiles.js';
 import type { ModelCapabilitySupport } from '../model-capabilities.js';
 import type {
@@ -504,6 +508,8 @@ export type GenerationExecutionUsage = {
     promptTokens?: number;
     cachedInputTokens?: number;
     cacheWriteTokens?: number;
+    cacheWrite30mTokens?: number;
+    cacheWrite12hTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
     reasoningTokens?: number;
@@ -801,11 +807,18 @@ export type WorkflowReviewParseFailureReason =
  * with older metadata readers.
  */
 export type WorkflowRoutingChainAttemptSignal = {
+    cost?: WorkflowAttemptRoutingRecord['cost'];
+    startedAtMs?: number;
+    finishedAtMs?: number;
+    actualProvider?: string;
+    actualModel?: string;
+    promptCache?: PromptCacheReceipt;
     index: number;
     profileId: string;
     provider?: string;
     model?: string;
     status: string;
+    providerCallStatus?: 'succeeded' | 'failed' | 'not_called';
     reasonCode?: string;
     finishReason?: string;
     completion?: GenerationCompletion;
@@ -1002,12 +1015,14 @@ export type WorkflowAttemptRoutingRecord = {
     actualProvider?: string;
     actualModel?: string;
     status: string;
+    providerCallStatus?: 'succeeded' | 'failed' | 'not_called';
     reasonCode?: string;
     finishReason?: string;
     completion?: GenerationCompletion;
     /** Requested/applied/ignored provider controls for this routing attempt. */
     settings?: WorkflowAttemptSettings;
     /** Allowlisted provider/runtime facts with their source and authority. */
+    promptCache?: PromptCacheReceipt;
     providerObservations?: OllamaRuntimeObservations;
     /** Provider/runtime-reported counts for this routing attempt; omitted counts are unavailable. */
     usage?: GenerationExecutionUsage;
@@ -1016,6 +1031,7 @@ export type WorkflowAttemptRoutingRecord = {
         inputCostUsd: number;
         outputCostUsd: number;
         totalCostUsd: number;
+        cacheSavingsUsd?: number;
         costCompleteness?: OpenAITextCostCompleteness;
         costAppliedRules?: OpenAITextCostAppliedRule[];
         costIncompleteReasons?: OpenAITextCostIncompleteReason[];
@@ -1118,6 +1134,7 @@ export type WorkflowAttemptRecord = {
     actualProvider?: string;
     actualModel?: string;
     settings?: WorkflowAttemptSettings;
+    promptCache?: PromptCacheReceipt;
     providerObservations?: OllamaRuntimeObservations;
     capabilities?: WorkflowAttemptCapabilities;
     completion?: GenerationCompletion;
@@ -1128,6 +1145,7 @@ export type WorkflowAttemptRecord = {
         inputCostUsd: number;
         outputCostUsd: number;
         totalCostUsd: number;
+        cacheSavingsUsd?: number;
         costCompleteness?: OpenAITextCostCompleteness;
         costAppliedRules?: OpenAITextCostAppliedRule[];
         costIncompleteReasons?: OpenAITextCostIncompleteReason[];
@@ -1154,6 +1172,8 @@ export type StepRecord = {
         promptTokens?: number;
         cachedInputTokens?: number;
         cacheWriteTokens?: number;
+        cacheWrite30mTokens?: number;
+        cacheWrite12hTokens?: number;
         completionTokens?: number;
         totalTokens?: number;
         reasoningTokens?: number;
@@ -1163,6 +1183,7 @@ export type StepRecord = {
         inputCostUsd: number;
         outputCostUsd: number;
         totalCostUsd: number;
+        cacheSavingsUsd?: number;
         costCompleteness?: OpenAITextCostCompleteness;
         costAppliedRules?: OpenAITextCostAppliedRule[];
         costIncompleteReasons?: OpenAITextCostIncompleteReason[];
@@ -1174,6 +1195,8 @@ export type StepRecord = {
 };
 
 export type WorkflowRecord = {
+    /** Backend-derived cache measurements; no raw identities or prompt content. */
+    cacheSummary?: PromptCacheSummary[];
     runId?: string;
     /** Opaque correlation for Runs produced within one live voice session; not cross-surface conversation identity. */
     sessionCorrelationId?: string;
@@ -1693,6 +1716,8 @@ export type ImageGenerationMetadata = {
         inputTokens: number;
         cachedInputTokens?: number;
         cacheWriteTokens?: number;
+        cacheWrite30mTokens?: number;
+        cacheWrite12hTokens?: number;
         outputTokens: number;
         totalTokens: number;
         imageCount: number;
@@ -1715,6 +1740,8 @@ export type ImageGenerationMetadata = {
             inputTokens: number;
             cachedInputTokens?: number;
             cacheWriteTokens?: number;
+            cacheWrite30mTokens?: number;
+            cacheWrite12hTokens?: number;
             outputTokens: number;
             totalTokens: number;
             reasoningEffort:

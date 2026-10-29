@@ -603,6 +603,42 @@ test('internal news task preserves missing usage in its cost estimate', async ()
     ]);
 });
 
+test('internal news task preserves cache write tiers and prices by its configured provider', async () => {
+    const records: BackendLLMCostRecord[] = [];
+    const service = createInternalNewsTaskService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                return {
+                    text: JSON.stringify({ news: [], summary: 'No news.' }),
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 12,
+                        cacheWrite30mTokens: 4,
+                        cacheWrite12hTokens: 8,
+                        completionTokens: 8,
+                        totalTokens: 20,
+                    },
+                };
+            },
+        },
+        defaultProfile: {
+            ...defaultNewsProfile,
+            provider: 'openrouter',
+        },
+        recordUsage: (record) => records.push(record),
+    });
+
+    await service.runNewsTask({ task: 'news' });
+
+    assert.equal(records.length, 1);
+    assert.equal(records[0].provider, 'openrouter');
+    assert.equal(records[0].cacheWrite30mTokens, 4);
+    assert.equal(records[0].cacheWrite12hTokens, 8);
+    assert.equal(records[0].costCompleteness, 'unknown');
+    assert.deepEqual(records[0].costIncompleteReasons, ['unpriced_model']);
+});
+
 test('internal news task forwards only a backend-derived safety identifier', async () => {
     let seenRequest: GenerationRequest | undefined;
     const service = createInternalNewsTaskService({

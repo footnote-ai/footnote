@@ -1,4 +1,22 @@
-paths: {}
+paths:
+    /healthz:
+        get:
+            operationId: getHealthz
+            x-codeRefs:
+                - packages/backend/src/http/publicRoutes.ts#registerPublicRoutes
+            summary: Check backend HTTP availability
+            description: >
+                Returns plain-text `ok` when the backend HTTP server can handle requests. Does not
+                indicate readiness of Discord, model providers, TrustGraph, or optional services.
+            tags:
+                - System
+            responses:
+                '200':
+                    description: The backend HTTP server is serving requests.
+                    content:
+                        text/plain:
+                            schema:
+                                type: string
 components:
     schemas:
         ErrorResponse:
@@ -194,27 +212,7 @@ components:
                             model:
                                 type: string
                             usage:
-                                type: object
-                                properties:
-                                    promptTokens:
-                                        type: integer
-                                        minimum: 0
-                                    cachedInputTokens:
-                                        type: integer
-                                        minimum: 0
-                                    cacheWriteTokens:
-                                        type: integer
-                                        minimum: 0
-                                    completionTokens:
-                                        type: integer
-                                        minimum: 0
-                                    totalTokens:
-                                        type: integer
-                                        minimum: 0
-                                    reasoningTokens:
-                                        type: integer
-                                        minimum: 0
-                                additionalProperties: false
+                                $ref: '#/components/schemas/WorkflowGenerationUsage'
                             routingChainAttempts:
                                 type: array
                                 items:
@@ -231,6 +229,12 @@ components:
                                             type: string
                                         status:
                                             type: string
+                                        providerCallStatus:
+                                            type: string
+                                            enum:
+                                                - succeeded
+                                                - failed
+                                                - not_called
                                         reasonCode:
                                             type: string
                                         finishReason:
@@ -257,27 +261,7 @@ components:
                                                 - visibleTextLength
                                             additionalProperties: false
                                         usage:
-                                            type: object
-                                            properties:
-                                                promptTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                cachedInputTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                cacheWriteTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                completionTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                totalTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                                reasoningTokens:
-                                                    type: integer
-                                                    minimum: 0
-                                            additionalProperties: false
+                                            $ref: '#/components/schemas/WorkflowGenerationUsage'
                                         chooseOneUsed:
                                             type: boolean
                                         chooseOneSelectedIndex:

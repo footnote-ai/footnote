@@ -1,0 +1,122 @@
+{
+    "experimentId": "cee0637d-699b-472d-8e49-aca3fda12bbb",
+    "fixtureVersion": 2,
+    "commit": "5f32428612aa0e1ef5ab0d22ee7c25f6b97c57df",
+    "reportSourceDigest": "fdf1cffc3085ecfa9c62594e8e9d3c3246a2bdc01abcea1a58f21d109e88e982",
+    "capturedAt": "2026-10-28T17:56:34.259Z",
+    "synthetic": true,
+    "historicalExperiment": {
+        "experimentId": "44cf86b6-2860-4a66-8a63-44c26173d6e5",
+        "sha256": "dee1239dce2c5e083fadf2877676419e164e6232e2f50557bbeac7343f490a12"
+    },
+    "provider": "openai",
+    "model": "gpt-5.6-luna",
+    "pricing": {
+        "input": 0.2,
+        "cachedInput": 0.02,
+        "output": 1.2,
+        "cacheWriteMultiplier": 1.25,
+        "longContext": {
+            "inputTokenThreshold": 272000,
+            "inputMultiplier": 2,
+            "outputMultiplier": 1.5
+        },
+        "verifiedAt": "2026-10-28T17:56:11.0886648Z",
+        "sources": [
+            "https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+            "https://developers.openai.com/api/docs/guides/prompt-caching"
+        ]
+    },
+    "preflight": {
+        "credentialsAvailable": true,
+        "pricingVerifiedAt": "2026-10-28T17:56:11.0886648Z",
+        "pricingFresh": true,
+        "ratesMatchApproved": true
+    },
+    "limits": {
+        "maxCalls": 16,
+        "maxEstimatedUsd": 0.15,
+        "maxRequestBytes": 12000,
+        "maxOutputTokens": 64
+    },
+    "budget": {
+        "calls": 4,
+        "reservedUsd": 0.014521200000000001
+    },
+    "samples": [
+        {
+            "pair": 0,
+            "arm": "automatic",
+            "status": "failed",
+            "durationMs": 20093,
+            "wireCalls": 4,
+            "wire": {
+                "controls": "automatic",
+                "digest": "99a378c49fecb2d5eb94e09f65865e42abae708eff073ee0a81c3a7f1d1dd260",
+                "equivalenceDigest": "02f449379bd08ef48675727e53c51e32d73c6287aa48fbb908edc22d8299cf43",
+                "prefixDigest": "d5df79175a1962aab934bfc09aad2a13d01a14dee34b44367abe1ecc29497a1b"
+            },
+            "outputValid": false,
+            "rawReceiptVerified": false
+        }
+    ],
+    "wireRequests": [
+        {
+            "pair": 0,
+            "arm": "automatic",
+            "controls": "automatic",
+            "digest": "99a378c49fecb2d5eb94e09f65865e42abae708eff073ee0a81c3a7f1d1dd260",
+            "equivalenceDigest": "02f449379bd08ef48675727e53c51e32d73c6287aa48fbb908edc22d8299cf43",
+            "prefixDigest": "d5df79175a1962aab934bfc09aad2a13d01a14dee34b44367abe1ecc29497a1b",
+            "status": "reported",
+            "httpStatus": 429
+        },
+        {
+            "pair": 0,
+            "arm": "automatic",
+            "controls": "automatic",
+            "digest": "99a378c49fecb2d5eb94e09f65865e42abae708eff073ee0a81c3a7f1d1dd260",
+            "equivalenceDigest": "02f449379bd08ef48675727e53c51e32d73c6287aa48fbb908edc22d8299cf43",
+            "prefixDigest": "d5df79175a1962aab934bfc09aad2a13d01a14dee34b44367abe1ecc29497a1b",
+            "status": "reported",
+            "httpStatus": 429
+        },
+        {
+            "pair": 0,
+            "arm": "automatic",
+            "controls": "automatic",
+            "digest": "99a378c49fecb2d5eb94e09f65865e42abae708eff073ee0a81c3a7f1d1dd260",
+            "equivalenceDigest": "02f449379bd08ef48675727e53c51e32d73c6287aa48fbb908edc22d8299cf43",
+            "prefixDigest": "d5df79175a1962aab934bfc09aad2a13d01a14dee34b44367abe1ecc29497a1b",
+            "status": "reported",
+            "httpStatus": 429
+        },
+        {
+            "pair": 0,
+            "arm": "automatic",
+            "controls": "automatic",
+            "digest": "99a378c49fecb2d5eb94e09f65865e42abae708eff073ee0a81c3a7f1d1dd260",
+            "equivalenceDigest": "02f449379bd08ef48675727e53c51e32d73c6287aa48fbb908edc22d8299cf43",
+            "prefixDigest": "d5df79175a1962aab934bfc09aad2a13d01a14dee34b44367abe1ecc29497a1b",
+            "status": "reported",
+            "httpStatus": 429
+        }
+    ],
+    "result": {
+        "outcome": "inconclusive",
+        "issues": [
+            "incomplete_or_unexpected_schedule",
+            "retry_or_unaccounted_wire_request",
+            "incomplete_usage_cost_attribution_or_output",
+            "unmatched_pair",
+            "prefix_eligibility_unverified"
+        ]
+    },
+    "limitations": [
+        "Only this six-request reuse pattern is tested.",
+        "Costs are usage-priced estimates, not invoice reconciliation.",
+        "Retention, production hit rates and latency significance are not tested.",
+        "Any spent or interrupted experiment is terminal and cannot be replayed."
+    ],
+    "deliberateCachingEnabledByDefault": false
+}

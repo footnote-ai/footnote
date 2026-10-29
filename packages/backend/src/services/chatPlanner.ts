@@ -70,6 +70,7 @@ import {
     isWorkflowOwnedPlannerInvocation,
 } from './chatPlannerInvocation.js';
 import { classifyTypedModelOutputFailure } from './typedModelOutput.js';
+import { isPreProviderCallFailure } from './preProviderCallFailure.js';
 import type { ChatPlannerInvocationContext } from './chatPlannerInvocation.js';
 import { buildRequestTimePrompt } from './prompts/conversationPromptLayers.js';
 export type {
@@ -119,6 +120,7 @@ export type ChatPlannerExecution = {
         upstreamReportedCostUsd?: number;
     };
     providerSettingResolution?: WorkflowAttemptSettings;
+    promptCache?: GenerationResult['promptCache'];
     providerObservations?: OllamaRuntimeObservations;
 };
 
@@ -226,6 +228,7 @@ type CreateChatPlannerOptions = {
 
 type PlannerFailureUsage = {
     model: string;
+    provider?: string;
     usage?: GenerationUsage;
 };
 
@@ -260,6 +263,7 @@ const readPlannerFailureUsage = (
     }
     const candidate = error as {
         plannerModel?: unknown;
+        plannerProvider?: unknown;
         plannerUsage?: unknown;
     };
     const usage = normalizeGenerationUsage(candidate.plannerUsage);
@@ -269,28 +273,11 @@ const readPlannerFailureUsage = (
                 ? candidate.plannerModel
                 : requestedModel,
         usage,
+        provider:
+            typeof candidate.plannerProvider === 'string'
+                ? candidate.plannerProvider
+                : undefined,
     };
-};
-
-const isPreProviderCallFailure = (error: unknown): boolean => {
-    const seen = new Set<object>();
-    let current = error;
-    while (
-        typeof current === 'object' &&
-        current !== null &&
-        !seen.has(current)
-    ) {
-        seen.add(current);
-        const candidate = current as {
-            preProviderCallFailure?: unknown;
-            cause?: unknown;
-        };
-        if (candidate.preProviderCallFailure === true) {
-            return true;
-        }
-        current = candidate.cause;
-    }
-    return false;
 };
 
 /**
@@ -309,6 +296,7 @@ type ChatPlannerExecutionRequest = {
 };
 
 type ChatPlannerRequestPayload = ChatPlannerExecutionRequest & {
+    cacheSurface?: 'web' | 'discord';
     /** Prompt messages for a text-JSON fallback from a structured attempt. */
     compatibilityMessages?: () => RuntimeMessage[];
     /** Force the parser path after a provider JSON-mode attempt has failed. */
@@ -328,6 +316,7 @@ type ChatPlannerExecutionResult = {
     completion?: GenerationResult['completion'];
     upstreamAttribution?: ChatPlannerExecution['upstreamAttribution'];
     providerSettingResolution?: ChatPlannerExecution['providerSettingResolution'];
+    promptCache?: GenerationResult['promptCache'];
     providerObservations?: ChatPlannerExecution['providerObservations'];
 };
 
@@ -343,6 +332,7 @@ type ChatPlannerStructuredExecutionResult = {
     rawArguments?: string;
     upstreamAttribution?: ChatPlannerExecution['upstreamAttribution'];
     providerSettingResolution?: ChatPlannerExecution['providerSettingResolution'];
+    promptCache?: GenerationResult['promptCache'];
     providerObservations?: ChatPlannerExecution['providerObservations'];
 };
 
@@ -1064,11 +1054,7 @@ const buildPlannerMessages = (input: {
     contextTier: PlannerContextTier;
     requestStartedAtMs: number;
 }): RuntimeMessage[] => [
-    { role: 'system', content: input.plannerPrompt },
-    {
-        role: 'system',
-        content: buildRequestTimePrompt(input.requestStartedAtMs),
-    },
+    { role: 'system', content: input.plannerPrompt, cacheable: true },
     {
         role: 'system',
         content: `Planner capability profiles (bounded): ${input.plannerProfileContext}`,
@@ -1076,6 +1062,10 @@ const buildPlannerMessages = (input: {
     {
         role: 'system',
         content: `Configured TrustGraph retrieval targets (bounded, operator-authored descriptions): ${input.plannerTrustGraphTargetContext}`,
+    },
+    {
+        role: 'system',
+        content: buildRequestTimePrompt(input.requestStartedAtMs),
     },
     {
         role: 'system',
@@ -1874,6 +1864,7 @@ export const createChatPlanner = ({
         let upstreamAttribution: ChatPlannerExecution['upstreamAttribution'];
         let providerSettingResolution: ChatPlannerExecution['providerSettingResolution'];
         let providerObservations: ChatPlannerExecution['providerObservations'];
+        let promptCache: GenerationResult['promptCache'];
         let plannerProvider: string | undefined;
         let plannerModel: string | undefined;
         const requestSummary = summarizeRequest(request);
@@ -1893,6 +1884,7 @@ export const createChatPlanner = ({
             });
             return {
                 messages,
+                cacheSurface: request.surface,
                 model: defaultModel,
                 maxOutputTokens: plannerOutputTokenBudget,
                 reasoningEffort: plannerReasoningEffort,
@@ -1924,6 +1916,8 @@ export const createChatPlanner = ({
             promptTokens: number;
             cachedInputTokens?: number;
             cacheWriteTokens?: number;
+            cacheWrite30mTokens?: number;
+            cacheWrite12hTokens?: number;
             completionTokens: number;
             totalTokens: number;
             reasoningTokens?: number;
@@ -1947,6 +1941,7 @@ export const createChatPlanner = ({
                 providerSettingResolution,
             }),
             ...(providerObservations !== undefined && { providerObservations }),
+            ...(promptCache === undefined ? {} : { promptCache }),
             ...(plannerProvider !== undefined && { provider: plannerProvider }),
             ...(plannerModel !== undefined && { model: plannerModel }),
             ...(plannerUsageRecorded && {
@@ -1957,6 +1952,16 @@ export const createChatPlanner = ({
                     }),
                     ...(plannerUsageTotals.cacheWriteTokens !== undefined && {
                         cacheWriteTokens: plannerUsageTotals.cacheWriteTokens,
+                    }),
+                    ...(plannerUsageTotals.cacheWrite30mTokens !==
+                        undefined && {
+                        cacheWrite30mTokens:
+                            plannerUsageTotals.cacheWrite30mTokens,
+                    }),
+                    ...(plannerUsageTotals.cacheWrite12hTokens !==
+                        undefined && {
+                        cacheWrite12hTokens:
+                            plannerUsageTotals.cacheWrite12hTokens,
                     }),
                     completionTokens: plannerUsageTotals.completionTokens,
                     totalTokens: plannerUsageTotals.totalTokens,
@@ -1972,7 +1977,8 @@ export const createChatPlanner = ({
 
         const recordPlannerUsage = (
             usageModel: string,
-            usage?: GenerationUsage
+            usage?: GenerationUsage,
+            provider?: string
         ) => {
             const normalizedUsage = normalizeGenerationUsage(usage);
             const promptTokens = normalizedUsage?.promptTokens ?? 0;
@@ -1989,8 +1995,13 @@ export const createChatPlanner = ({
                     }),
                     ...(normalizedUsage?.cacheWriteTokens !== undefined && {
                         cacheWriteTokens: normalizedUsage.cacheWriteTokens,
+                        cacheWrite30mTokens:
+                            normalizedUsage.cacheWrite30mTokens,
+                        cacheWrite12hTokens:
+                            normalizedUsage.cacheWrite12hTokens,
                     }),
-                }
+                },
+                provider
             );
             if (normalizedUsage !== undefined) {
                 plannerUsageRecorded = true;
@@ -2004,6 +2015,15 @@ export const createChatPlanner = ({
                     plannerUsageTotals.cacheWriteTokens =
                         (plannerUsageTotals.cacheWriteTokens ?? 0) +
                         normalizedUsage.cacheWriteTokens;
+                }
+                for (const field of [
+                    'cacheWrite30mTokens',
+                    'cacheWrite12hTokens',
+                ] as const) {
+                    if (normalizedUsage[field] !== undefined)
+                        plannerUsageTotals[field] =
+                            (plannerUsageTotals[field] ?? 0) +
+                            normalizedUsage[field];
                 }
                 plannerUsageTotals.completionTokens += completionTokens;
                 plannerUsageTotals.totalTokens += totalTokens;
@@ -2028,6 +2048,10 @@ export const createChatPlanner = ({
                         }),
                         ...(normalizedUsage?.cacheWriteTokens !== undefined && {
                             cacheWriteTokens: normalizedUsage.cacheWriteTokens,
+                            cacheWrite30mTokens:
+                                normalizedUsage.cacheWrite30mTokens,
+                            cacheWrite12hTokens:
+                                normalizedUsage.cacheWrite12hTokens,
                         }),
                         completionTokens,
                         totalTokens,
@@ -2056,11 +2080,19 @@ export const createChatPlanner = ({
                         error,
                         payload.model
                     );
-                    recordPlannerUsage(failed.model, failed.usage);
+                    recordPlannerUsage(
+                        failed.model,
+                        failed.usage,
+                        failed.provider
+                    );
                 }
                 throw error;
             }
-            recordPlannerUsage(response.model || payload.model, response.usage);
+            recordPlannerUsage(
+                response.model || payload.model,
+                response.usage,
+                response.provider
+            );
             return response;
         };
 
@@ -2083,6 +2115,7 @@ export const createChatPlanner = ({
             providerSettingResolution =
                 expandedResponse.providerSettingResolution;
             providerObservations = expandedResponse.providerObservations;
+            promptCache = expandedResponse.promptCache;
             plannerModel = expandedResponse.model;
             plannerProvider = expandedResponse.provider;
             const expandedCandidate = parsePlannerCandidateFromTextJson(
@@ -2245,7 +2278,8 @@ export const createChatPlanner = ({
                         );
                         recordPlannerUsage(
                             failedStructuredUsage.model,
-                            failedStructuredUsage.usage
+                            failedStructuredUsage.usage,
+                            failedStructuredUsage.provider
                         );
                     }
                     if (
@@ -2268,12 +2302,14 @@ export const createChatPlanner = ({
                 providerSettingResolution =
                     structuredResponse.providerSettingResolution;
                 providerObservations = structuredResponse.providerObservations;
+                promptCache = structuredResponse.promptCache;
                 plannerModel = structuredResponse.model;
                 plannerProvider = structuredResponse.provider;
                 structuredOutputOutcome = 'strict_success';
                 recordPlannerUsage(
                     structuredResponse.model || defaultModel,
-                    structuredResponse.usage
+                    structuredResponse.usage,
+                    structuredResponse.provider
                 );
                 const normalization = normalizePlan(
                     request,
@@ -2316,6 +2352,7 @@ export const createChatPlanner = ({
             providerSettingResolution =
                 plannerResponse.providerSettingResolution;
             providerObservations = plannerResponse.providerObservations;
+            promptCache = plannerResponse.promptCache;
             plannerModel = plannerResponse.model;
             plannerProvider = plannerResponse.provider;
             rejectInvalidPlannerTextJsonResult(plannerResponse);
@@ -2433,6 +2470,7 @@ export const createChatPlanner = ({
                         textJsonResponse.providerSettingResolution;
                     providerObservations =
                         textJsonResponse.providerObservations;
+                    promptCache = textJsonResponse.promptCache;
                     plannerModel = textJsonResponse.model;
                     plannerProvider = textJsonResponse.provider;
                     rejectInvalidPlannerTextJsonResult(textJsonResponse);
