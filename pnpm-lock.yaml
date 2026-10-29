@@ -95,8 +95,8 @@ catalogs:
       specifier: ^14.27.0
       version: 14.27.0
     dotenv:
-      specifier: ^18.0.7
-      version: 18.0.7
+      specifier: ^18.0.9
+      version: 18.0.9
     eslint:
       specifier: ^10.12.0
       version: 10.12.0
@@ -234,7 +234,7 @@ importers:
         version: link:packages/repository-context
       dotenv:
         specifier: 'catalog:'
-        version: 18.0.7
+        version: 18.0.9
       jsonwebtoken:
         specifier: 'catalog:'
         version: 9.0.3
@@ -380,7 +380,7 @@ importers:
         version: 12.10.0
       dotenv:
         specifier: 'catalog:'
-        version: 18.0.7
+        version: 18.0.9
       express:
         specifier: 'catalog:'
         version: 5.3.0(supports-color@10.2.2)
@@ -477,7 +477,7 @@ importers:
         version: 14.27.0(bufferutil@4.1.0)
       dotenv:
         specifier: 'catalog:'
-        version: 18.0.7
+        version: 18.0.9
       express:
         specifier: 'catalog:'
         version: 5.3.0(supports-color@10.2.2)
@@ -3165,8 +3165,8 @@ packages:
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
 
-  dotenv@18.0.7:
-    resolution: {integrity: sha512-QEvMEF8ca3GNZJJnAbOgxpj5ULhBvnMcURp+XKrtvqFNPgjBvYoswQ0Jl2cO7JzCjxZjJhr9ZuIEhlrRxMft/Q==}
+  dotenv@18.0.9:
+    resolution: {integrity: sha512-3fVOW4cB02R066PUSwn8O4TJyz9NckQl7F81blIbaq9jKBm2tSmOKky7ZHIXzGvkVPXCSn6jkpziBPZdGFs8Tw==}
     engines: {node: '>=12'}
     hasBin: true
 
@@ -8421,7 +8421,7 @@ snapshots:
       domelementtype: 2.3.0
       domhandler: 5.0.3
 
-  dotenv@18.0.7: {}
+  dotenv@18.0.9: {}
 
   dset@3.1.4: {}
 
