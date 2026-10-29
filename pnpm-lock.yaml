@@ -116,8 +116,8 @@ catalogs:
       specifier: ^16.2.4
       version: 16.2.4
     js-yaml:
-      specifier: ^3.15.2
-      version: 3.15.2
+      specifier: ^5.5.0
+      version: 5.5.0
     jsonwebtoken:
       specifier: ^9.0.3
       version: 9.0.3
@@ -304,7 +304,7 @@ importers:
         version: 16.2.4
       js-yaml:
         specifier: 'catalog:'
-        version: 3.15.2
+        version: 5.5.0
       prettier:
         specifier: 'catalog:'
         version: 3.9.9
@@ -389,7 +389,7 @@ importers:
         version: 8.6.2(express@5.3.0(supports-color@10.2.2))(supports-color@10.2.2)
       js-yaml:
         specifier: 'catalog:'
-        version: 3.15.2
+        version: 5.5.0
       neverthrow:
         specifier: 'catalog:'
         version: 8.2.0
@@ -483,7 +483,7 @@ importers:
         version: 5.3.0(supports-color@10.2.2)
       js-yaml:
         specifier: 'catalog:'
-        version: 3.15.2
+        version: 5.5.0
       linkify-it:
         specifier: ^6.1.0
         version: 6.1.0
@@ -585,7 +585,7 @@ importers:
     dependencies:
       js-yaml:
         specifier: 'catalog:'
-        version: 3.15.2
+        version: 5.5.0
     devDependencies:
       '@types/js-yaml':
         specifier: 'catalog:'
@@ -2726,6 +2726,9 @@ packages:
   argparse@2.0.1:
     resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
 
+  argparse@3.0.3:
+    resolution: {integrity: sha512-Sn98ftV3KfsO8xfLPHG6oT8y+b0yvbrLgZjgPDXsharNY15tTAjqIsIju4S32nl6/iEUNNE4v+yL2Zhm8ooP3w==}
+
   aria-query@5.3.2:
     resolution: {integrity: sha512-COROpnaoap1E2F000S62r6A60uHZnmlvomhfyT2DlTcrY1OrBKn2UhH7qn5wTC9zMvD0AY7csdPSNwKP+7WiQw==}
     engines: {node: '>= 0.4'}
@@ -3906,6 +3909,10 @@ packages:
 
   js-yaml@4.3.2:
     resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
+    hasBin: true
+
+  js-yaml@5.5.0:
+    resolution: {integrity: sha512-paNr4LFIFPjeeSmwNYdrb8FafLLG/Cr2Af3GjbsHJ5CxIjH4r0c2emlmRdAtpPAieP1gRVzk6buBbVP5gBMGAg==}
     hasBin: true
 
   jsesc@3.1.0:
@@ -7909,6 +7916,8 @@ snapshots:
 
   argparse@2.0.1: {}
 
+  argparse@3.0.3: {}
+
   aria-query@5.3.2: {}
 
   array-iterate@2.0.1: {}
@@ -9400,6 +9409,10 @@ snapshots:
   js-yaml@4.3.2:
     dependencies:
       argparse: 2.0.1
+
+  js-yaml@5.5.0:
+    dependencies:
+      argparse: 3.0.3
 
   jsesc@3.1.0: {}
 
