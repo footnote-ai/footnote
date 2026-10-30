@@ -51,6 +51,47 @@ const approved = (): RealtimeWorkflowResult => ({
     },
 });
 
+test('the delivery slot enforces its own 16 KiB UTF-8 bound for every runner', async () => {
+    for (const [text, fits] of [
+        ['x'.repeat(16 * 1024), true],
+        ['x'.repeat(16 * 1024 + 1), false],
+        ['é'.repeat(8 * 1024), true],
+        ['é'.repeat(8 * 1024) + 'x', false],
+    ] as const) {
+        const state = call();
+        try {
+            state.startExecution({
+                runRealtimeConversation: async (_snapshot, context) => {
+                    context.onRunStarted('run-one');
+                    const result = approved();
+                    assert.ok(result.finalResponse?.disposition === 'approved');
+                    result.finalResponse.text = text;
+                    return result;
+                },
+            });
+            await flush();
+            const ready = state.deliveryStatus();
+            assert.equal(
+                ready !== undefined,
+                fits,
+                `${Buffer.byteLength(text, 'utf8')} bytes`
+            );
+            if (ready) {
+                assert.ok(state.requestDelivery(ready.handle));
+                assert.equal(state.startDelivery(ready.deliveryId)?.text, text);
+            }
+            assert.equal(state.completedExecution()?.status, 'completed');
+            assert.equal(
+                state.completedExecution()?.reviewDisposition,
+                'approved'
+            );
+            assert.equal(state.executionStatus().occupied, false);
+        } finally {
+            state.close();
+        }
+    }
+});
+
 test('requesting and handing off an answer do not report audible completion', async () => {
     const state = call();
     state.startExecution({

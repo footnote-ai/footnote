@@ -433,7 +433,8 @@ export class RealtimeConversationState {
                             this.intent?.status === 'pending' &&
                             this.intent.turnId === reservation.turnId &&
                             this.hasConsentingAudience() &&
-                            deliveryEpoch === this.deliveryEpoch
+                            deliveryEpoch === this.deliveryEpoch &&
+                            utf8Bytes(answer.text) <= MAX_CONTEXT_BYTES
                         ) {
                             const { text, ...evidence } = answer;
                             this.delivery = {
@@ -522,8 +523,7 @@ export class RealtimeConversationState {
         this.recheckDelivery();
         const delivery = this.delivery;
         if (
-            !delivery ||
-            delivery.inspection.deliveryId !== deliveryId ||
+            delivery?.inspection.deliveryId !== deliveryId ||
             delivery.inspection.status !== 'requested' ||
             delivery.text === undefined
         )
@@ -548,8 +548,7 @@ export class RealtimeConversationState {
         this.recheckDelivery();
         const inspection = this.delivery?.inspection;
         if (
-            !inspection ||
-            inspection.deliveryId !== deliveryId ||
+            inspection?.deliveryId !== deliveryId ||
             inspection.handedOffAt === undefined
         )
             return false;

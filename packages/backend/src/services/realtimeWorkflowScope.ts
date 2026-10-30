@@ -61,9 +61,9 @@ export const assessRealtimeFinalResponse = (
         (candidate) => candidate.state === 'selected'
     );
     const candidate = selected?.length === 1 ? selected[0] : undefined;
-    const assessment = workflow?.steps
-        .filter((step) => step.stepKind === 'assess')
-        .at(-1);
+    const assessment = workflow?.steps.findLast(
+        (step) => step.stepKind === 'assess'
+    );
     if (!assessment) return { disposition: 'unassessed' };
     if (
         assessment.outcome.status !== 'executed' ||
@@ -88,8 +88,7 @@ export const assessRealtimeFinalResponse = (
     )
         return { disposition: 'assessment_failed' };
     if (
-        !candidate ||
-        candidate.text !== selection.message ||
+        candidate?.text !== selection.message ||
         !candidate.text.trim() ||
         Buffer.byteLength(candidate.text, 'utf8') > 16 * 1024
     )
@@ -106,8 +105,7 @@ export const assessRealtimeFinalResponse = (
             result.status === 'produced'
     );
     if (
-        !generation ||
-        generation.stepKind !== 'generate' ||
+        generation?.stepKind !== 'generate' ||
         generation.outcome.status !== 'executed' ||
         !generation.outcome.artifacts?.includes(candidate.id) ||
         !draft
