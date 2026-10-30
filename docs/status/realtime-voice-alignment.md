@@ -1,7 +1,7 @@
 # Realtime Voice alignment
 
-Updated: 2026-10-29. Baseline: merged #960 at `71cdc3101a597ee2d4b1216ba0016901d4c7bad4`,
-plus the synthetic Workflow execution slice below. Owner:
+Updated: 2026-10-30. Baseline: merged #961 at `e4ebb62`,
+plus the synthetic final-response approval and staging slice below. Owner:
 [#558](https://github.com/footnote-ai/footnote/issues/558), still open.
 
 This tracker records source/test evidence, not live-provider validation. Update
@@ -10,7 +10,7 @@ separate from implemented behavior. The
 [current architecture](../architecture/realtime-voice.md) describes transport;
 the [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md) describes
 the broader design. Call state and background Workflow execution have synthetic
-implementation; live provider wiring, final-result approval and speech delivery remain proposed.
+implementation, including final-response approval and staging; live provider wiring and speech delivery remain proposed.
 
 ## Alignment matrix
 
@@ -23,9 +23,9 @@ foundation without a provider; they do not establish live voice behavior.
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Conversation projection            | Normalization builds role-aligned messages plus participant/turn/visibility/authority metadata; recent windows retain 12 web / 24 Discord non-system messages.                             | **Implemented, synthetic only:** bounded call-local turns reuse the existing message projection and envelope after audience/consent checks. **Gap:** live provider input still has only startup roster and optional summary strings; finalized turn events are not connected.                                                                                                                                                                                                         | [conversationContextService.ts](../../packages/backend/src/services/conversationContextService.ts), [requestNormalization.ts](../../packages/backend/src/services/chatOrchestrator/requestNormalization.ts), [realtimePromptComposer.ts](../../packages/backend/src/services/prompts/realtimePromptComposer.ts); `backend/test/conversationContextService.test.ts` | #558 reuse projection; #559 governs transfer/retention.                                                                                                 |
 | Identity and correlation           | `sessionId` maps to correlation `conversationId`; web keeps a component-local ID. Neither is a durable conversation entity.                                                                | **Implemented:** each response has a canonical Run, one Generate Step, provider Attempt and bounded Result; a private random session ID joins Runs. **Implemented, synthetic only:** stable call-local turn IDs and intent revisions share the private session correlation. **Gap:** live user-turn, reasoning-result and audible-delivery correlation.                                                                                                                               | [internalVoiceRealtime.ts](../../packages/backend/src/handlers/internalVoiceRealtime.ts); `backend/test/internalVoiceRealtimeHandler.test.ts` (distinct Runs, shared private correlation, disconnect idempotence)                                                                                                                                                  | #878 landed; #558 extends correlation locally; #559 owns cross-surface IDs.                                                                             |
-| Async execution                    | `runChat` awaits the existing workflow and returns a final response; AbortSignal propagates to supported operations. This is not a durable background-job API.                             | **Implemented, synthetic only:** one process-owned pending reservation starts the existing Workflow without awaiting completion in the call-state event path. Reconnects cannot bypass unresolved work in that process. **Gap:** live event wiring and result delivery.                                                                                                                                                                                                               | [chatOrchestrator.ts](../../packages/backend/src/services/chatOrchestrator.ts), [reviewedChatWorkflow.ts](../../packages/backend/src/services/workflowCore/reviewedChatWorkflow.ts), `backend/src/handlers/chat.ts`; [runtime interface](../../packages/agent-runtime/src/index.ts)                                                                                | #558: one pending handle and delivery slot, not another engine.                                                                                         |
-| Review, policy, breakers           | Existing workflow applies Execution Contract limits, conditional assessment, revision, and fail-open outcomes; a named Result or completed Run is not necessarily assessed/approved.       | **Implemented, synthetic only:** background execution reuses Workflow policy, assessment and breaker decisions with narrower pre-execution voice admission. **Gap:** direct live provider answers still bypass that path; final speech eligibility is deferred.                                                                                                                                                                                                                       | `backend/src/services/workflowEngine/limits.ts`, `backend/src/services/workflowEngine/reviewDecision.ts`, `backend/src/services/workflowCore/reviewedChatWorkflow.ts`, `backend/src/handlers/internalVoiceRealtime.ts`                                                                                                                                             | #558 explicit speech eligibility; [#709](https://github.com/footnote-ai/footnote/issues/709) is closed for its tested boundaries, not voice coverage.   |
-| Retrieval and source reporting     | Context Integrations execute bounded lookups; `buildModelInput` projects evidence as advisory user data with a generation-context manifest. Revision-aware `github_source` is implemented. | **Implemented, synthetic only:** answer-only execution admits weather and web-search Context Integrations at executor selection; provider-native search and other integrations are denied. Workflow model-input authority is reused. **Gap:** approved result injection into live speech.                                                                                                                                                                                             | [Context Integrations](../architecture/context-integrations/README.md), [GitHub source retrieval](../architecture/context-integrations/github.md), [modelInput.ts](../../packages/backend/src/services/workflowEngine/modelInput.ts)                                                                                                                               | #558 reuse workflow; [#539](https://github.com/footnote-ai/footnote/issues/539) is closed. Its completion does not establish voice retrieval.           |
+| Async execution                    | `runChat` awaits the existing workflow and returns a final response; AbortSignal propagates to supported operations. This is not a durable background-job API.                             | **Implemented, synthetic only:** one process-owned pending reservation starts the existing Workflow without awaiting completion in the call-state event path. Reconnects cannot bypass unresolved work in that process. **Implemented, synthetic only:** one approved-answer slot with single-use consumption. **Gap:** live event wiring and speech delivery.                                                                                                                        | [chatOrchestrator.ts](../../packages/backend/src/services/chatOrchestrator.ts), [reviewedChatWorkflow.ts](../../packages/backend/src/services/workflowCore/reviewedChatWorkflow.ts), `backend/src/handlers/chat.ts`; [runtime interface](../../packages/agent-runtime/src/index.ts)                                                                                | #558: one pending handle and delivery slot, not another engine.                                                                                         |
+| Review, policy, breakers           | Existing workflow applies Execution Contract limits, conditional assessment, revision, and fail-open outcomes; a named Result or completed Run is not necessarily assessed/approved.       | **Implemented, synthetic only:** background execution reuses Workflow policy, assessment and breaker decisions with narrower pre-execution voice admission. **Gap:** direct live provider answers still bypass that path; selected final-response eligibility and staging are implemented with synthetic evidence; speech remains unwired.                                                                                                                                            | `backend/src/services/workflowEngine/limits.ts`, `backend/src/services/workflowEngine/reviewDecision.ts`, `backend/src/services/workflowCore/reviewedChatWorkflow.ts`, `backend/src/handlers/internalVoiceRealtime.ts`                                                                                                                                             | #558 explicit speech eligibility; [#709](https://github.com/footnote-ai/footnote/issues/709) is closed for its tested boundaries, not voice coverage.   |
+| Retrieval and source reporting     | Context Integrations execute bounded lookups; `buildModelInput` projects evidence as advisory user data with a generation-context manifest. Revision-aware `github_source` is implemented. | **Implemented, synthetic only:** answer-only execution admits weather and web-search Context Integrations at executor selection; provider-native search and other integrations are denied. Workflow model-input authority is reused. **Implemented, synthetic only:** approved text can be staged after selection/review checks. **Gap:** injection into live speech.                                                                                                                 | [Context Integrations](../architecture/context-integrations/README.md), [GitHub source retrieval](../architecture/context-integrations/github.md), [modelInput.ts](../../packages/backend/src/services/workflowEngine/modelInput.ts)                                                                                                                               | #558 reuse workflow; [#539](https://github.com/footnote-ai/footnote/issues/539) is closed. Its completion does not establish voice retrieval.           |
 | Profile and speech selection       | Request/profile resolution and overlays; backend TTS selects effective model/voice/delivery.                                                                                               | **Implemented shared selection; intentional profile difference:** Realtime uses configured `runtimeConfig.profile`, not chat request profile resolution. Precedence is request/session → operator profile → deployment fallback. Invalid explicit choices are rejected; unsupported configured settings can fall back per setting.                                                                                                                                                    | [speechPresentation.ts](../../packages/backend/src/services/speechPresentation.ts), [internalVoiceTts.ts](../../packages/backend/src/services/internalVoiceTts.ts), `backend/test/speechPresentation.test.ts`, `backend/test/internalVoiceTtsService.test.ts`, `backend/test/internalVoiceRealtimeHandler.test.ts`                                                 | #831 landed. [#534](https://github.com/footnote-ai/footnote/issues/534) still owns human audition/default selection; no bundled voices assumed settled. |
 | Audio, attention, speaker identity | Text input is attributed by surface metadata. Generated playback synthesizes supplied text rather than continuing a voice session.                                                         | **Intentional difference:** Discord captures/resamples speaker streams, injects silence tails for server VAD, and immediately streams playback. **Gap:** audio labels/IDs reach the backend but adapter audio append sends only bytes; text injection adds a label. No proven multi-speaker attribution or safe delivery window.                                                                                                                                                      | `discord-bot/src/voice/AudioCaptureHandler.ts`, `VoiceSessionManager.ts`, `AudioPlaybackHandler.ts`; [OpenAI adapter](../../packages/agent-runtime/src/openAiRealtimeVoiceRuntime.ts); `discord-bot/test/realtimeStreaming.test.ts`, `voiceSessionManager.test.ts`                                                                                                 | #558 normalized attention/input events; #559 participant/consent lifecycle.                                                                             |
 | Interruptions and delivery         | HTTP disconnect requests cancellation; provider/tool stop is not guaranteed.                                                                                                               | **Gap:** VAD can auto-create/interrupt provider responses, but normalized contract lacks speech-start/stop, finalized transcript, explicit output cancellation/truncation, approved-result update, and local playback acknowledgement. Provider `response.done` is not audible delivery.                                                                                                                                                                                              | [voice types](../../packages/contracts/src/voice/types.ts), `agent-runtime/src/openAiRealtimeVoiceRuntime.ts`, `discord-bot/src/realtime/RealtimeEventHandler.ts`, `discord-bot/src/voice/AudioPlaybackHandler.ts`                                                                                                                                                 | #558: distinguish Run completion, delivery, partial playback, supersession and cancellation.                                                            |
@@ -72,15 +72,15 @@ and Run/Trace records are unchanged. No live handler calls it yet.
   metadata is separately bounded to 32 people and 128 characters per field.
   Oversized turns are rejected; rejected user content holds delivery rather than
   leaving an earlier answer eligible. Snapshots are detached from mutable state.
-- Interruptions hold delivery while preserving the reasoning revision. An explicit
-  attributed continuation resumes it. Closing is idempotent, clears retained content, and
+- Interruptions preserve the reasoning revision but revoke staged and late speech.
+  An attributed continuation resumes intent, not revoked text. Closing is idempotent, clears retained content, and
   rejects later turns.
 
 `backend/test/realtimeConversationState.test.ts` exercises these rules with
 synthetic turns and participant events. This slice adds no provider connection,
 speech delivery, transcript persistence, memory, or cross-session continuity.
-The following slice adds the bounded Workflow handoff; final-result approval
-and controlled speech remain separate gates.
+The following slices add the bounded Workflow handoff and final-response staging;
+controlled speech remains a separate gate.
 
 ## Synthetic Workflow execution
 
@@ -139,15 +139,45 @@ does not prove a remote Run or billing stopped. This is not a durable job servic
 `backend/test/realtimeWorkflowExecution.test.ts` uses deferred promises, fake
 clocks, synthetic events and a truly never-settling Run. The real-orchestrator
 tests use synthetic generation and HTTP boundaries plus disposable SQLite; the
-operator tests verify auth, privacy and degraded inspection. Completion retains
-identity/disposition only: no result text, approval or speech permission is exposed.
+operator tests verify auth, privacy and degraded inspection. Completion inspection retains identity, actual status and review disposition only;
+approved text is isolated in the ephemeral slot described below.
+
+## Synthetic final-response approval and staging
+
+The [architecture mapping](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only)
+describes the implemented dispositions. `realtimeWorkflowScope.ts` checks the
+selected candidate, final text, produced draft/review Results and the successful
+assessment of that exact draft. Only `finalize` with successful Run/Workflow
+completion can approve speech. Persistence must finish first. Unassessed,
+failed, revise/search and unsupported/ambiguous paths carry no answer text.
+Ordinary text-chat fail-open behavior and the actual Run outcome are preserved.
+
+`RealtimeConversationState.takeDelivery(handle)` consumes at most one staged
+answer for the initiating turn, revision, call instance, session and audience.
+The body is bounded to 16 KiB and expires after 30 seconds. Interruptions,
+ambiguous user input, corrections, cancellation, consent/roster changes and close
+discard it and prevent prior callbacks from restaging it. Continuation cannot
+restore revoked text. No persistence or public Trace fields were added.
+
+Evidence: `backend/test/realtimeWorkflowOrchestrator.test.ts` exercises the real
+orchestrator with synthetic generation: approved initial/revised answers, rejected
+actions, unassessed express responses, failed assessments, unresolved revision/search,
+missing review Results, wrong draft links, storage failure and cancellation during
+storage. `backend/test/realtimeWorkflowExecution.test.ts` uses controlled promises
+and fake clocks for single consumption, wrong identity, late callbacks on both
+sides of completion, audience/consent changes, expiry and disconnect.
+
+This establishes backend approval and staging only. Provider event wiring,
+safe-turn scheduling, audio delivery/cancellation and playback evidence remain
+unimplemented. The conversational Talker is not complete. Broader permission for
+unassessed or unresolved fallbacks remains an explicit policy decision.
 
 ## Proposed decisions and remaining gates
 
 The proposal recommends a single-call ephemeral scope, one pending Run handle,
 one result slot, explicit freshness/approval gates, and controlled speech of
 approved text. The ephemeral call-state foundation below is implemented in
-isolation. Pending execution is implemented above; result approval and speech delivery remain proposed.
+isolation. Pending execution and final-response staging are implemented above; speech delivery remains proposed.
 No general conversation coordinator is needed.
 
 The target is a lightweight conversational Talker that listens, speaks naturally,
@@ -165,10 +195,10 @@ content. Reconnect must not bypass the held reservation; confirmed stop or
 settlement restores admission, otherwise operator recovery is required. This is
 implemented for the synthetic process-local boundary above, not a live-provider stop guarantee.
 
-Before provider integration, settle the exact final-review eligibility mapping,
+Before provider integration, settle broader fallback permission,
 live speaker/consent events, deployment capacity/recovery ownership, and controlled
 speech capability. The bounded Workflow admission/persistence and deadline
-decisions above are implemented; audio buffering and call/result lifetime limits
+decisions above and the 30-second result TTL are implemented; audio buffering and call lifetime limits
 belong to the later adapter and delivery slices.
 The [ordered slices](../proposals/realtime-talker-reasoner.md#small-follow-up-sequence)
 assign identity, asynchronous delivery, gating and adapter work to #558.

@@ -13,6 +13,10 @@ import type {
     ConversationContextServiceOutput,
 } from './conversationContextService.js';
 import { projectConversationMessages } from './conversationContextService.js';
+import type {
+    RealtimeFinalResponse,
+    RealtimeReviewDisposition,
+} from './realtimeWorkflowScope.js';
 
 const MAX_CONTEXT_TURNS = 12;
 const MAX_CONTEXT_BYTES = 16 * 1024;
@@ -20,6 +24,7 @@ const MAX_AUDIENCE_PARTICIPANTS = 32;
 const MAX_PARTICIPANT_FIELD_LENGTH = 128;
 const EXECUTION_DEADLINE_MS = 60_000;
 const CANCELLATION_WATCHDOG_MS = 5000;
+const DELIVERY_TTL_MS = 30_000;
 const INTENT_ACTIONS = new Set<RealtimeIntentAction>([
     'question',
     'supersede',
@@ -65,6 +70,7 @@ export type RealtimeWorkflowResult = {
     responseId?: string;
     runId?: string;
     status?: 'completed' | 'degraded' | 'failed' | 'rejected';
+    finalResponse?: RealtimeFinalResponse;
 };
 
 /** Internal backend service seam; results carry identity only, never speech authority. */
@@ -73,6 +79,20 @@ export type RealtimeWorkflowRunner = {
         snapshot: RealtimeConversationSnapshot,
         context: { signal: AbortSignal; onRunStarted: (runId: string) => void }
     ) => Promise<RealtimeWorkflowResult>;
+};
+
+export type RealtimeDelivery = Extract<
+    RealtimeFinalResponse,
+    { disposition: 'approved' }
+> & {
+    handle: RealtimeFreshnessHandle;
+    turnId: string;
+    audienceIds: string[];
+    expiresAt: number;
+};
+
+type RealtimeCompletion = Omit<RealtimeWorkflowResult, 'finalResponse'> & {
+    reviewDisposition?: RealtimeReviewDisposition;
 };
 
 type ExecutionReservation = {
@@ -183,7 +203,10 @@ export class RealtimeConversationState {
     private intent: RealtimeConversationSnapshot['intent'] = null;
     private closed = false;
     private lastStartedRevision: number | undefined;
-    private completed: RealtimeWorkflowResult | undefined;
+    private completed: RealtimeCompletion | undefined;
+    private delivery: RealtimeDelivery | undefined;
+    private deliveryEpoch = 0;
+    private deliveryExpiry: ReturnType<typeof setTimeout> | undefined;
 
     constructor(private readonly sessionCorrelationId: string) {
         this.sessionCorrelationId = requireBoundedText(
@@ -348,6 +371,8 @@ export class RealtimeConversationState {
         reservation.deadlineWatchdog.unref?.();
         this.lastStartedRevision = this.revision;
         this.completed = undefined;
+        this.revokeDelivery();
+        const deliveryEpoch = this.deliveryEpoch;
         void Promise.resolve()
             .then(() => {
                 const accepted = snapshot;
@@ -380,7 +405,40 @@ export class RealtimeConversationState {
                             responseId: result.responseId,
                             runId: result.runId,
                             status,
+                            ...(result.finalResponse === undefined
+                                ? {}
+                                : {
+                                      reviewDisposition:
+                                          result.finalResponse.disposition,
+                                  }),
                         };
+                        const answer = result.finalResponse;
+                        if (
+                            status === 'completed' &&
+                            answer?.disposition === 'approved' &&
+                            answer.responseId === result.responseId &&
+                            answer.runId === result.runId &&
+                            reservation.runId === result.runId &&
+                            this.intent?.status === 'pending' &&
+                            this.intent.turnId === reservation.turnId &&
+                            this.hasConsentingAudience() &&
+                            deliveryEpoch === this.deliveryEpoch
+                        ) {
+                            this.delivery = {
+                                ...answer,
+                                handle: this.freshnessHandle(),
+                                turnId: reservation.turnId,
+                                audienceIds: this.audience.map(
+                                    (person) => person.id
+                                ),
+                                expiresAt: Date.now() + DELIVERY_TTL_MS,
+                            };
+                            this.deliveryExpiry = setTimeout(
+                                () => this.revokeDelivery(),
+                                DELIVERY_TTL_MS
+                            );
+                            this.deliveryExpiry.unref?.();
+                        }
                     }
                 },
                 () => {
@@ -409,12 +467,38 @@ export class RealtimeConversationState {
     }
 
     /** Identity and disposition only: completion never grants permission to speak. */
-    completedExecution(): RealtimeWorkflowResult | undefined {
+    completedExecution(): RealtimeCompletion | undefined {
         return this.completed ? { ...this.completed } : undefined;
+    }
+
+    /** Consumes approved text at the backend delivery boundary; taking it does not prove playback. */
+    takeDelivery(
+        handle: RealtimeFreshnessHandle
+    ): RealtimeDelivery | undefined {
+        const delivery = this.delivery;
+        if (delivery && Date.now() >= delivery.expiresAt) this.revokeDelivery();
+        if (
+            !this.delivery ||
+            !this.isDeliveryFresh(handle) ||
+            !this.isDeliveryFresh(this.delivery.handle) ||
+            !this.hasConsentingAudience() ||
+            this.intent?.turnId !== this.delivery.turnId
+        )
+            return undefined;
+        this.revokeDelivery();
+        return delivery;
+    }
+
+    private revokeDelivery(): void {
+        clearTimeout(this.deliveryExpiry);
+        this.deliveryExpiry = undefined;
+        this.delivery = undefined;
+        this.deliveryEpoch += 1;
     }
 
     /** Requests a stop; only settlement releases the independent capacity reservation. */
     private cancelExecution(): void {
+        this.revokeDelivery();
         if (executionReservation?.owner === this.instanceId)
             requestExecutionCancellation(executionReservation);
         this.completed = undefined;
@@ -523,6 +607,7 @@ export class RealtimeConversationState {
             action === 'interrupt' &&
             this.intent?.status === 'pending'
         ) {
+            this.revokeDelivery();
             this.intent.status = 'interrupted';
         } else if (
             action === 'continue' &&
@@ -533,6 +618,7 @@ export class RealtimeConversationState {
     }
 
     private holdDeliveryForAmbiguousSpeech(): void {
+        this.revokeDelivery();
         if (this.intent?.status === 'pending')
             this.intent.status = 'interrupted';
     }

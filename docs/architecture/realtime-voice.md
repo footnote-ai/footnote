@@ -197,11 +197,72 @@ The proposed [conversation with background reasoning](../proposals/realtime-talk
 reuses the existing Workflow and conversation projection boundaries. It is a
 proposal under #558. Backend-local call state and background Workflow execution
 now have synthetic implementation, using the existing orchestrator with enforced
-answer/read-only scope and content-free execution records. They remain disconnected
-from live provider events, approval and speech delivery. A process-owned reservation
+answer/read-only scope and content-free execution records. Final-response approval
+and one ephemeral delivery slot are also implemented; live provider events and
+speech delivery remain disconnected. A process-owned reservation
 survives call teardown; its 60-second deadline and 5-second cancellation watchdog
 make unresolved work observably degraded without releasing capacity.
 Voice admission fails closed unless the runtime guarantees no content retention;
 the current VoltAgent adapter cannot provide that guarantee and remains blocked.
 The tracker describes process-local and deployment-recovery limits. Cross-surface
 continuity, consent, and retention remain under #559.
+
+## Final-response approval and staging (synthetic only)
+
+Workflow completion and voice delivery are separate decisions. The backend uses
+the existing candidate selection, assessment signals and named Result references
+in `realtimeWorkflowScope.ts`. `chatService.ts` supplies the normalized selected
+text before discarding candidate bodies; `chatOrchestrator.ts` checks it against
+the response actually returned by `runChat`. Ordinary text-chat behavior is unchanged.
+
+The receipt becomes available only after metadata persistence succeeds. Approval
+requires one selected candidate from a Generate or revision Step, an exact text
+match, its produced `draft` Result and candidate artifact link, and the final
+successful Assess Step consuming that same draft. The assessment must have a
+produced `review` Result and say `finalize`. The Run and Workflow must both be
+completed with `goal_satisfied`. Approval means that assessment accepted the text;
+it does not certify factual truth or provider privacy.
+
+| Observed evidence                                              | Voice disposition        |
+| -------------------------------------------------------------- | ------------------------ |
+| Selected final draft with all required evidence                | `approved`               |
+| No assessment, including assessment skipped by mode/policy     | `unassessed`             |
+| Failed, unparseable or incomplete assessment evidence          | `assessment_failed`      |
+| Last assessment asks for revision                              | `revision_requested`     |
+| Last assessment asks for more retrieval                        | `search_requested`       |
+| Missing/ambiguous candidate selection, text or draft linkage   | `selection_unverified`   |
+| Finalized draft but Run/Workflow did not complete successfully | `workflow_not_completed` |
+| Non-answer, terminal action or unsupported candidate stage     | `unsupported_response`   |
+
+Only `approved` carries text. These dispositions do not replace Run status or
+Workflow termination reasons. A revision needs its own final assessment; an
+earlier accepted draft cannot approve later text. Budget-limited, failed and
+fail-open paths retain their actual evidence and cannot authorize an answer.
+Tool clarification and status copy do not enter this reviewed-answer slot.
+Whether any unassessed or unresolved fallback should later be spoken remains
+unresolved; this implementation withholds it. Trace alignment describes metadata
+alignment, not a second content approval decision.
+
+`RealtimeConversationState` holds at most one answer, bounded to 16 KiB of UTF-8
+text and **30 seconds from staging**. It binds the initiating turn, intent revision,
+call instance, private session ID, audience IDs, Run, response, candidate and
+assessment/generation Steps. `completedExecution()` exposes only identity, Run
+status and disposition. `takeDelivery(handle)` rechecks current intent, instance,
+session, audience consent and expiry, then consumes the slot once. It is an
+internal backend seam, not a transport event or proof of audible playback.
+
+Interruptions and ambiguous user input discard the slot and revoke that
+execution's ability to stage later text, while reasoning may continue. An explicit
+continuation resumes intent but cannot restore revoked speech; a new question is
+needed. Corrections, cancellation, roster/consent changes and disconnect also
+discard the slot. Captured execution revisions and a delivery revocation counter
+prevent late callbacks from restoring it. Expiration clears the body and leaves
+the completed Run outcome intact. Cancellation remains a request until settlement;
+it does not prove remote work or billing stopped.
+
+Future playback code must take the answer at its safe delivery boundary and
+handle interruption after handoff; holding a returned object is not continuing
+authorization. No provider, Talker, audio generation, playback acknowledgement,
+durable delivery/replay, transcript retention, memory or public Trace extension
+is implemented here. The existing VoltAgent tracing restriction, process-local
+capacity and recovery gates remain in force.

@@ -62,6 +62,346 @@ const answerPlan = (generation: object = {}) => ({
     },
 });
 
+test('only the selected, assessed final answer is returned for voice staging', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    let calls = 0;
+    let stored: ResponseMetadata | undefined;
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: {
+                kind: 'synthetic',
+                supportsEphemeralContent: true,
+                generate: async (request) => ({
+                    model: request.model,
+                    text:
+                        [
+                            JSON.stringify(answerPlan()),
+                            'The reviewed answer.',
+                            JSON.stringify({
+                                reviewDecision: 'finalize',
+                                reviewReason: 'Sufficient evidence.',
+                            }),
+                        ][calls++] ?? '',
+                }),
+            },
+            storeTrace: async (metadata, candidates, publication, debug) => {
+                stored = metadata;
+                assert.equal(candidates, undefined);
+                assert.equal(publication, undefined);
+                assert.equal(debug, undefined);
+            },
+            buildResponseMetadata,
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+        });
+        const result = await orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: () => undefined,
+        });
+        assert.ok(result.finalResponse?.disposition === 'approved');
+        assert.equal(result.finalResponse?.text, 'The reviewed answer.');
+        assert.equal(result.finalResponse?.responseId, stored?.responseId);
+        assert.doesNotMatch(JSON.stringify(stored), /The reviewed answer/);
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+    }
+});
+
+test('an apparently final assessment cannot approve a missing Result or a different draft', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    try {
+        for (const missing of [
+            'review_result',
+            'draft_reference',
+            'candidate_link',
+            'run_status',
+        ] as const) {
+            let calls = 0;
+            const orchestrator = createChatOrchestrator({
+                generationRuntime: {
+                    kind: 'synthetic',
+                    supportsEphemeralContent: true,
+                    generate: async (request) => ({
+                        model: request.model,
+                        text:
+                            [
+                                JSON.stringify(answerPlan()),
+                                'The answer.',
+                                JSON.stringify({
+                                    reviewDecision: 'finalize',
+                                    reviewReason: 'Ready.',
+                                }),
+                            ][calls++] ?? '',
+                    }),
+                },
+                storeTrace: async () => undefined,
+                buildResponseMetadata: (...args) => {
+                    const metadata = buildResponseMetadata(...args);
+                    const workflow = metadata.workflow;
+                    assert.ok(workflow);
+                    if (missing === 'review_result')
+                        workflow.results = workflow.results?.filter(
+                            (result) => result.name !== 'review'
+                        );
+                    if (missing === 'run_status') delete workflow.runStatus;
+                    for (const step of workflow.steps) {
+                        if (
+                            missing === 'draft_reference' &&
+                            step.stepKind === 'assess'
+                        )
+                            step.inputRefs = [
+                                { name: 'draft', resultId: 'other-draft' },
+                            ];
+                        if (
+                            missing === 'candidate_link' &&
+                            step.stepKind === 'generate'
+                        )
+                            delete step.outcome.artifacts;
+                    }
+                    return metadata;
+                },
+                defaultModel: 'gpt-5-mini',
+                recordUsage: () => undefined,
+            });
+            const result = await orchestrator.runRealtimeConversation(
+                snapshot(),
+                {
+                    signal: new AbortController().signal,
+                    onRunStarted: () => undefined,
+                }
+            );
+            assert.notEqual(
+                result.finalResponse?.disposition,
+                'approved',
+                missing
+            );
+            assert.equal('text' in (result.finalResponse ?? {}), false);
+        }
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+    }
+});
+
+test('revision becomes speakable only when its own selected draft is finalized', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    let calls = 0;
+    let stored: ResponseMetadata | undefined;
+    try {
+        const outputs = [
+            JSON.stringify(answerPlan()),
+            'First draft.',
+            JSON.stringify({
+                reviewDecision: 'revise',
+                reviewReason: 'Overstates certainty.',
+                revisionInstruction: 'State the limit.',
+            }),
+            JSON.stringify(answerPlan()),
+            'Revised answer with its limit.',
+            JSON.stringify({
+                reviewDecision: 'finalize',
+                reviewReason: 'Ready.',
+            }),
+        ];
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: {
+                kind: 'synthetic',
+                supportsEphemeralContent: true,
+                generate: async (request) => ({
+                    model: request.model,
+                    text: outputs[calls++] ?? '',
+                }),
+            },
+            storeTrace: async (metadata) => {
+                stored = metadata;
+            },
+            buildResponseMetadata,
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+        });
+        const result = await orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: () => undefined,
+        });
+        assert.ok(
+            result.finalResponse?.disposition === 'approved',
+            JSON.stringify(result)
+        );
+        assert.equal(
+            result.finalResponse.text,
+            'Revised answer with its limit.'
+        );
+        const finalResponse = result.finalResponse;
+        const assessment = stored?.workflow?.steps.find(
+            (step) => step.stepId === finalResponse.assessmentStepId
+        );
+        assert.equal(
+            assessment?.parentStepId,
+            result.finalResponse.generationStepId
+        );
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+    }
+});
+
+test('delivery waits for persistence and cannot survive a failed write or cancellation during the write', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    try {
+        for (const outcome of ['written', 'failed', 'cancelled'] as const) {
+            let writeStarted!: () => void;
+            const writing = new Promise<void>((resolve) => {
+                writeStarted = resolve;
+            });
+            let finishWrite!: () => void;
+            let failWrite!: (error: Error) => void;
+            const persisted = new Promise<void>((resolve, reject) => {
+                finishWrite = resolve;
+                failWrite = reject;
+            });
+            let calls = 0;
+            const state = new RealtimeConversationState('private-call');
+            state.setAudience([
+                { id: 'human', displayName: 'Human', processingConsent: true },
+            ]);
+            const turn = state.appendFinalizedTurn({
+                role: 'user',
+                speakerId: 'human',
+                content: 'Question',
+                intent: 'question',
+            });
+            const orchestrator = createChatOrchestrator({
+                generationRuntime: {
+                    kind: 'synthetic',
+                    supportsEphemeralContent: true,
+                    generate: async (request) => ({
+                        model: request.model,
+                        text:
+                            [
+                                JSON.stringify(answerPlan()),
+                                'Reviewed answer.',
+                                JSON.stringify({
+                                    reviewDecision: 'finalize',
+                                    reviewReason: 'Ready.',
+                                }),
+                            ][calls++] ?? '',
+                    }),
+                },
+                storeTrace: async () => {
+                    writeStarted();
+                    await persisted;
+                },
+                buildResponseMetadata,
+                defaultModel: 'gpt-5-mini',
+                recordUsage: () => undefined,
+            });
+            state.startExecution(orchestrator);
+            await writing;
+            assert.equal(state.takeDelivery(turn.handle), undefined);
+            if (outcome === 'cancelled')
+                state.appendFinalizedTurn({
+                    role: 'user',
+                    speakerId: 'human',
+                    content: 'Stop',
+                    intent: 'cancel',
+                });
+            if (outcome === 'failed') failWrite(new Error('write failed'));
+            else finishWrite();
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            assert.equal(
+                state.takeDelivery(turn.handle)?.text,
+                outcome === 'written' ? 'Reviewed answer.' : undefined
+            );
+            assert.equal(state.takeDelivery(turn.handle), undefined);
+            if (outcome === 'failed')
+                assert.equal(state.completedExecution()?.status, 'failed');
+            state.close();
+        }
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+    }
+});
+
+test('voice withholds failed assessments and unresolved revision or search requests', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    try {
+        for (const decision of ['invalid', 'revise', 'search']) {
+            let calls = 0;
+            const orchestrator = createChatOrchestrator({
+                generationRuntime: {
+                    kind: 'synthetic',
+                    supportsEphemeralContent: true,
+                    generate: async (request) => ({
+                        model: request.model,
+                        text:
+                            calls++ === 0
+                                ? JSON.stringify(answerPlan())
+                                : calls === 2
+                                  ? 'The draft answer.'
+                                  : decision === 'invalid'
+                                    ? 'not a review'
+                                    : JSON.stringify({
+                                          reviewDecision: decision,
+                                          reviewReason: 'More work needed.',
+                                          ...(decision === 'revise'
+                                              ? {
+                                                    revisionInstruction:
+                                                        'State uncertainty.',
+                                                }
+                                              : {
+                                                    search: {
+                                                        query: 'missing evidence',
+                                                    },
+                                                }),
+                                      }),
+                    }),
+                },
+                storeTrace: async () => undefined,
+                buildResponseMetadata,
+                defaultModel: 'gpt-5-mini',
+                recordUsage: () => undefined,
+            });
+            const result = await orchestrator.runRealtimeConversation(
+                snapshot(),
+                {
+                    signal: new AbortController().signal,
+                    onRunStarted: () => undefined,
+                }
+            );
+            assert.equal(
+                result.finalResponse?.disposition,
+                decision === 'invalid'
+                    ? 'assessment_failed'
+                    : decision === 'revise'
+                      ? 'revision_requested'
+                      : 'search_requested'
+            );
+            assert.equal('text' in (result.finalResponse ?? {}), false);
+            assert.equal(result.status, 'degraded');
+        }
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+    }
+});
+
 test('voice denies planner terminal actions before execution and retains canonical evidence only', async () => {
     for (const action of ['react', 'image', 'ignore']) {
         let calls = 0;
@@ -104,6 +444,7 @@ test('voice denies planner terminal actions before execution and retains canonic
             onRunStarted: () => undefined,
         });
         assert.equal(result.status, 'rejected');
+        assert.equal(result.finalResponse?.disposition, 'unsupported_response');
         assert.equal(calls, 1);
         assert.ok(stored?.workflow?.runId);
         assert.equal(result.runId, stored.workflow.runId);
@@ -255,6 +596,7 @@ test('express voice still executes a canonical Workflow', async () => {
             },
         });
         assert.ok(runId);
+        assert.equal(result.finalResponse?.disposition, 'unassessed');
         assert.equal(result.runId, runId);
         assert.equal(stored?.workflow?.runId, runId);
         assert.ok(stored?.workflow?.steps.length);
@@ -608,7 +950,7 @@ test('real storage withholds voice bodies and refuses completion when canonical 
         assert.equal(publicTrace?.workflow?.sessionCorrelationId, undefined);
         assert.equal(publicTrace?.workflow?.initiatingTurnId, undefined);
         assert.doesNotMatch(
-            JSON.stringify([metadata, publicTrace, result]),
+            JSON.stringify([metadata, publicTrace]),
             /VOICE_SECRET|Private Name/u
         );
         calls = 0;

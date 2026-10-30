@@ -2746,7 +2746,14 @@ export const createChatService = ({
         if (voiceScope !== undefined) {
             await storeRealtimeWorkflowMetadata(
                 metadataWithTrustGraph,
-                storeTrace
+                storeTrace,
+                terminalActionResponse === undefined
+                    ? {
+                          message: normalizedDeliveredMessage.content,
+                          candidates: normalizedResponseCandidates,
+                          answerProvenanceEligible,
+                      }
+                    : undefined
             );
         } else if (publicationSource !== undefined) {
             try {

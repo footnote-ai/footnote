@@ -18,13 +18,134 @@ import {
 } from '@footnote/contracts/policy';
 import { ExecutionReasonCodeSchema } from '@footnote/contracts/web/schemas';
 import type { RealtimeWorkflowResult } from './realtimeConversationState.js';
+import type { ResponseCandidate } from '@footnote/contracts/web';
+
+export type RealtimeReviewDisposition =
+    | 'approved'
+    | 'unassessed'
+    | 'assessment_failed'
+    | 'revision_requested'
+    | 'search_requested'
+    | 'selection_unverified'
+    | 'workflow_not_completed'
+    | 'unsupported_response';
+
+/** Backend-only evidence about the selected response; text exists only for approved answers. */
+export type RealtimeFinalResponse =
+    | {
+          disposition: Exclude<RealtimeReviewDisposition, 'approved'>;
+      }
+    | {
+          disposition: 'approved';
+          responseId: string;
+          runId: string;
+          candidateId: string;
+          generationStepId: string;
+          assessmentStepId: string;
+          text: string;
+      };
+
+/** Reuses candidate selection and Result references, without treating fail-open completion as approval. */
+export const assessRealtimeFinalResponse = (
+    metadata: ResponseMetadata,
+    selection?: {
+        message: string;
+        candidates?: ResponseCandidate[];
+        answerProvenanceEligible: boolean;
+    }
+): RealtimeFinalResponse => {
+    if (!selection?.answerProvenanceEligible)
+        return { disposition: 'unsupported_response' };
+    const workflow = metadata.workflow;
+    const selected = selection.candidates?.filter(
+        (candidate) => candidate.state === 'selected'
+    );
+    const candidate = selected?.length === 1 ? selected[0] : undefined;
+    const assessment = workflow?.steps
+        .filter((step) => step.stepKind === 'assess')
+        .at(-1);
+    if (!assessment) return { disposition: 'unassessed' };
+    if (
+        assessment.outcome.status !== 'executed' ||
+        !assessment.attempts?.some((attempt) => attempt.status === 'succeeded')
+    )
+        return { disposition: 'assessment_failed' };
+    const decision = assessment.outcome.signals?.reviewDecision;
+    if (decision === 'revise') return { disposition: 'revision_requested' };
+    if (decision === 'search') return { disposition: 'search_requested' };
+    if (decision !== 'finalize') return { disposition: 'assessment_failed' };
+    const review = workflow?.results?.find(
+        (result) =>
+            result.name === 'review' &&
+            result.producedByStepId === assessment.stepId &&
+            result.status === 'produced'
+    );
+    if (
+        !review ||
+        !assessment.resultRefs?.some(
+            (ref) => ref.resultId === review.resultId && ref.name === 'review'
+        )
+    )
+        return { disposition: 'assessment_failed' };
+    if (
+        !candidate ||
+        candidate.text !== selection.message ||
+        !candidate.text.trim() ||
+        Buffer.byteLength(candidate.text, 'utf8') > 16 * 1024
+    )
+        return { disposition: 'selection_unverified' };
+    if (!['initial_generation', 'revision'].includes(candidate.stage))
+        return { disposition: 'unsupported_response' };
+    const generation = workflow?.steps.find(
+        (step) => step.stepId === candidate.workflowStepId
+    );
+    const draft = workflow?.results?.find(
+        (result) =>
+            result.producedByStepId === generation?.stepId &&
+            result.name === 'draft' &&
+            result.status === 'produced'
+    );
+    if (
+        !generation ||
+        generation.stepKind !== 'generate' ||
+        generation.outcome.status !== 'executed' ||
+        !generation.outcome.artifacts?.includes(candidate.id) ||
+        !draft
+    )
+        return { disposition: 'selection_unverified' };
+    if (
+        !assessment.inputRefs?.some(
+            (ref) => ref.name === 'draft' && ref.resultId === draft.resultId
+        ) ||
+        assessment.parentStepId !== generation.stepId
+    )
+        return { disposition: 'selection_unverified' };
+    if (
+        !workflow?.runId ||
+        workflow.runStatus !== 'completed' ||
+        workflow.status !== 'completed' ||
+        workflow.terminationReason !== 'goal_satisfied'
+    )
+        return { disposition: 'workflow_not_completed' };
+    return {
+        disposition: 'approved',
+        responseId: metadata.responseId,
+        runId: workflow.runId,
+        candidateId: candidate.id,
+        generationStepId: generation.stepId,
+        assessmentStepId: assessment.stepId,
+        text: selection.message,
+    };
+};
 
 export type RealtimeWorkflowScope = {
     sessionCorrelationId: string;
     turnId: string;
     onRunStarted: (runId: string) => void;
     actionRejected?: boolean;
-    recorded?: Required<RealtimeWorkflowResult>;
+    recorded?: Required<
+        Pick<RealtimeWorkflowResult, 'responseId' | 'runId' | 'status'>
+    > & { finalResponse: RealtimeFinalResponse };
 };
 
 const scope = new AsyncLocalStorage<RealtimeWorkflowScope>();
@@ -288,7 +409,8 @@ export const projectRealtimeWorkflowMetadata = (
 /** Both ordinary completion and tool short-circuits use the same content-free storage boundary. */
 export const storeRealtimeWorkflowMetadata = async (
     metadata: ResponseMetadata,
-    store: (metadata: ResponseMetadata) => Promise<void>
+    store: (metadata: ResponseMetadata) => Promise<void>,
+    selection?: Parameters<typeof assessRealtimeFinalResponse>[1]
 ): Promise<void> => {
     const voice = realtimeWorkflowScope();
     if (voice === undefined)
@@ -305,5 +427,6 @@ export const storeRealtimeWorkflowMetadata = async (
         responseId: projected.responseId,
         runId,
         status,
+        finalResponse: assessRealtimeFinalResponse(metadata, selection),
     };
 };

@@ -2131,7 +2131,7 @@ export const createChatOrchestrator = ({
         };
     };
 
-    /** Runs the existing Workflow over the accepted ephemeral projection, returning identity only. */
+    /** Runs the existing Workflow and returns persisted identity plus ephemeral final-response evidence. */
     const runRealtimeConversation: RealtimeWorkflowRunner['runRealtimeConversation'] =
         async (snapshot, context) => {
             if (rawGenerationRuntime.supportsEphemeralContent !== true)
@@ -2153,7 +2153,7 @@ export const createChatOrchestrator = ({
                 onRunStarted: context.onRunStarted,
             };
             return withRealtimeWorkflowScope(voice, async () => {
-                await runChat(
+                const response = await runChat(
                     {
                         surface: 'discord',
                         trigger: { kind: 'direct' },
@@ -2176,6 +2176,20 @@ export const createChatOrchestrator = ({
                     throw new Error(
                         'Realtime canonical execution receipt is unavailable.'
                     );
+                const finalResponse = voice.recorded.finalResponse;
+                if (
+                    finalResponse.disposition === 'approved' &&
+                    (response.action !== 'message' ||
+                        response.message !== finalResponse.text ||
+                        response.metadata?.responseId !==
+                            finalResponse.responseId ||
+                        response.metadata.workflow?.runId !==
+                            finalResponse.runId ||
+                        voice.actionRejected)
+                )
+                    voice.recorded.finalResponse = {
+                        disposition: 'selection_unverified',
+                    };
                 return {
                     ...voice.recorded,
                     ...(voice.actionRejected

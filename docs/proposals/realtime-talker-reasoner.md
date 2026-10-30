@@ -1,6 +1,6 @@
 # Realtime conversation with background reasoning
 
-Status: call state and bounded background Workflow execution implemented with synthetic events; final-result approval, speech and live wiring remain proposed. Updated 2026-10-29.
+Status: call state, bounded background Workflow execution, final-response approval and one ephemeral delivery slot implemented with synthetic events; speech and live wiring remain proposed. Updated 2026-10-30.
 Primary owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
 Conversation continuity and retention remain governed by
 [#559](https://github.com/footnote-ai/footnote/issues/559).
@@ -23,7 +23,9 @@ The first slice now has a backend-local state boundary and synthetic tests; see
 the [implemented foundation](../status/realtime-voice-alignment.md#synthetic-call-state-foundation).
 The next slice now starts bounded background Runs through the existing orchestrator;
 see [implemented Workflow admission and capacity](#implemented-workflow-admission-and-capacity).
-Neither slice connects live provider events or delivers speech.
+The third slice now checks the selected final response and stages approved text;
+see [implemented approval and staging](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only).
+None of these slices connects live provider events or delivers speech.
 
 The intended Talker is a lightweight conversational model: it listens and speaks
 naturally, manages turn-taking and interruptions, and maintains attention while
@@ -170,11 +172,11 @@ Settled decisions for this slice:
   Citations, queries, drafts, candidates, debug bodies and publication tokens are
   excluded. Free-form logs and model debug capture are suppressed within voice
   work. No transcript-derived hash is retained.
-- The call retains completion identity/disposition only, with no answer body or
-  delivery slot. Freshness is not approval, and completion cannot authorize speech.
+- Completion inspection retains identity/disposition only. One separate ephemeral
+  slot may retain approved text; freshness and completion alone cannot authorize speech.
   Completion requires a persisted receipt containing both response and canonical
   Run IDs. Missing receipts, absent status and failed writes cannot become success.
-  Approval and controlled result delivery remain the next separate slices.
+  Final-response approval and staging are implemented; controlled speech remains separate.
 - The sole capacity reservation belongs to the backend process, outside call
   instances. Admission is synchronous; invocation and settlement are asynchronous.
   Duplicates and occupied slots are rejected without queuing replacement work.
@@ -220,12 +222,21 @@ the target Talker may express the same permitted conversational intent naturally
 | Superseded                   | Increment intent revision; invalidate the old delivery and request cancellation. Start replacement only after capacity admission.   | Acknowledge the correction and eventually give only the new answer.                                                                 |
 | Late                         | Recheck revision, deadline, session, audience, and whether the question is still outstanding. Time alone does not decide relevance. | Deliver at the next safe boundary only if still eligible, naming the question. Otherwise discard from voice delivery with a reason. |
 
-The proposed approval predicate is deliberately stricter than "Run completed"
-or "mode is reviewed." Some text modes gate assessment, and fail-open text
-fallbacks exist. #558 must define an explicit mapping from current final
-response/review outcomes to voice eligibility. Unsupported or ambiguous evidence
-permits a status acknowledgement, not a substantive answer. This narrows voice
-delivery; it does not silently change ordinary chat policy.
+The implemented [approval mapping](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only)
+requires the selected final draft and its successful, linked `finalize` assessment,
+including produced draft/review Results and successful canonical completion.
+Missing assessment, failed review, unresolved revise/search requests, selection
+ambiguity and unsupported responses withhold substantive speech. The disposition
+and actual Run outcome remain distinct. Unassessed fail-open text remains valid
+under text-chat policy but is withheld from voice. Whether to permit a particular
+fallback later is an unresolved policy decision, not implicit approval.
+
+The slot expires 30 seconds after staging and holds at most 16 KiB. Interruptions
+and ambiguous speech now discard queued text and revoke late staging without
+aborting reasoning. Continuation does not revive that text; a new question is
+required. This is more conservative than the proposed hold-and-revalidate behavior
+below. Live safe-turn selection, playback cancellation and audible evidence are
+still proposed.
 
 Recheck before enqueue, before playback, and after any interruption. Backend
 session events serialize state transitions; completion callbacks must compare
@@ -409,8 +420,8 @@ only capabilities actually required by the selected experiment.
 
 ## Small follow-up sequence
 
-Each row is an independently reviewable slice. The first two now have synthetic
-implementation, with result retention/approval deferred to slice 3. The remaining
+Each row is an independently reviewable slice. The first three now have synthetic
+implementation through single-use staging; actual speech remains in slice 4. The remaining
 rows are proposed child scopes, not newly created issues or duplicate umbrellas.
 
 | Order / owner                                                                                              | Scope                                                                                                                                                                                                                               | Acceptance evidence                                                                                                                                                                                                                                                                                |
@@ -443,10 +454,10 @@ conversational versus answer latency measurements. A successful serial audio
 pipeline does not satisfy those criteria. The lightweight model and adapter
 remain open choices; approval and provider feasibility remain hard gates.
 
-Approval is needed for the proposed strict speech eligibility mapping, the
-single-call lifecycle/defaults, and which provider experiment to pursue later.
-Implementation must choose concrete resource limits and prove controlled speech,
+The conservative eligibility mapping and slot bounds above are implemented.
+Broader fallback permission, single-call lifecycle/defaults, and the later provider
+experiment remain decisions. Later implementation must prove controlled speech,
 speaker attribution, persistence exclusions, and delivery cancellation before
 enabling this mode. #559 must separately settle continuity consent/retention;
 this proposal supplies terminology and conservative defaults, not that ADR's
-approval. No runtime behavior changes in this documentation pass.
+approval. Staging an approved answer does not complete the conversational Talker.

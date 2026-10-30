@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { RealtimeConversationState } from '../src/services/realtimeConversationState.js';
+import type { RealtimeWorkflowResult } from '../src/services/realtimeConversationState.js';
 
 const deferred = <T>() => {
     let resolve!: (value: T) => void;
@@ -34,6 +35,209 @@ const call = (id = 'call-one') => {
 const flush = async () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 };
+
+const approved = (): RealtimeWorkflowResult => ({
+    responseId: 'response-one',
+    runId: 'run-one',
+    status: 'completed',
+    finalResponse: {
+        disposition: 'approved',
+        responseId: 'response-one',
+        runId: 'run-one',
+        candidateId: 'candidate-one',
+        generationStepId: 'step-one',
+        assessmentStepId: 'step-two',
+        text: 'PRIVATE ANSWER',
+    },
+});
+
+test('late completion cannot restore speech after interruption, cancellation, audience changes or disconnect', async () => {
+    for (const event of [
+        'interrupt',
+        'ambiguous',
+        'cancel',
+        'supersede',
+        'audience',
+        'consent',
+        'disconnect',
+    ] as const) {
+        for (const when of ['pending', 'staged'] as const) {
+            const state = call();
+            const handle = state.appendFinalizedTurn({
+                role: 'user',
+                speakerId: 'human',
+                content: 'Answer',
+                intent: 'question',
+            }).handle;
+            const work = deferred<RealtimeWorkflowResult>();
+            let signal: AbortSignal | undefined;
+            state.startExecution({
+                runRealtimeConversation: async (_snapshot, context) => {
+                    signal = context.signal;
+                    context.onRunStarted('run-one');
+                    return work.promise;
+                },
+            });
+            await flush();
+            if (when === 'staged') {
+                work.resolve(approved());
+                await flush();
+            }
+            if (event === 'disconnect') state.close();
+            else if (event === 'audience' || event === 'consent')
+                state.setAudience([
+                    {
+                        id: 'human',
+                        displayName: 'Human',
+                        processingConsent: event !== 'consent',
+                    },
+                    ...(event === 'audience'
+                        ? [
+                              {
+                                  id: 'other',
+                                  displayName: 'Other',
+                                  processingConsent: true,
+                              },
+                          ]
+                        : []),
+                ]);
+            else
+                state.appendFinalizedTurn({
+                    role: 'user',
+                    speakerId: event === 'ambiguous' ? 'unknown' : 'human',
+                    content: 'Changed',
+                    intent: event === 'ambiguous' ? 'attention' : event,
+                });
+            if (event === 'interrupt' || event === 'ambiguous') {
+                assert.equal(signal?.aborted, false);
+                state.appendFinalizedTurn({
+                    role: 'user',
+                    speakerId: 'human',
+                    content: 'Continue',
+                    intent: 'continue',
+                });
+            }
+            if (when === 'pending') {
+                work.resolve(approved());
+                await flush();
+            }
+            assert.equal(
+                state.takeDelivery(handle),
+                undefined,
+                `${event} ${when}`
+            );
+            assert.equal(
+                state.takeDelivery({
+                    ...handle,
+                    revision: state.snapshot().revision,
+                }),
+                undefined
+            );
+            state.close();
+        }
+    }
+});
+
+test('a staged answer expires at thirty seconds and the settled Run outcome is preserved', async (t) => {
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+    const state = call();
+    const handle = state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'human',
+        content: 'Answer',
+        intent: 'question',
+    }).handle;
+    state.startExecution({
+        runRealtimeConversation: async (_snapshot, context) => {
+            context.onRunStarted('run-one');
+            return approved();
+        },
+    });
+    await flush();
+    t.mock.timers.tick(30_000);
+    assert.equal(state.takeDelivery(handle), undefined);
+    assert.equal(state.completedExecution()?.status, 'completed');
+    assert.equal(state.completedExecution()?.reviewDisposition, 'approved');
+    state.close();
+});
+
+test('missing evidence, wrong canonical identity and a degraded outcome never stage speech', async () => {
+    for (const change of [
+        'missing',
+        'run',
+        'response',
+        'degraded',
+        'unassessed',
+    ] as const) {
+        const state = call();
+        const handle = state.appendFinalizedTurn({
+            role: 'user',
+            speakerId: 'human',
+            content: 'Answer',
+            intent: 'question',
+        }).handle;
+        const result = approved();
+        if (change === 'missing') delete result.finalResponse;
+        if (change === 'run') result.runId = 'different-run';
+        if (change === 'response') result.responseId = 'different-response';
+        if (change === 'degraded') result.status = 'degraded';
+        if (change === 'unassessed')
+            result.finalResponse = { disposition: 'unassessed' };
+        state.startExecution({
+            runRealtimeConversation: async (_snapshot, context) => {
+                context.onRunStarted('run-one');
+                return result;
+            },
+        });
+        await flush();
+        assert.equal(state.takeDelivery(handle), undefined, change);
+        state.close();
+    }
+});
+
+test('a reviewed final answer occupies one ephemeral slot and can be taken only once', async () => {
+    const state = call();
+    const handle = state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'human',
+        content: 'Please answer',
+        intent: 'question',
+    }).handle;
+    state.startExecution({
+        runRealtimeConversation: async (_snapshot, context) => {
+            context.onRunStarted('run-one');
+            return {
+                responseId: 'response-one',
+                runId: 'run-one',
+                status: 'completed',
+                finalResponse: {
+                    disposition: 'approved',
+                    responseId: 'response-one',
+                    runId: 'run-one',
+                    candidateId: 'candidate-one',
+                    generationStepId: 'step-one',
+                    assessmentStepId: 'step-two',
+                    text: 'PRIVATE ANSWER',
+                },
+            };
+        },
+    });
+    await flush();
+    assert.doesNotMatch(
+        JSON.stringify(state.completedExecution()),
+        /PRIVATE ANSWER/
+    );
+    assert.equal(
+        state.takeDelivery({ ...handle, sessionCorrelationId: 'other' }),
+        undefined
+    );
+    const delivery = state.takeDelivery(handle);
+    assert.equal(delivery?.text, 'PRIVATE ANSWER');
+    assert.equal(delivery?.turnId, state.snapshot().intent?.turnId);
+    assert.equal(delivery?.responseId, 'response-one');
+    assert.equal(state.takeDelivery(handle), undefined);
+    state.close();
+});
 
 test('one background execution leaves conversation responsive and rejects duplicates', async () => {
     const work = deferred<{
