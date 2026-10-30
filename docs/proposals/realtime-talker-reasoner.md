@@ -241,8 +241,7 @@ interrupted or failed playback; completion requires a prior start report.
 Text is cleared at handoff, expiry or revocation. After a timely start report,
 only content-free evidence remains and playback may finish beyond that deadline.
 
-Interruptions
-and ambiguous speech now discard queued text and revoke late staging without
+Interruptions and ambiguous speech now discard queued text and revoke late staging without
 aborting reasoning. Continuation does not revive that text; a new question is
 required. This is more conservative than the proposed hold-and-revalidate behavior
 below. Revocation preserves the last handoff's playback evidence: a start report
