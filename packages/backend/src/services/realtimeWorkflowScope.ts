@@ -24,7 +24,7 @@ export type RealtimeWorkflowScope = {
     turnId: string;
     onRunStarted: (runId: string) => void;
     actionRejected?: boolean;
-    recorded?: RealtimeWorkflowResult;
+    recorded?: Required<RealtimeWorkflowResult>;
 };
 
 const scope = new AsyncLocalStorage<RealtimeWorkflowScope>();
@@ -294,13 +294,16 @@ export const storeRealtimeWorkflowMetadata = async (
     if (voice === undefined)
         throw new Error('Realtime execution scope is required.');
     const projected = projectRealtimeWorkflowMetadata(metadata, voice);
+    const runId = projected.workflow?.runId;
+    if (!projected.responseId || !runId)
+        throw new Error('Realtime canonical execution receipt is unavailable.');
     let status: RealtimeWorkflowResult['status'] = 'completed';
     if (projected.workflow?.runStatus === 'failed') status = 'failed';
     else if (projected.workflow?.status === 'degraded') status = 'degraded';
+    await store(projected);
     voice.recorded = {
         responseId: projected.responseId,
-        runId: projected.workflow?.runId,
+        runId,
         status,
     };
-    await store(projected);
 };

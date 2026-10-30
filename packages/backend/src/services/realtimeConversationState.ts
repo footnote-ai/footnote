@@ -372,12 +372,16 @@ export class RealtimeConversationState {
                         !reservation.controller.signal.aborted &&
                         Date.now() <
                             reservation.startedAt + EXECUTION_DEADLINE_MS
-                    )
+                    ) {
+                        let status = result.status ?? 'failed';
+                        if (!result.responseId || !result.runId)
+                            status = 'failed';
                         this.completed = {
                             responseId: result.responseId,
                             runId: result.runId,
-                            status: result.status ?? 'completed',
+                            status,
                         };
+                    }
                 },
                 () => {
                     if (

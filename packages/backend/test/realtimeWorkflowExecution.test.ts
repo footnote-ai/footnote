@@ -36,7 +36,11 @@ const flush = async () => {
 };
 
 test('one background execution leaves conversation responsive and rejects duplicates', async () => {
-    const work = deferred<{ responseId: string; runId: string }>();
+    const work = deferred<{
+        responseId: string;
+        runId: string;
+        status: 'completed';
+    }>();
     const state = call();
     let starts = 0;
     const runner = {
@@ -62,7 +66,11 @@ test('one background execution leaves conversation responsive and rejects duplic
     await flush();
     assert.equal(starts, 1);
     assert.equal(state.executionStatus().occupied, true);
-    work.resolve({ responseId: 'response-one', runId: 'run-one' });
+    work.resolve({
+        responseId: 'response-one',
+        runId: 'run-one',
+        status: 'completed',
+    });
     await flush();
     assert.equal(state.executionStatus().occupied, false);
     assert.deepEqual(state.completedExecution(), {
@@ -235,7 +243,11 @@ test('same-tick cancellation prevents dispatch and errors settle capacity withou
 
 test('interruption preserves the execution and explicit continuation permits only identity completion', async () => {
     const state = call();
-    const work = deferred<{ responseId: string; runId: string }>();
+    const work = deferred<{
+        responseId: string;
+        runId: string;
+        status: 'completed';
+    }>();
     let signal: AbortSignal | undefined;
     state.startExecution({
         runRealtimeConversation: async (_snapshot, context) => {
@@ -259,7 +271,7 @@ test('interruption preserves the execution and explicit continuation permits onl
         intent: 'continue',
     });
     assert.equal(signal?.aborted, false);
-    work.resolve({ responseId: 'complete', runId: 'run' });
+    work.resolve({ responseId: 'complete', runId: 'run', status: 'completed' });
     await flush();
     assert.deepEqual(state.completedExecution(), {
         responseId: 'complete',
@@ -296,6 +308,7 @@ test('completion retains only canonical identity even if a runner returns extra 
         runRealtimeConversation: async () => ({
             responseId: 'response',
             runId: 'run',
+            status: 'completed' as const,
             message: 'PRIVATE RESPONSE',
             transcript: 'PRIVATE QUESTION',
         }),
@@ -307,6 +320,27 @@ test('completion retains only canonical identity even if a runner returns extra 
         status: 'completed',
     });
     state.close();
+});
+
+test('a settled execution without an explicit canonical receipt cannot report completion', async () => {
+    for (const result of [
+        {},
+        { status: 'completed' as const },
+        { responseId: 'response', runId: 'run' },
+        { status: 'completed' as const, responseId: 'response' },
+    ]) {
+        const state = call();
+        assert.equal(
+            state.startExecution({
+                runRealtimeConversation: async () => result,
+            }).accepted,
+            true
+        );
+        await flush();
+        assert.equal(state.executionStatus().occupied, false);
+        assert.equal(state.completedExecution()?.status, 'failed');
+        state.close();
+    }
 });
 
 test('a truly never-settling Run stays reserved across repeated reconnects after watchdog expiry', async (t) => {

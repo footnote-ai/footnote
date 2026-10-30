@@ -90,6 +90,9 @@ uses `runChat` and the existing policy, planner, Context Integrations and Workfl
 over the accepted projection. It does not call the public chat HTTP endpoint.
 No live voice handler invokes this path yet.
 
+- Completion requires an explicit receipt with response and canonical Run IDs,
+  issued only after storage succeeds. Missing receipts/status and storage failures
+  fail closed for voice; ordinary text storage keeps its existing fail-open behavior.
 - Canonical Workflow execution is required even in `express` mode. The entry
   rejects runtimes without an explicit `supportsEphemeralContent` guarantee
   before any execution. Synthetic runtimes provide this guarantee in tests.

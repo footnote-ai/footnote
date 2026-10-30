@@ -172,6 +172,8 @@ Settled decisions for this slice:
   work. No transcript-derived hash is retained.
 - The call retains completion identity/disposition only, with no answer body or
   delivery slot. Freshness is not approval, and completion cannot authorize speech.
+  Completion requires a persisted receipt containing both response and canonical
+  Run IDs. Missing receipts, absent status and failed writes cannot become success.
   Approval and controlled result delivery remain the next separate slices.
 - The sole capacity reservation belongs to the backend process, outside call
   instances. Admission is synchronous; invocation and settlement are asynchronous.

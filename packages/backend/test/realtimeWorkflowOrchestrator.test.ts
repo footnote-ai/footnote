@@ -264,6 +264,41 @@ test('express voice still executes a canonical Workflow', async () => {
     }
 });
 
+test('voice cannot complete without a canonical execution receipt', async () => {
+    let calls = 0;
+    let writes = 0;
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: {
+            kind: 'test-runtime',
+            supportsEphemeralContent: true,
+            generate: async (request) => ({
+                model: request.model,
+                text:
+                    calls++ === 0
+                        ? JSON.stringify(answerPlan())
+                        : 'VOICE_SECRET',
+            }),
+        },
+        storeTrace: async () => {
+            writes += 1;
+        },
+        buildResponseMetadata: (...args) => ({
+            ...buildResponseMetadata(...args),
+            workflow: undefined,
+        }),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+    await assert.rejects(
+        orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: () => undefined,
+        }),
+        /canonical execution receipt/
+    );
+    assert.equal(writes, 0);
+});
+
 test('voice provider errors cannot enter persistent logs even with model debug capture enabled', async () => {
     const output: string[] = [];
     const transport = new transports.Stream({
@@ -491,7 +526,7 @@ test('allowlisted web search cannot escalate its hints into provider-native tool
     }
 });
 
-test('real storage retains reviewed execution structure while withholding voice bodies and public call identity', async () => {
+test('real storage withholds voice bodies and refuses completion when canonical writes fail', async (t) => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'voice-workflow-'));
     const store = new SqliteTraceStore({ dbPath: path.join(root, 'trace.db') });
     const previousMode = runtimeConfig.chatWorkflow.modeId;
@@ -576,6 +611,18 @@ test('real storage retains reviewed execution structure while withholding voice 
             JSON.stringify([metadata, publicTrace, result]),
             /VOICE_SECRET|Private Name/u
         );
+        calls = 0;
+        const failedWrite = t.mock.method(store, 'upsert', async () => {
+            throw new Error('canonical write failed');
+        });
+        await assert.rejects(
+            orchestrator.runRealtimeConversation(snapshot(), {
+                signal: new AbortController().signal,
+                onRunStarted: () => undefined,
+            }),
+            /canonical write failed/
+        );
+        assert.equal(failedWrite.mock.callCount(), 1);
     } finally {
         store.close();
         await fs.rm(root, { recursive: true, force: true });

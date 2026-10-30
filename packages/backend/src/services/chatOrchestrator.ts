@@ -2172,6 +2172,10 @@ export const createChatOrchestrator = ({
                         realtimeContext: snapshot.context,
                     }
                 );
+                if (voice.recorded === undefined)
+                    throw new Error(
+                        'Realtime canonical execution receipt is unavailable.'
+                    );
                 return {
                     ...voice.recorded,
                     ...(voice.actionRejected
