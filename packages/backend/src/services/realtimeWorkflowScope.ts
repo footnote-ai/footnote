@@ -56,10 +56,43 @@ const projectOutcome = (outcome: StepOutcome): StepOutcome => {
         applyOutcome: ['applied', 'adjusted_by_policy', 'not_applied'],
         action: ['message', 'react', 'image', 'ignore'],
         modality: ['text', 'tts'],
+        clarificationReasonCode: ['ambiguous_location'],
+        searchRecoveryOutcome: [
+            'requested',
+            'executed',
+            'failed',
+            'unavailable',
+            'no_results',
+            'cancelled',
+            'regenerated',
+            'generation_budget_blocked',
+            'search_query_invalid',
+            'search_query_repeated',
+            'repeated_query',
+            'cycle_limit',
+            'policy_blocked',
+            'execution_limit',
+        ],
     };
     for (const [key, allowed] of Object.entries(machineSignals)) {
         const value = outcome.signals?.[key];
         if (typeof value === 'string' && allowed.includes(value))
+            signals[key] = value;
+    }
+    if (outcome.signals?.clarification === true) {
+        signals.clarification = true;
+    }
+    for (const key of [
+        'clarificationOptionCount',
+        'contextStepCount',
+        'retrievedSourceCount',
+    ]) {
+        const value = outcome.signals?.[key];
+        if (
+            typeof value === 'number' &&
+            Number.isSafeInteger(value) &&
+            value >= 0
+        )
             signals[key] = value;
     }
     const reviewDecision = outcome.signals?.reviewDecision;

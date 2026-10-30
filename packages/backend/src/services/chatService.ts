@@ -1616,7 +1616,8 @@ export const createChatService = ({
         const workflowProfile = executionPhases.workflowProfile;
         const workflowRuntimeConfig = executionPhases.workflowRuntimeConfig;
         const workflowExecutionEnabled =
-            executionPhases.workflowExecutionEnabled;
+            executionPhases.workflowExecutionEnabled ||
+            realtimeWorkflowScope() !== undefined;
         const workflowExecutionLimits = executionPhases.workflowExecutionLimits;
         const enabledProfilesById = executionPhases.enabledProfilesById;
         const generateProfileCandidates =

@@ -68,6 +68,7 @@ test('voice denies planner terminal actions before execution and retains canonic
         let stored: ResponseMetadata | undefined;
         const runtime: GenerationRuntime = {
             kind: 'synthetic',
+            supportsEphemeralContent: true,
             generate: async (request) => {
                 calls += 1;
                 return {
@@ -141,6 +142,7 @@ test('allowlisted weather clarification still records content-free canonical exe
     const orchestrator = createChatOrchestrator({
         generationRuntime: {
             kind: 'synthetic',
+            supportsEphemeralContent: true,
             generate: async (request) => ({
                 model: request.model,
                 text:
@@ -178,7 +180,88 @@ test('allowlisted weather clarification still records content-free canonical exe
     assert.ok(result.runId);
     assert.equal(result.responseId, stored?.responseId);
     assert.equal(stored?.workflow?.sessionCorrelationId, 'private-call');
+    const tool = stored?.workflow?.steps.find(
+        (step) => step.stepKind === 'tool'
+    );
+    assert.equal(tool?.outcome.signals?.clarification, true);
+    assert.equal(
+        tool?.outcome.signals?.clarificationReasonCode,
+        'ambiguous_location'
+    );
+    assert.equal(tool?.outcome.signals?.clarificationOptionCount, 0);
+    assert.equal(ResponseMetadataSchema.safeParse(stored).success, true);
     assert.equal(JSON.stringify(stored).includes('VOICE_SECRET'), false);
+});
+
+test('voice rejects runtimes without an explicit content-retention guarantee before any execution', async () => {
+    let calls = 0;
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: {
+            kind: 'test-runtime',
+            generate: async () => {
+                calls += 1;
+                throw new Error('Must not execute');
+            },
+        },
+        storeTrace: async () => {
+            throw new Error('Must not persist');
+        },
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+    await assert.rejects(
+        orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: () => {
+                throw new Error('Must not allocate a Run');
+            },
+        }),
+        /runtime does not support ephemeral content/
+    );
+    assert.equal(calls, 0);
+});
+
+test('express voice still executes a canonical Workflow', async () => {
+    const priorMode = runtimeConfig.chatWorkflow.modeId;
+    runtimeConfig.chatWorkflow.modeId = 'express';
+    let stored: ResponseMetadata | undefined;
+    let runId: string | undefined;
+    let calls = 0;
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: {
+                kind: 'test-runtime',
+                supportsEphemeralContent: true,
+                generate: async (request) => ({
+                    model: request.model,
+                    text:
+                        calls++ === 0
+                            ? JSON.stringify(answerPlan())
+                            : 'VOICE_SECRET',
+                }),
+            },
+            storeTrace: async (metadata) => {
+                stored = metadata;
+            },
+            buildResponseMetadata,
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+        });
+        const result = await orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: (identity) => {
+                runId = identity;
+            },
+        });
+        assert.ok(runId);
+        assert.equal(result.runId, runId);
+        assert.equal(stored?.workflow?.runId, runId);
+        assert.ok(stored?.workflow?.steps.length);
+        assert.equal(JSON.stringify(stored).includes('VOICE_SECRET'), false);
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = priorMode;
+    }
 });
 
 test('voice provider errors cannot enter persistent logs even with model debug capture enabled', async () => {
@@ -198,6 +281,7 @@ test('voice provider errors cannot enter persistent logs even with model debug c
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'synthetic',
+                supportsEphemeralContent: true,
                 generate: async () => {
                     throw new Error('VOICE_SECRET');
                 },
@@ -247,6 +331,7 @@ test('planner-requested GitHub context is unavailable at the executor boundary f
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'synthetic',
+                supportsEphemeralContent: true,
                 generate: async (request) => ({
                     model: request.model,
                     text:
@@ -349,6 +434,7 @@ test('allowlisted web search cannot escalate its hints into provider-native tool
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'test-runtime',
+                supportsEphemeralContent: true,
                 generate: async (request) => {
                     if (calls++ === 0)
                         return {
@@ -419,6 +505,7 @@ test('real storage retains reviewed execution structure while withholding voice 
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'test-runtime',
+                supportsEphemeralContent: true,
                 generate: async (request) => ({
                     model: request.model,
                     text:
@@ -513,6 +600,7 @@ test('a cancelled real Workflow records failed attempts without retrying the abo
     const orchestrator = createChatOrchestrator({
         generationRuntime: {
             kind: 'test-runtime',
+            supportsEphemeralContent: true,
             generate: async (request) => {
                 if (calls++ === 0)
                     return {

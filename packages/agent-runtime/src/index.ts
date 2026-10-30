@@ -480,6 +480,11 @@ export interface GenerationRuntime {
      */
     readonly kind: string;
     /**
+     * Adapter-owned guarantee: generation retains no content in diagnostics,
+     * traces, logs, memory, or other content stores. Absence denies voice use.
+     */
+    readonly supportsEphemeralContent?: true;
+    /**
      * Optional adapter-owned capability intersection for one selected profile.
      * Backend policy remains the authority for how these facts are used.
      */

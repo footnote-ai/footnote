@@ -90,6 +90,14 @@ uses `runChat` and the existing policy, planner, Context Integrations and Workfl
 over the accepted projection. It does not call the public chat HTTP endpoint.
 No live voice handler invokes this path yet.
 
+- Canonical Workflow execution is required even in `express` mode. The entry
+  rejects runtimes without an explicit `supportsEphemeralContent` guarantee
+  before any execution. Synthetic runtimes provide this guarantee in tests.
+  **Architectural blocker:** VoltAgent 2.11.0 automatically captures input/output
+  and messages in local/WebSocket tracing and exposes no supported per-call
+  opt-out. The production adapter remains unsupported. Missing credentials or
+  remote sampling do not establish privacy; verified adapter controls are required
+  before live wiring.
 - Execution admits text answers and only `weather_forecast` and `web_search`.
   Executor selection denies every other integration, including registry and
   fallback executors. Provider-native search is disabled at the runtime boundary;

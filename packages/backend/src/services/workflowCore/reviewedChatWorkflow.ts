@@ -1937,6 +1937,12 @@ export const runBoundedReviewWorkflow = async (
                 signals: clarification
                     ? {
                           clarification: true,
+                          clarificationOptionCount:
+                              clarificationResult?.outcome ===
+                              'needs_clarification'
+                                  ? clarificationResult.clarification.options
+                                        .length
+                                  : 0,
                           clarificationReasonCode:
                               clarificationResult?.outcome ===
                               'needs_clarification'

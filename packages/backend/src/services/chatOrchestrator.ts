@@ -2134,6 +2134,10 @@ export const createChatOrchestrator = ({
     /** Runs the existing Workflow over the accepted ephemeral projection, returning identity only. */
     const runRealtimeConversation: RealtimeWorkflowRunner['runRealtimeConversation'] =
         async (snapshot, context) => {
+            if (rawGenerationRuntime.supportsEphemeralContent !== true)
+                throw new Error(
+                    'Generation runtime does not support ephemeral content.'
+                );
             if (snapshot.intent?.status !== 'pending')
                 throw new Error('Realtime intent is unavailable.');
             const turnIndex = snapshot.context.contextEnvelope.turns.findIndex(

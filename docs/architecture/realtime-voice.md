@@ -201,5 +201,7 @@ answer/read-only scope and content-free execution records. They remain disconnec
 from live provider events, approval and speech delivery. A process-owned reservation
 survives call teardown; its 60-second deadline and 5-second cancellation watchdog
 make unresolved work observably degraded without releasing capacity.
+Voice admission fails closed unless the runtime guarantees no content retention;
+the current VoltAgent adapter cannot provide that guarantee and remains blocked.
 The tracker describes process-local and deployment-recovery limits. Cross-surface
 continuity, consent, and retention remain under #559.

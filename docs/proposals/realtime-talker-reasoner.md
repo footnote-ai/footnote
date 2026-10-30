@@ -146,6 +146,16 @@ call a public HTTP endpoint, install another Reasoner or add a conversation coor
 
 Settled decisions for this slice:
 
+- Voice always uses canonical Workflow execution, including when the configured
+  text mode is `express`; mode selection cannot bypass Run creation.
+- Admission requires the runtime's explicit `supportsEphemeralContent` guarantee.
+  Absence fails before planning, provider execution or storage. **The current
+  VoltAgent adapter is unsupported:** installed SDK 2.11.0 automatically records
+  inputs, outputs and messages in local/WebSocket tracing, with no supported
+  per-call opt-out. Remote-export sampling and missing credentials do not disable
+  local capture. Only synthetic runtimes supply the guarantee in this slice.
+  A separately verified adapter privacy control is an architectural prerequisite
+  for live wiring; this slice does not replace SDK observability or add a runtime.
 - Voice execution permits text answering plus the explicit read-only allowlist
   `weather_forecast` and `web_search`. The execution continuation denies other
   terminal actions. Context executor selection denies other integration names
@@ -154,7 +164,8 @@ Settled decisions for this slice:
 - A backend-only async scope prevents voice work from inheriting text persistence.
   It injects no account memories, attachments, text session identity or private
   retrieval scope. Storage allowlists execution identity/status, timing, usage,
-  cost, limits and validated machine decisions. Free-text summaries and review
+  cost, limits and validated machine decisions, including tool clarification
+  reasons/counts and search recovery outcomes. Free-text summaries and review
   rationale are withheld; fixed placeholders preserve canonical schema validity.
   Citations, queries, drafts, candidates, debug bodies and publication tokens are
   excluded. Free-form logs and model debug capture are suppressed within voice
