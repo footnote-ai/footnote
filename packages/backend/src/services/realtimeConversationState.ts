@@ -107,29 +107,28 @@ const requestExecutionCancellation = (
 /** Content-free, process-wide inspection; caller authentication belongs to the operator handler. */
 export const inspectRealtimeExecution = (): RealtimeExecutionInspection => {
     const reservation = executionReservation;
-    return reservation === undefined
-        ? { occupied: false as const }
-        : {
-              occupied: true as const,
-              sessionCorrelationId: reservation.sessionCorrelationId,
-              turnId: reservation.turnId,
-              runId: reservation.runId,
-              status: reservation.degradedReason
-                  ? ('degraded' as const)
-                  : reservation.cancellationRequestedAt !== undefined
-                    ? ('cancelling' as const)
-                    : ('pending' as const),
-              cancellationRequestedAt: reservation.cancellationRequestedAt,
-              cancellationDeadlineAt:
-                  reservation.cancellationRequestedAt === undefined
-                      ? undefined
-                      : reservation.cancellationRequestedAt +
-                        CANCELLATION_WATCHDOG_MS,
-              degradedReason: reservation.degradedReason,
-              ageMs: Math.max(0, Date.now() - reservation.startedAt),
-              startedAt: reservation.startedAt,
-              deadlineAt: reservation.startedAt + EXECUTION_DEADLINE_MS,
-          };
+    if (reservation === undefined) return { occupied: false };
+    let status: 'degraded' | 'cancelling' | 'pending' = 'pending';
+    if (reservation.degradedReason) status = 'degraded';
+    else if (reservation.cancellationRequestedAt !== undefined)
+        status = 'cancelling';
+    return {
+        occupied: true as const,
+        sessionCorrelationId: reservation.sessionCorrelationId,
+        turnId: reservation.turnId,
+        runId: reservation.runId,
+        status,
+        cancellationRequestedAt: reservation.cancellationRequestedAt,
+        cancellationDeadlineAt:
+            reservation.cancellationRequestedAt === undefined
+                ? undefined
+                : reservation.cancellationRequestedAt +
+                  CANCELLATION_WATCHDOG_MS,
+        degradedReason: reservation.degradedReason,
+        ageMs: Math.max(0, Date.now() - reservation.startedAt),
+        startedAt: reservation.startedAt,
+        deadlineAt: reservation.startedAt + EXECUTION_DEADLINE_MS,
+    };
 };
 
 export type FinalizedRealtimeTurn = {

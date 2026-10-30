@@ -7,18 +7,16 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
-import type {
-    ResponseMetadata,
-    WorkflowRecord,
-    WorkflowAttemptRecord,
-} from '@footnote/contracts/policy';
 import {
     BOUNDED_REVIEW_ASSESS_DECISIONS,
     TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS,
     WORKFLOW_TERMINATION_REASONS,
+    type ResponseMetadata,
+    type StepOutcome,
+    type WorkflowRecord,
+    type WorkflowAttemptRecord,
 } from '@footnote/contracts/policy';
 import { ExecutionReasonCodeSchema } from '@footnote/contracts/web/schemas';
-import type { StepOutcome } from '@footnote/contracts/policy';
 import type { RealtimeWorkflowResult } from './realtimeConversationState.js';
 
 export type RealtimeWorkflowScope = {
@@ -47,6 +45,31 @@ const pick = <T extends object, K extends keyof T>(
             .filter((key) => value[key] !== undefined)
             .map((key) => [key, value[key]])
     ) as Pick<T, K>;
+
+const projectTraceAlignmentSignals = (
+    source: StepOutcome['signals']
+): NonNullable<StepOutcome['signals']> => {
+    const alignment = source?.traceAlignment;
+    if (alignment !== 'aligned' && alignment !== 'misaligned') return {};
+    const signals: NonNullable<StepOutcome['signals']> = {
+        traceAlignment: alignment,
+    };
+    if (alignment === 'misaligned')
+        signals.traceAlignmentReason = '[withheld for voice privacy]';
+    for (const key of Object.values(
+        TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS
+    )) {
+        const value = source?.[key];
+        if (
+            typeof value === 'number' &&
+            Number.isInteger(value) &&
+            value >= 1 &&
+            value <= 5
+        )
+            signals[key] = value;
+    }
+    return signals;
+};
 
 const projectOutcome = (outcome: StepOutcome): StepOutcome => {
     const signals: NonNullable<StepOutcome['signals']> = {};
@@ -104,29 +127,16 @@ const projectOutcome = (outcome: StepOutcome): StepOutcome => {
     ) {
         signals.reviewDecision = reviewDecision;
         signals.reviewReason = '[withheld for voice privacy]';
-        if (reviewDecision === 'revise')
-            signals.revisionInstruction = '[withheld for voice privacy]';
-        if (reviewDecision === 'search')
-            signals.searchQuery = '[withheld for voice privacy]';
-    }
-    const alignment = outcome.signals?.traceAlignment;
-    if (alignment === 'aligned' || alignment === 'misaligned') {
-        signals.traceAlignment = alignment;
-        if (alignment === 'misaligned')
-            signals.traceAlignmentReason = '[withheld for voice privacy]';
-        for (const key of Object.values(
-            TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS
-        )) {
-            const value = outcome.signals?.[key];
-            if (
-                typeof value === 'number' &&
-                Number.isInteger(value) &&
-                value >= 1 &&
-                value <= 5
-            )
-                signals[key] = value;
+        switch (reviewDecision) {
+            case 'revise':
+                signals.revisionInstruction = '[withheld for voice privacy]';
+                break;
+            case 'search':
+                signals.searchQuery = '[withheld for voice privacy]';
+                break;
         }
     }
+    Object.assign(signals, projectTraceAlignmentSignals(outcome.signals));
     return {
         status: outcome.status,
         summary: 'Voice execution metadata only.',
@@ -284,15 +294,13 @@ export const storeRealtimeWorkflowMetadata = async (
     if (voice === undefined)
         throw new Error('Realtime execution scope is required.');
     const projected = projectRealtimeWorkflowMetadata(metadata, voice);
+    let status: RealtimeWorkflowResult['status'] = 'completed';
+    if (projected.workflow?.runStatus === 'failed') status = 'failed';
+    else if (projected.workflow?.status === 'degraded') status = 'degraded';
     voice.recorded = {
         responseId: projected.responseId,
         runId: projected.workflow?.runId,
-        status:
-            projected.workflow?.runStatus === 'failed'
-                ? 'failed'
-                : projected.workflow?.status === 'degraded'
-                  ? 'degraded'
-                  : 'completed',
+        status,
     };
     await store(projected);
 };
