@@ -19,6 +19,7 @@ export type {
     ExecutionReportDebugCapture,
     GetAuthSessionResponse,
     ExecutionReportResponse,
+    RealtimeExecutionInspection,
 } from './types.js';
 
 /**

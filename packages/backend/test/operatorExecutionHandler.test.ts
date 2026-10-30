@@ -19,6 +19,7 @@ import { createAccountAuthService } from '../src/services/accountAuth.js';
 import type { OidcAccountClient } from '../src/services/oidcClient.js';
 import { createInMemoryAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 import { SqliteTraceStore } from '../src/storage/traces/sqliteTraceStore.js';
+import { RealtimeConversationState } from '../src/services/realtimeConversationState.js';
 
 test('operator execution reads deny missing, expired, and ordinary account sessions', async (t) => {
     let now = 1_000;
@@ -301,6 +302,106 @@ test('operator execution reads deny missing, expired, and ordinary account sessi
         }
     );
     assert.equal(missing.status, 404);
+    const pendingUrl = `http://127.0.0.1:${address.port}/api/admin/executions/realtime-pending`;
+    const currentOrdinary = await createSession('ordinary');
+    assert.equal((await fetch(pendingUrl)).status, 401);
+    assert.equal(
+        (
+            await fetch(pendingUrl, {
+                headers: {
+                    cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${currentOrdinary.sessionId}`,
+                },
+            })
+        ).status,
+        403
+    );
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+    const state = new RealtimeConversationState('operator-private-call');
+    state.setAudience([
+        { id: 'human', displayName: 'PRIVATE_NAME', processingConsent: true },
+    ]);
+    state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'human',
+        content: 'PRIVATE_UTTERANCE',
+        intent: 'question',
+    });
+    let settle!: (result: { responseId: string }) => void;
+    const unresolved = new Promise<{ responseId: string }>((resolve) => {
+        settle = resolve;
+    });
+    state.startExecution({
+        runRealtimeConversation: async (_snapshot, context) => {
+            context.onRunStarted('pending-canonical-run');
+            return unresolved;
+        },
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const pendingResponse = await fetch(pendingUrl, {
+        headers: {
+            cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${currentOperator.sessionId}`,
+        },
+    });
+    try {
+        assert.equal(pendingResponse.status, 200);
+        const pending = (await pendingResponse.json()) as {
+            occupied: boolean;
+            runId: string;
+            deadlineAt: number;
+            startedAt: number;
+            ageMs: number;
+            status: string;
+        };
+        assert.equal(pending.occupied, true);
+        assert.equal(pending.runId, 'pending-canonical-run');
+        assert.equal(pending.deadlineAt - pending.startedAt, 60_000);
+        assert.ok(pending.ageMs >= 0);
+        assert.equal(pending.status, 'pending');
+        assert.doesNotMatch(
+            JSON.stringify(pending),
+            /PRIVATE_|workflow|modelDebug|messages|conversation/u
+        );
+        state.close();
+        const cancelling = (await (
+            await fetch(pendingUrl, {
+                headers: {
+                    cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${currentOperator.sessionId}`,
+                },
+            })
+        ).json()) as {
+            cancellationRequestedAt: number;
+            status: string;
+            occupied: boolean;
+        };
+        assert.equal(cancelling.status, 'cancelling');
+        assert.equal(typeof cancelling.cancellationRequestedAt, 'number');
+        assert.equal(cancelling.occupied, true);
+        t.mock.timers.tick(5000);
+        const stalledResponse = await fetch(pendingUrl, {
+            headers: {
+                cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${currentOperator.sessionId}`,
+            },
+        });
+        assert.equal(stalledResponse.status, 200);
+        const stalled = (await stalledResponse.json()) as {
+            status: string;
+            occupied: boolean;
+            ageMs: number;
+            cancellationDeadlineAt: number;
+            degradedReason: string;
+        };
+        assert.equal(stalled.status, 'degraded');
+        assert.equal(stalled.occupied, true);
+        assert.equal(stalled.ageMs, 5000);
+        assert.equal(stalled.cancellationDeadlineAt, 6000);
+        assert.equal(stalled.degradedReason, 'cancellation_unconfirmed');
+        assert.equal(stalledResponse.headers.get('Cache-Control'), 'no-store');
+    } finally {
+        state.close();
+        settle({ responseId: 'settled-private-run' });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        t.mock.timers.reset();
+    }
     assert.equal(
         logs.some((entry) => 'workflow' in entry),
         false

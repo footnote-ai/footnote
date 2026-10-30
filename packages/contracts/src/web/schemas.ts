@@ -377,7 +377,7 @@ const TraceFinalizationReasonCodeSchema = z.enum([
     'assess_trace_misalignment',
 ]);
 const ExecutionStatusSchema = z.enum(WORKFLOW_STEP_STATUSES);
-const ExecutionReasonCodeSchema = z.enum([
+export const ExecutionReasonCodeSchema = z.enum([
     'planner_runtime_error',
     'planner_invalid_output',
     'evaluator_runtime_error',
@@ -1563,6 +1563,7 @@ const WorkflowRecordSchema = z
         cacheSummary: z.array(PromptCacheSummarySchema).optional(),
         runId: z.string().min(1).optional(),
         sessionCorrelationId: z.string().min(1).max(64).optional(),
+        initiatingTurnId: z.string().min(1).max(64).optional(),
         runStatus: z
             .enum(['completed', 'degraded', 'limited', 'failed', 'rejected'])
             .optional(),

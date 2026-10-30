@@ -14,6 +14,7 @@ import {
 } from '@footnote/contracts';
 import { createLogger, format, transports } from 'winston';
 import { runtimeConfig } from '../config.js';
+import { realtimeWorkflowScope } from '../services/realtimeWorkflowScope.js';
 
 const { combine, timestamp, printf, colorize } = format;
 const splatSymbol = Symbol.for('splat');
@@ -77,6 +78,8 @@ export function sanitizeLogData<T>(
 
 // --- Winston formatters ---
 const sanitizeFormat = format((info) => {
+    // Voice Workflow diagnostics use the content-free operator projection, never free-form logs.
+    if (realtimeWorkflowScope() !== undefined) return false;
     // Clean the main message field (string or structured).
     info.message = sanitizeLogData(info.message);
 

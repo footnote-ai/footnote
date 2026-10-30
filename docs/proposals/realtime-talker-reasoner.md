@@ -1,6 +1,6 @@
 # Realtime conversation with background reasoning
 
-Status: first call-state slice implemented with synthetic events; remaining design proposed. Updated 2026-10-29.
+Status: call state and bounded background Workflow execution implemented with synthetic events; final-result approval, speech and live wiring remain proposed. Updated 2026-10-29.
 Primary owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
 Conversation continuity and retention remain governed by
 [#559](https://github.com/footnote-ai/footnote/issues/559).
@@ -21,7 +21,9 @@ The [alignment tracker](../status/realtime-voice-alignment.md) records what exis
 everything below describes proposed behavior unless explicitly identified as current.
 The first slice now has a backend-local state boundary and synthetic tests; see
 the [implemented foundation](../status/realtime-voice-alignment.md#synthetic-call-state-foundation).
-It does not connect provider events, start Runs, or deliver speech.
+The next slice now starts bounded background Runs through the existing orchestrator;
+see [implemented Workflow admission and capacity](#implemented-workflow-admission-and-capacity).
+Neither slice connects live provider events or delivers speech.
 
 The intended Talker is a lightweight conversational model: it listens and speaks
 naturally, manages turn-taking and interruptions, and maintains attention while
@@ -133,6 +135,61 @@ flowchart TD
 The workflow remains the Reasoner; no extra reasoning agent wraps it. Existing
 Context Integrations and `buildModelInput` retain retrieval scope, advisory
 evidence roles, source reporting, and backend-owned prompt ordering.
+
+## Implemented Workflow admission and capacity
+
+The synthetic backend boundary now uses `RealtimeConversationState.startExecution`
+and `chatOrchestrator.runRealtimeConversation`. The latter supplies the accepted
+conversation projection directly to the existing `runChat` service, including
+its normal planner, policy, Workflow and Context Integration setup. It does not
+call a public HTTP endpoint, install another Reasoner or add a conversation coordinator.
+
+Settled decisions for this slice:
+
+- Voice execution permits text answering plus the explicit read-only allowlist
+  `weather_forecast` and `web_search`. The execution continuation denies other
+  terminal actions. Context executor selection denies other integration names
+  before either registry or fallback execution. Provider-native search is denied
+  at the provider boundary, including search hinted by retrieved evidence.
+- A backend-only async scope prevents voice work from inheriting text persistence.
+  It injects no account memories, attachments, text session identity or private
+  retrieval scope. Storage allowlists execution identity/status, timing, usage,
+  cost, limits and validated machine decisions. Free-text summaries and review
+  rationale are withheld; fixed placeholders preserve canonical schema validity.
+  Citations, queries, drafts, candidates, debug bodies and publication tokens are
+  excluded. Free-form logs and model debug capture are suppressed within voice
+  work. No transcript-derived hash is retained.
+- The call retains completion identity/disposition only, with no answer body or
+  delivery slot. Freshness is not approval, and completion cannot authorize speech.
+  Approval and controlled result delivery remain the next separate slices.
+- The sole capacity reservation belongs to the backend process, outside call
+  instances. Admission is synchronous; invocation and settlement are asynchronous.
+  Duplicates and occupied slots are rejected without queuing replacement work.
+  The canonical Run ID binds when the existing Workflow creates it; the response
+  ID binds when metadata is assembled. Private initiating-turn correlation never
+  becomes a text message ID or public Trace field.
+- The execution deadline is **60 seconds**, with an independent **5-second
+  cancellation watchdog**. Cancellation is a request, not stop evidence. Both
+  deadline paths revoke completion eligibility and leave the slot occupied and
+  observably degraded if work has not settled. New reasoning requests are rejected
+  while call-state listening/control events remain usable. Only settlement releases
+  capacity and clears its timers; there is no force-release or confirmed-stop API.
+- `/api/admin/executions/realtime-pending` uses the existing account/admin
+  authorization to expose metadata-only age, deadlines, cancellation, occupancy,
+  degradation reason and available Run identity. Final records retain their normal
+  response-ID lookup. No early response ID or fabricated terminal Run status is used.
+
+The Workflow also restores its original AbortSignal after reading serialized plan
+Results: a signal is runtime authority, not serializable plan data. Tests cover
+real cancellation propagation and preserve failure Attempts without a provider retry.
+
+This is process-local and remains disconnected from live provider events.
+Crash/restart recovery and cross-process capacity ownership must be settled before
+live wiring; reconnect protection here applies to the same backend process.
+Restarting still does not prove remote work or billing stopped. Durable scheduling,
+operator force-release, transcript continuity and provider evaluation are outside
+this slice. The [tracker](../status/realtime-voice-alignment.md#synthetic-workflow-execution)
+lists synthetic and disposable-storage evidence.
 
 ## Result and delivery rules
 
@@ -339,8 +396,9 @@ only capabilities actually required by the selected experiment.
 
 ## Small follow-up sequence
 
-Each row is an independently reviewable slice after design approval. These are
-proposed child scopes, not newly created issues or duplicate umbrellas.
+Each row is an independently reviewable slice. The first two now have synthetic
+implementation, with result retention/approval deferred to slice 3. The remaining
+rows are proposed child scopes, not newly created issues or duplicate umbrellas.
 
 | Order / owner                                                                                              | Scope                                                                                                                                                                                                                               | Acceptance evidence                                                                                                                                                                                                                                                                                |
 | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

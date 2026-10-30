@@ -95,6 +95,24 @@ export type ExecutionReportResponse = {
     modelDebugCaptures: ExecutionReportDebugCapture[];
 };
 
+/** Process-local voice capacity, independent of call content and final response identity. */
+export type RealtimeExecutionInspection =
+    | { occupied: false }
+    | {
+          occupied: true;
+          sessionCorrelationId: string;
+          turnId: string;
+          runId?: string;
+          startedAt: number;
+          ageMs: number;
+          deadlineAt: number;
+          cancellationRequestedAt?: number;
+          cancellationDeadlineAt?: number;
+          status: 'pending' | 'cancelling' | 'degraded';
+          degradedReason?:
+              'cancellation_unconfirmed' | 'execution_deadline_exceeded';
+      };
+
 /**
  * Review lifecycle used by operators while investigating one report.
  */

@@ -6,6 +6,15 @@
  * @footnote-ethics: high - This is the canonical action-selection boundary for user-facing chat behavior.
  */
 import { applyPromptCaching } from './workflowEngine/promptCaching.js';
+import {
+    realtimeWorkflowScope,
+    withRealtimeWorkflowScope,
+    type RealtimeWorkflowScope,
+} from './realtimeWorkflowScope.js';
+import type {
+    RealtimeConversationSnapshot,
+    RealtimeWorkflowRunner,
+} from './realtimeConversationState.js';
 import type {
     ChatAssistantIdentity,
     PostChatRequest,
@@ -217,8 +226,31 @@ export const createChatOrchestrator = ({
     internalImageDescriptionTaskService,
     alertRouter,
 }: CreateChatOrchestratorOptions) => {
-    const generationRuntime =
-        createModelDebugCapturingRuntime(rawGenerationRuntime);
+    const generationRuntime = createModelDebugCapturingRuntime({
+        kind: rawGenerationRuntime.kind,
+        ...(rawGenerationRuntime.resolveCapabilityFacts === undefined
+            ? {}
+            : {
+                  resolveCapabilityFacts:
+                      rawGenerationRuntime.resolveCapabilityFacts.bind(
+                          rawGenerationRuntime
+                      ),
+              }),
+        generate: (request) => {
+            if (realtimeWorkflowScope() === undefined)
+                return rawGenerationRuntime.generate(request);
+            // Only backend Context Integrations may retrieve during voice execution.
+            const bounded = { ...request };
+            delete bounded.search;
+            delete bounded.userId;
+            if (bounded.capabilities !== undefined)
+                bounded.capabilities = {
+                    ...bounded.capabilities,
+                    canUseSearch: false,
+                };
+            return rawGenerationRuntime.generate(bounded);
+        },
+    });
     const chatOrchestratorLogger =
         typeof logger.child === 'function'
             ? logger.child({ module: 'chatOrchestrator' })
@@ -846,6 +878,7 @@ export const createChatOrchestrator = ({
         context?: {
             advisoryUserMemories?: readonly string[];
             signal?: AbortSignal;
+            realtimeContext?: RealtimeConversationSnapshot['context'];
         }
     ): Promise<PostChatResponse> => {
         context?.signal?.throwIfAborted();
@@ -900,11 +933,23 @@ export const createChatOrchestrator = ({
         let normalizedRequest: PostChatRequest;
         let contextEnvelope: ConversationContextEnvelope;
         try {
-            const normalized = normalizeRequest(
-                request,
-                chatOrchestratorLogger,
-                outputBoundaryOptions
-            );
+            const normalized =
+                context?.realtimeContext === undefined
+                    ? normalizeRequest(
+                          request,
+                          chatOrchestratorLogger,
+                          outputBoundaryOptions
+                      )
+                    : {
+                          normalizedConversation:
+                              context.realtimeContext.messages,
+                          normalizedRequest: {
+                              ...request,
+                              conversation: context.realtimeContext.messages,
+                          },
+                          contextEnvelope:
+                              context.realtimeContext.contextEnvelope,
+                      };
             normalizedConversation = normalized.normalizedConversation;
             normalizedRequest = normalized.normalizedRequest;
             contextEnvelope = normalized.contextEnvelope;
@@ -1510,10 +1555,21 @@ export const createChatOrchestrator = ({
                         plannerApplication.selectedCapabilityProfile,
                 }),
             };
-            const plannerActionOutcome = classifyPlanContinuation({
-                executionPlan,
-                normalizedRequest,
-            });
+            const voiceScope = realtimeWorkflowScope();
+            const actionDenied =
+                voiceScope !== undefined &&
+                (executionPlan.action !== 'message' ||
+                    executionPlan.modality !== 'text');
+            if (actionDenied) voiceScope.actionRejected = true;
+            const plannerActionOutcome = actionDenied
+                ? {
+                      kind: 'terminal_action' as const,
+                      terminalAction: { responseAction: 'ignore' as const },
+                  }
+                : classifyPlanContinuation({
+                      executionPlan,
+                      normalizedRequest,
+                  });
             if (plannerActionOutcome.kind === 'terminal_action') {
                 if (plannerActionOutcome.fallbackReason !== undefined) {
                     fallbackReasons.push(plannerActionOutcome.fallbackReason);
@@ -2075,7 +2131,53 @@ export const createChatOrchestrator = ({
         };
     };
 
+    /** Runs the existing Workflow over the accepted ephemeral projection, returning identity only. */
+    const runRealtimeConversation: RealtimeWorkflowRunner['runRealtimeConversation'] =
+        async (snapshot, context) => {
+            if (snapshot.intent?.status !== 'pending')
+                throw new Error('Realtime intent is unavailable.');
+            const turnIndex = snapshot.context.contextEnvelope.turns.findIndex(
+                (turn) => turn.turnId === snapshot.intent?.turnId
+            );
+            const latestUserInput =
+                snapshot.context.messages[turnIndex]?.content;
+            if (latestUserInput === undefined)
+                throw new Error('Realtime initiating turn is unavailable.');
+            const voice: RealtimeWorkflowScope = {
+                sessionCorrelationId: snapshot.sessionCorrelationId,
+                turnId: snapshot.intent.turnId,
+                onRunStarted: context.onRunStarted,
+            };
+            return withRealtimeWorkflowScope(voice, async () => {
+                await runChat(
+                    {
+                        surface: 'discord',
+                        trigger: { kind: 'direct' },
+                        botPersonaId: runtimeConfig.profile.id,
+                        latestUserInput,
+                        conversation: snapshot.context.messages,
+                        // Surface capabilities are hints; the execution gate independently denies non-answer actions.
+                        capabilities: {
+                            canReact: true,
+                            canGenerateImages: true,
+                            canUseTts: true,
+                        },
+                    },
+                    {
+                        signal: context.signal,
+                        realtimeContext: snapshot.context,
+                    }
+                );
+                return {
+                    ...voice.recorded,
+                    ...(voice.actionRejected
+                        ? { status: 'rejected' as const }
+                        : {}),
+                };
+            });
+        };
     return {
         runChat,
+        runRealtimeConversation,
     };
 };

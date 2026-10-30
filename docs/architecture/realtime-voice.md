@@ -195,7 +195,11 @@ ownership relative to ordinary chat.
 
 The proposed [conversation with background reasoning](../proposals/realtime-talker-reasoner.md)
 reuses the existing Workflow and conversation projection boundaries. It is a
-proposal under #558. A backend-local, synthetic call-state foundation now reuses
-conversation projection; it is not connected to provider events or Workflow Runs.
-The tracker describes its limits. Cross-surface
+proposal under #558. Backend-local call state and background Workflow execution
+now have synthetic implementation, using the existing orchestrator with enforced
+answer/read-only scope and content-free execution records. They remain disconnected
+from live provider events, approval and speech delivery. A process-owned reservation
+survives call teardown; its 60-second deadline and 5-second cancellation watchdog
+make unresolved work observably degraded without releasing capacity.
+The tracker describes process-local and deployment-recovery limits. Cross-surface
 continuity, consent, and retention remain under #559.

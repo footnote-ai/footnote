@@ -7,6 +7,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { InternalVoiceParticipant } from '@footnote/contracts/voice';
+import type { RealtimeExecutionInspection } from '@footnote/contracts/web';
 import type {
     ConversationContextEnvelope,
     ConversationContextServiceOutput,
@@ -17,6 +18,8 @@ const MAX_CONTEXT_TURNS = 12;
 const MAX_CONTEXT_BYTES = 16 * 1024;
 const MAX_AUDIENCE_PARTICIPANTS = 32;
 const MAX_PARTICIPANT_FIELD_LENGTH = 128;
+const EXECUTION_DEADLINE_MS = 60_000;
+const CANCELLATION_WATCHDOG_MS = 5000;
 const INTENT_ACTIONS = new Set<RealtimeIntentAction>([
     'question',
     'supersede',
@@ -56,6 +59,77 @@ export type RealtimeConversationSnapshot = {
     revision: number;
     intent: { status: RealtimeIntentStatus; turnId: string } | null;
     context: ConversationContextServiceOutput;
+};
+
+export type RealtimeWorkflowResult = {
+    responseId?: string;
+    runId?: string;
+    status?: 'completed' | 'degraded' | 'failed' | 'rejected';
+};
+
+/** Internal backend service seam; results carry identity only, never speech authority. */
+export type RealtimeWorkflowRunner = {
+    runRealtimeConversation: (
+        snapshot: RealtimeConversationSnapshot,
+        context: { signal: AbortSignal; onRunStarted: (runId: string) => void }
+    ) => Promise<RealtimeWorkflowResult>;
+};
+
+type ExecutionReservation = {
+    owner: string;
+    revision: number;
+    sessionCorrelationId: string;
+    turnId: string;
+    controller: AbortController;
+    startedAt: number;
+    runId?: string;
+    cancellationRequestedAt?: number;
+    degradedReason?: 'cancellation_unconfirmed' | 'execution_deadline_exceeded';
+    cancellationWatchdog?: ReturnType<typeof setTimeout>;
+    deadlineWatchdog?: ReturnType<typeof setTimeout>;
+};
+
+// Capacity belongs to the backend process, so a new call cannot replace unresolved work.
+let executionReservation: ExecutionReservation | undefined;
+
+const requestExecutionCancellation = (
+    reservation: ExecutionReservation
+): void => {
+    if (reservation.cancellationRequestedAt !== undefined) return;
+    reservation.cancellationRequestedAt = Date.now();
+    reservation.controller.abort();
+    reservation.cancellationWatchdog = setTimeout(() => {
+        reservation.degradedReason ??= 'cancellation_unconfirmed';
+    }, CANCELLATION_WATCHDOG_MS);
+    reservation.cancellationWatchdog.unref?.();
+};
+
+/** Content-free, process-wide inspection; caller authentication belongs to the operator handler. */
+export const inspectRealtimeExecution = (): RealtimeExecutionInspection => {
+    const reservation = executionReservation;
+    return reservation === undefined
+        ? { occupied: false as const }
+        : {
+              occupied: true as const,
+              sessionCorrelationId: reservation.sessionCorrelationId,
+              turnId: reservation.turnId,
+              runId: reservation.runId,
+              status: reservation.degradedReason
+                  ? ('degraded' as const)
+                  : reservation.cancellationRequestedAt !== undefined
+                    ? ('cancelling' as const)
+                    : ('pending' as const),
+              cancellationRequestedAt: reservation.cancellationRequestedAt,
+              cancellationDeadlineAt:
+                  reservation.cancellationRequestedAt === undefined
+                      ? undefined
+                      : reservation.cancellationRequestedAt +
+                        CANCELLATION_WATCHDOG_MS,
+              degradedReason: reservation.degradedReason,
+              ageMs: Math.max(0, Date.now() - reservation.startedAt),
+              startedAt: reservation.startedAt,
+              deadlineAt: reservation.startedAt + EXECUTION_DEADLINE_MS,
+          };
 };
 
 export type FinalizedRealtimeTurn = {
@@ -109,6 +183,8 @@ export class RealtimeConversationState {
     private revision = 0;
     private intent: RealtimeConversationSnapshot['intent'] = null;
     private closed = false;
+    private lastStartedRevision: number | undefined;
+    private completed: RealtimeWorkflowResult | undefined;
 
     constructor(private readonly sessionCorrelationId: string) {
         this.sessionCorrelationId = requireBoundedText(
@@ -161,6 +237,7 @@ export class RealtimeConversationState {
             [...this.audience].sort((a, b) => a.id.localeCompare(b.id))
         );
         if (before !== after) {
+            this.cancelExecution();
             this.audience = next;
             this.turns = [];
             this.contextBytes = 0;
@@ -233,9 +310,117 @@ export class RealtimeConversationState {
         };
     }
 
+    /** Reserves capacity synchronously and detaches Workflow completion from conversational events. */
+    startExecution(runner: RealtimeWorkflowRunner):
+        | { accepted: true }
+        | {
+              accepted: false;
+              reason:
+                  'duplicate' | 'occupied' | 'degraded' | 'intent_unavailable';
+          } {
+        if (executionReservation?.degradedReason !== undefined)
+            return { accepted: false, reason: 'degraded' };
+        if (this.lastStartedRevision === this.revision)
+            return { accepted: false, reason: 'duplicate' };
+        if (executionReservation !== undefined)
+            return { accepted: false, reason: 'occupied' };
+        if (
+            this.closed ||
+            !this.hasConsentingAudience() ||
+            this.intent?.status !== 'pending' ||
+            !this.turns.some((turn) => turn.turnId === this.intent?.turnId)
+        )
+            return { accepted: false, reason: 'intent_unavailable' };
+        let snapshot: RealtimeConversationSnapshot | undefined =
+            this.snapshot();
+        const reservation: ExecutionReservation = {
+            owner: this.instanceId,
+            revision: this.revision,
+            sessionCorrelationId: this.sessionCorrelationId,
+            turnId: this.intent.turnId,
+            controller: new AbortController(),
+            startedAt: Date.now(),
+        };
+        executionReservation = reservation;
+        reservation.deadlineWatchdog = setTimeout(() => {
+            reservation.degradedReason = 'execution_deadline_exceeded';
+            requestExecutionCancellation(reservation);
+        }, EXECUTION_DEADLINE_MS);
+        reservation.deadlineWatchdog.unref?.();
+        this.lastStartedRevision = this.revision;
+        this.completed = undefined;
+        void Promise.resolve()
+            .then(() => {
+                const accepted = snapshot;
+                snapshot = undefined;
+                reservation.controller.signal.throwIfAborted();
+                if (accepted === undefined)
+                    throw new Error(
+                        'Realtime execution snapshot is unavailable.'
+                    );
+                return runner.runRealtimeConversation(accepted, {
+                    signal: reservation.controller.signal,
+                    onRunStarted: (runId) => {
+                        reservation.runId = runId;
+                    },
+                });
+            })
+            .then(
+                (result) => {
+                    if (
+                        !this.closed &&
+                        this.revision === reservation.revision &&
+                        !reservation.controller.signal.aborted &&
+                        Date.now() <
+                            reservation.startedAt + EXECUTION_DEADLINE_MS
+                    )
+                        this.completed = {
+                            responseId: result.responseId,
+                            runId: result.runId,
+                            status: result.status ?? 'completed',
+                        };
+                },
+                () => {
+                    if (
+                        !this.closed &&
+                        this.revision === reservation.revision &&
+                        !reservation.controller.signal.aborted
+                    )
+                        this.completed = {
+                            status: 'failed',
+                            runId: reservation.runId,
+                        };
+                }
+            )
+            .finally(() => {
+                clearTimeout(reservation.cancellationWatchdog);
+                clearTimeout(reservation.deadlineWatchdog);
+                if (executionReservation === reservation)
+                    executionReservation = undefined;
+            });
+        return { accepted: true };
+    }
+
+    executionStatus(): ReturnType<typeof inspectRealtimeExecution> {
+        return inspectRealtimeExecution();
+    }
+
+    /** Identity and disposition only: completion never grants permission to speak. */
+    completedExecution(): RealtimeWorkflowResult | undefined {
+        return this.completed ? { ...this.completed } : undefined;
+    }
+
+    /** Requests a stop; only settlement releases the independent capacity reservation. */
+    private cancelExecution(): void {
+        if (executionReservation?.owner === this.instanceId)
+            requestExecutionCancellation(executionReservation);
+        this.completed = undefined;
+    }
+
     /** Idempotently revokes handles and clears all ephemeral call content. */
     close(): void {
         if (this.closed) return;
+        this.cancelExecution();
         this.closed = true;
         this.revision += 1;
         this.audience = [];
@@ -324,9 +509,11 @@ export class RealtimeConversationState {
         turnId: string
     ): void {
         if (action === 'question' || action === 'supersede') {
+            this.cancelExecution();
             this.revision += 1;
             this.intent = { status: 'pending', turnId };
         } else if (action === 'cancel' && this.intent) {
+            this.cancelExecution();
             this.revision += 1;
             this.intent = { ...this.intent, status: 'cancelled' };
         } else if (
@@ -348,6 +535,7 @@ export class RealtimeConversationState {
     }
 
     private invalidateAudience(): void {
+        this.cancelExecution();
         this.audience = [];
         this.turns = [];
         this.contextBytes = 0;

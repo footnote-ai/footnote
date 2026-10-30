@@ -7,6 +7,10 @@
  * @footnote-ethics: high - This workflow owns the AI response and provenance metadata users rely on.
  */
 import { applyPromptCaching } from './workflowEngine/promptCaching.js';
+import {
+    realtimeWorkflowScope,
+    storeRealtimeWorkflowMetadata,
+} from './realtimeWorkflowScope.js';
 import { randomBytes } from 'node:crypto';
 import type {
     GenerationResult,
@@ -2162,6 +2166,14 @@ export const createChatService = ({
         };
         const generationPhase = await executeGenerationPhase();
         if (generationPhase.kind === 'result') {
+            if (
+                realtimeWorkflowScope() !== undefined &&
+                generationPhase.result.kind === 'message'
+            )
+                await storeRealtimeWorkflowMetadata(
+                    generationPhase.result.metadata,
+                    storeTrace
+                );
             return generationPhase.result;
         }
         const generationResult = normalizeGenerationResultEvidence(
@@ -2729,7 +2741,13 @@ export const createChatService = ({
         // to the browser. Storage failure hides the share control but does not
         // block delivery of the answer.
         let availablePublicationToken: string | undefined;
-        if (publicationSource !== undefined) {
+        const voiceScope = realtimeWorkflowScope();
+        if (voiceScope !== undefined) {
+            await storeRealtimeWorkflowMetadata(
+                metadataWithTrustGraph,
+                storeTrace
+            );
+        } else if (publicationSource !== undefined) {
             try {
                 await storeTrace(
                     metadataWithTrustGraph,
