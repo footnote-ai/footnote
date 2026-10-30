@@ -1200,6 +1200,8 @@ export type WorkflowRecord = {
     runId?: string;
     /** Opaque correlation for Runs produced within one live voice session; not cross-surface conversation identity. */
     sessionCorrelationId?: string;
+    /** Private initiating voice turn; not a text-chat message or public Trace identity. */
+    initiatingTurnId?: string;
     runStatus?: 'completed' | 'degraded' | 'limited' | 'failed' | 'rejected';
     /**
      * Backend-observed Run wall-clock bounds. `durationMs` is derived as

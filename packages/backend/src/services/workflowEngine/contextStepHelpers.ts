@@ -12,6 +12,7 @@ import type {
     ContextStepExecutor,
 } from '../workflowCore/reviewedChatWorkflow.js';
 import type { GenerationRequest } from '@footnote/agent-runtime';
+import { realtimeWorkflowScope } from '../realtimeWorkflowScope.js';
 
 type FollowUpSearchHint = {
     query: string;
@@ -30,6 +31,13 @@ export const selectContextStepExecutor = (
     contextStepExecutor: ContextStepExecutor | undefined,
     contextStepExecutorRegistry: Record<string, ContextStepExecutor> | undefined
 ): ContextStepExecutor | undefined => {
+    // Voice admission is enforced before selecting either registry or fallback executors.
+    if (
+        realtimeWorkflowScope() !== undefined &&
+        request.integrationName !== 'weather_forecast' &&
+        request.integrationName !== 'web_search'
+    )
+        return undefined;
     const hasRegistryExecutor =
         contextStepExecutorRegistry !== undefined &&
         Object.prototype.hasOwnProperty.call(
@@ -61,7 +69,10 @@ export const selectFollowUpSearchHint = (input: {
           contextSize: 'low';
       }
     | undefined => {
-    if (!input.openAiNativeSearchFromHintsEnabled) {
+    if (
+        realtimeWorkflowScope() !== undefined ||
+        !input.openAiNativeSearchFromHintsEnabled
+    ) {
         return undefined;
     }
     if (input.effectiveGenerationRequest.provider !== 'openai') {

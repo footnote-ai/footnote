@@ -7,6 +7,7 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { realtimeWorkflowScope } from './realtimeWorkflowScope.js';
 import type {
     GenerationRequest,
     GenerationResult,
@@ -59,6 +60,7 @@ const attemptIdentity = new AsyncLocalStorage<AttemptIdentity>();
 
 /** Opt-in is set by the backend operator, never by an API request. */
 export const isModelDebugCaptureEnabled = (): boolean =>
+    realtimeWorkflowScope() === undefined &&
     process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO === 'true';
 
 export const withModelDebugCaptureSession = <T>(

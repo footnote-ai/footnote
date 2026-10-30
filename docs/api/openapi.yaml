@@ -1765,7 +1765,9 @@ paths:
             summary: Get a workflow execution report
             description: >-
                 Returns the workflow and bounded model debug material recorded for a response. Requires a signed-in
-                account with admin access. Setup and service tokens cannot use this endpoint.
+                account with admin access. Setup and service tokens cannot use this endpoint. The reserved responseId
+                realtime-pending returns process-owned Realtime capacity metadata, including available canonical Run
+                identity, without requiring a completed trace or exposing call content.
             tags:
                 - Admin
             security:
@@ -1782,7 +1784,9 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ExecutionReportResponse'
+                                oneOf:
+                                    - $ref: '#/components/schemas/ExecutionReportResponse'
+                                    - $ref: '#/components/schemas/RealtimeExecutionInspection'
                 '400':
                     $ref: '#/components/responses/BadRequest'
                 '401':
@@ -3732,6 +3736,11 @@ components:
                     description: >-
                         Private operator correlation for Runs from one live Realtime session; not cross-surface
                         conversation identity.
+                initiatingTurnId:
+                    type: string
+                    minLength: 1
+                    maxLength: 64
+                    description: 'Private initiating voice turn, omitted from public Trace.'
                 runStatus:
                     type: string
                     enum:
@@ -6669,6 +6678,61 @@ components:
                       - expiresAt
                       - csrfToken
                   additionalProperties: false
+        RealtimeExecutionInspection:
+            description: 'Metadata-only process-local voice capacity; settlement, not call teardown, releases a reservation.'
+            oneOf:
+                - type: object
+                  properties:
+                      occupied:
+                          const: false
+                  required:
+                      - occupied
+                  additionalProperties: false
+                - type: object
+                  properties:
+                      occupied:
+                          const: true
+                      sessionCorrelationId:
+                          type: string
+                      turnId:
+                          type: string
+                      runId:
+                          type: string
+                          description: 'Canonical Workflow identity, omitted until the Workflow actually starts.'
+                      startedAt:
+                          type: integer
+                      ageMs:
+                          type: integer
+                          minimum: 0
+                      deadlineAt:
+                          type: integer
+                      cancellationRequestedAt:
+                          type: integer
+                      cancellationDeadlineAt:
+                          type: integer
+                      status:
+                          type: string
+                          enum:
+                              - pending
+                              - cancelling
+                              - degraded
+                      degradedReason:
+                          type: string
+                          enum:
+                              - cancellation_unconfirmed
+                              - execution_deadline_exceeded
+                  required:
+                      - occupied
+                      - sessionCorrelationId
+                      - turnId
+                      - startedAt
+                      - ageMs
+                      - deadlineAt
+                      - status
+                  additionalProperties: false
+            x-codeRefs:
+                - packages/contracts/src/web/types.ts#RealtimeExecutionInspection
+                - packages/backend/src/services/realtimeConversationState.ts#inspectRealtimeExecution
         ExecutionReportResponse:
             type: object
             properties:

@@ -14,6 +14,7 @@ import type { TraceStore } from '../storage/traces/traceStore.js';
 import { logger as defaultLogger } from '../utils/logger.js';
 import { readAccountSession } from './accountRequest.js';
 import { sendJson } from './chatResponses.js';
+import { inspectRealtimeExecution } from '../services/realtimeConversationState.js';
 
 type OperatorExecutionLogger = {
     info: (message: string, meta?: Record<string, unknown>) => void;
@@ -83,6 +84,12 @@ export const createOperatorExecutionHandler = ({
             actorHash: operator.actorHash,
             responseId,
         });
+        // This reserved selector inspects process-owned capacity without inventing an early response ID.
+        if (responseId === 'realtime-pending') {
+            sendJson(res, 200, inspectRealtimeExecution());
+            logRequest(req, res, 'operator realtime execution status');
+            return;
+        }
         if (!traceStore) {
             sendJson(res, 503, { error: 'Execution records unavailable' });
             logRequest(req, res, 'operator execution store-unavailable');

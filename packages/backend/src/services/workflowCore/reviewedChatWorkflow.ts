@@ -35,6 +35,7 @@ import type {
 } from '@footnote/contracts/policy';
 import type { ResponseCandidate } from '@footnote/contracts/web';
 import { logger } from '../../utils/logger.js';
+import { realtimeWorkflowScope } from '../realtimeWorkflowScope.js';
 import {
     combineBackendTextCostEstimates,
     type BackendTextCostEstimate,
@@ -1042,6 +1043,7 @@ export const runBoundedReviewWorkflow = async (
         ),
     };
     const workflowId = `wf_${generationStartedAtMs.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    realtimeWorkflowScope()?.onRunStarted(workflowId);
     const initialContextRequests = contextStepRequests ?? [];
     const hasPlannerStep =
         workflowPolicy.enablePlanning &&
@@ -1313,7 +1315,11 @@ export const runBoundedReviewWorkflow = async (
         const continuation = readContinuePlanContinuation(
             baseContinuation(resultValues)
         );
-        const request = continuation?.generationRequest ?? generationRequest;
+        // AbortSignal is runtime authority and cannot survive a serializable plan Result.
+        const request = {
+            ...(continuation?.generationRequest ?? generationRequest),
+            signal: generationRequest.signal,
+        };
         const messages = continuation?.messagesWithHints ?? messagesWithHints;
         const envelope = continuation?.contextEnvelope ?? contextEnvelope;
         const evidence = readEvidenceEnvelope(resultValues.evidence);
@@ -1931,6 +1937,12 @@ export const runBoundedReviewWorkflow = async (
                 signals: clarification
                     ? {
                           clarification: true,
+                          clarificationOptionCount:
+                              clarificationResult?.outcome ===
+                              'needs_clarification'
+                                  ? clarificationResult.clarification.options
+                                        .length
+                                  : 0,
                           clarificationReasonCode:
                               clarificationResult?.outcome ===
                               'needs_clarification'

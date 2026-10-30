@@ -14,6 +14,7 @@ import {
 } from '../storage/traces/traceStore.js';
 import type { LangfuseMetadataMirror } from './langfuseMetadataMirrorExporter.js';
 import { logger } from '../utils/logger.js';
+import { realtimeWorkflowScope } from './realtimeWorkflowScope.js';
 
 let traceMetadataMirror: LangfuseMetadataMirror | null = null;
 
@@ -122,7 +123,10 @@ const storeTrace = async (
         logger.error(
             `Failed to store trace for response "${metadata.responseId}": ${error instanceof Error ? error.message : String(error)}`
         );
-        if (publicationSource !== undefined) {
+        if (
+            publicationSource !== undefined ||
+            realtimeWorkflowScope() !== undefined
+        ) {
             throw error;
         }
     }

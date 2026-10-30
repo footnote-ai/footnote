@@ -1620,6 +1620,11 @@ components:
                     minLength: 1
                     maxLength: 64
                     description: Private operator correlation for Runs from one live Realtime session; not cross-surface conversation identity.
+                initiatingTurnId:
+                    type: string
+                    minLength: 1
+                    maxLength: 64
+                    description: Private initiating voice turn, omitted from public Trace.
                 runStatus:
                     type: string
                     enum:
