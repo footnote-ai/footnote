@@ -73,7 +73,7 @@ export type RealtimeWorkflowResult = {
     finalResponse?: RealtimeFinalResponse;
 };
 
-/** Internal backend service seam; results carry identity only, never speech authority. */
+/** Internal backend service seam carrying canonical identity and final-response evidence for staging. */
 export type RealtimeWorkflowRunner = {
     runRealtimeConversation: (
         snapshot: RealtimeConversationSnapshot,
