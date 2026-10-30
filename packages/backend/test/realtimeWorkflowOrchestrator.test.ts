@@ -310,7 +310,7 @@ test('delivery waits for persistence and cannot survive a failed write or cancel
             });
             state.startExecution(orchestrator);
             await writing;
-            assert.equal(state.takeDelivery(turn.handle), undefined);
+            assert.equal(state.requestDelivery(turn.handle), undefined);
             if (outcome === 'cancelled')
                 state.appendFinalizedTurn({
                     role: 'user',
@@ -321,11 +321,14 @@ test('delivery waits for persistence and cannot survive a failed write or cancel
             if (outcome === 'failed') failWrite(new Error('write failed'));
             else finishWrite();
             await new Promise<void>((resolve) => setImmediate(resolve));
+            const request = state.requestDelivery(turn.handle);
             assert.equal(
-                state.takeDelivery(turn.handle)?.text,
+                request
+                    ? state.startDelivery(request.deliveryId)?.text
+                    : undefined,
                 outcome === 'written' ? 'Reviewed answer.' : undefined
             );
-            assert.equal(state.takeDelivery(turn.handle), undefined);
+            assert.equal(state.requestDelivery(turn.handle), undefined);
             if (outcome === 'failed')
                 assert.equal(state.completedExecution()?.status, 'failed');
             state.close();

@@ -1,6 +1,6 @@
 # Realtime conversation with background reasoning
 
-Status: call state, bounded background Workflow execution, final-response approval and one ephemeral delivery slot implemented with synthetic events; speech and live wiring remain proposed. Updated 2026-10-30.
+Status: call state, bounded background Workflow execution, final-response approval and a controlled delivery lifecycle implemented with synthetic events and playback reports; audio, conversational Talker and live wiring remain proposed. Updated 2026-10-30.
 Primary owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
 Conversation continuity and retention remain governed by
 [#559](https://github.com/footnote-ai/footnote/issues/559).
@@ -23,7 +23,8 @@ The first slice now has a backend-local state boundary and synthetic tests; see
 the [implemented foundation](../status/realtime-voice-alignment.md#synthetic-call-state-foundation).
 The next slice now starts bounded background Runs through the existing orchestrator;
 see [implemented Workflow admission and capacity](#implemented-workflow-admission-and-capacity).
-The third slice now checks the selected final response and stages approved text;
+The third slice now checks the selected final response and stages approved text,
+with separate request, handoff and adapter-reported playback transitions;
 see [implemented approval and staging](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only).
 None of these slices connects live provider events or delivers speech.
 
@@ -231,12 +232,24 @@ and actual Run outcome remain distinct. Unassessed fail-open text remains valid
 under text-chat policy but is withheld from voice. Whether to permit a particular
 fallback later is an unresolved policy decision, not implicit approval.
 
-The slot expires 30 seconds after staging and holds at most 16 KiB. Interruptions
+The slot holds at most 16 KiB. Its start deadline is 30 seconds after staging,
+including time spent requested or handed off without a start report. Requesting
+delivery returns no text; the backend rechecks scope and expiry before handing
+text off once at the intended playback boundary. Handoff does not report a start
+or completion. Ordered synthetic adapter reports record started, completed,
+interrupted or failed playback; completion requires a prior start report.
+Text is cleared at handoff, expiry or revocation. After a timely start report,
+only content-free evidence remains and playback may finish beyond that deadline.
+
+Interruptions
 and ambiguous speech now discard queued text and revoke late staging without
 aborting reasoning. Continuation does not revive that text; a new question is
 required. This is more conservative than the proposed hold-and-revalidate behavior
-below. Live safe-turn selection, playback cancellation and audible evidence are
-still proposed.
+below. Revocation preserves the last handoff's playback evidence: a start report
+without an end report remains an unconfirmed stop. Late reports may record what
+the adapter says happened, but cannot restore permission or replay the answer.
+Reports for a replaced or disconnected slot are ignored. Live safe-turn selection,
+local playback cancellation and evidence of audible delivery are still proposed.
 
 Recheck before enqueue, before playback, and after any interruption. Backend
 session events serialize state transitions; completion callbacks must compare
@@ -421,7 +434,8 @@ only capabilities actually required by the selected experiment.
 ## Small follow-up sequence
 
 Each row is an independently reviewable slice. The first three now have synthetic
-implementation through single-use staging; actual speech remains in slice 4. The remaining
+implementation through single-use handoff and controlled playback reports; actual
+speech remains in slice 4. The remaining
 rows are proposed child scopes, not newly created issues or duplicate umbrellas.
 
 | Order / owner                                                                                              | Scope                                                                                                                                                                                                                               | Acceptance evidence                                                                                                                                                                                                                                                                                |

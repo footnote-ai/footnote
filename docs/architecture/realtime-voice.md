@@ -198,8 +198,9 @@ reuses the existing Workflow and conversation projection boundaries. It is a
 proposal under #558. Backend-local call state and background Workflow execution
 now have synthetic implementation, using the existing orchestrator with enforced
 answer/read-only scope and content-free execution records. Final-response approval
-and one ephemeral delivery slot are also implemented; live provider events and
-speech delivery remain disconnected. A process-owned reservation
+and one ephemeral delivery slot with controlled playback reports are also
+implemented synthetically; live provider events and audio playback remain
+disconnected. A process-owned reservation
 survives call teardown; its 60-second deadline and 5-second cancellation watchdog
 make unresolved work observably degraded without releasing capacity.
 Voice admission fails closed unless the runtime guarantees no content retention;
@@ -244,25 +245,59 @@ unresolved; this implementation withholds it. Trace alignment describes metadata
 alignment, not a second content approval decision.
 
 `RealtimeConversationState` holds at most one answer, bounded to 16 KiB of UTF-8
-text and **30 seconds from staging**. It binds the initiating turn, intent revision,
-call instance, private session ID, audience IDs, Run, response, candidate and
-assessment/generation Steps. `completedExecution()` exposes only identity, Run
-status and disposition. `takeDelivery(handle)` rechecks current intent, instance,
-session, audience consent and expiry, then consumes the slot once. It is an
-internal backend seam, not a transport event or proof of audible playback.
+text. Its **30-second deadline runs from staging until a playback start is
+reported**, without restarting when delivery is requested. It binds the initiating
+turn, intent revision, call instance, private session ID, audience IDs, Run,
+response, candidate and assessment/generation Steps. `completedExecution()` still
+exposes only identity, execution status and review disposition.
 
-Interruptions and ambiguous user input discard the slot and revoke that
+The same slot now separates backend permission from adapter observations:
+
+| Operation                                               | Effect                                                                                                                       |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Workflow stages an eligible answer                      | `ready`; no playback reported                                                                                                |
+| `requestDelivery(handle)`                               | Rechecks session/instance, audience consent, intent and deadline; moves once to `requested`, returning metadata without text |
+| `startDelivery(deliveryId)`                             | Rechecks those conditions at the intended playback boundary; returns exact text once and moves to `handed_off`               |
+| `reportPlayback(deliveryId, 'started')`                 | Records the adapter's start report, not a grant of permission                                                                |
+| `reportPlayback(deliveryId, 'completed')`               | Records completion only after a start report; handoff alone cannot complete delivery                                         |
+| `reportPlayback(deliveryId, 'interrupted' or 'failed')` | Records an incomplete outcome after handoff, whether or not a start was reported                                             |
+
+`deliveryStatus()` returns a detached, content-free snapshot. Its `status` records
+authorization (`ready`, `requested`, `handed_off`, `revoked`, `expired`); `playback`
+separately records what the adapter reported. `handedOffAt` is backend time and
+`startReportedAt` is receipt time, not a reconstructed audio timestamp. This
+distinguishes no handoff, an unconfirmed start, and reported partial playback.
+Duplicate reports, completion before start, reports before handoff and callbacks
+for another delivery ID are rejected. Each new staged answer gets a fresh ID.
+
+Text is removed from the slot at handoff, revocation or expiry. Until start is
+reported, expiry remains active even after handoff. Every boundary checks the
+clock as well as the timer, so a delayed timer cannot authorize stale text.
+A timely start report clears that deadline: it is a start limit, not a maximum
+playback duration. Only content-free evidence remains while playback finishes.
+
+Interruptions and ambiguous user input discard text and revoke that
 execution's ability to stage later text, while reasoning may continue. An explicit
 continuation resumes intent but cannot restore revoked speech; a new question is
 needed. Corrections, cancellation, roster/consent changes and disconnect also
-discard the slot. Captured execution revisions and a delivery revocation counter
+discard text. Captured execution revisions and a delivery revocation counter
 prevent late callbacks from restoring it. Expiration clears the body and leaves
-the completed Run outcome intact. Cancellation remains a request until settlement;
-it does not prove remote work or billing stopped.
+the completed Run outcome intact. Revocation does not rewrite a playback start
+as a confirmed stop. Ordered late reports about the last handoff may still update
+playback evidence while its authorization remains revoked or expired; they never
+restore text or permit a retry. Closing clears the entire slot, and replacing it
+causes old callbacks to be ignored. Cancellation remains a request until settlement;
+it does not prove remote work, audio or billing stopped.
 
-Future playback code must take the answer at its safe delivery boundary and
-handle interruption after handoff; holding a returned object is not continuing
-authorization. No provider, Talker, audio generation, playback acknowledgement,
-durable delivery/replay, transcript retention, memory or public Trace extension
-is implemented here. The existing VoltAgent tracing restriction, process-local
-capacity and recovery gates remain in force.
+These operations are backend-local synthetic seams, not transport events. A
+future adapter must call `startDelivery` at a safe playback boundary, honor the
+deadline and subsequent revocation, stop queued/active audio when required, and
+report what happened. An adapter that retains handed-off text or reports late can
+already have played audio; backend revocation cannot undo it. Reports are not proof
+that a participant heard the answer, and no exactly-once audible playback is claimed.
+
+No provider, conversational Talker, audio generation/playback, durable replay,
+transcript retention, memory or public Trace extension is implemented. The
+VoltAgent tracing restriction, process-local capacity and recovery gates remain
+in force. Lost acknowledgements, safe speaking opportunities, adapter stop controls
+and provider capabilities must be resolved before live integration.

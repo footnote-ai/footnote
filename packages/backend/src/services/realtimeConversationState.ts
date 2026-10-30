@@ -85,10 +85,20 @@ export type RealtimeDelivery = Extract<
     RealtimeFinalResponse,
     { disposition: 'approved' }
 > & {
+    deliveryId: string;
     handle: RealtimeFreshnessHandle;
     turnId: string;
     audienceIds: string[];
     expiresAt: number;
+};
+
+/** Local authorization and adapter-reported playback are independent facts. */
+export type RealtimeDeliveryStatus = Omit<RealtimeDelivery, 'text'> & {
+    status: 'ready' | 'requested' | 'handed_off' | 'revoked' | 'expired';
+    playback:
+        'not_reported' | 'started' | 'completed' | 'interrupted' | 'failed';
+    handedOffAt?: number;
+    startReportedAt?: number;
 };
 
 type RealtimeCompletion = Omit<RealtimeWorkflowResult, 'finalResponse'> & {
@@ -204,7 +214,8 @@ export class RealtimeConversationState {
     private closed = false;
     private lastStartedRevision: number | undefined;
     private completed: RealtimeCompletion | undefined;
-    private delivery: RealtimeDelivery | undefined;
+    private delivery:
+        { inspection: RealtimeDeliveryStatus; text?: string } | undefined;
     private deliveryEpoch = 0;
     private deliveryExpiry: ReturnType<typeof setTimeout> | undefined;
 
@@ -424,17 +435,24 @@ export class RealtimeConversationState {
                             this.hasConsentingAudience() &&
                             deliveryEpoch === this.deliveryEpoch
                         ) {
+                            const { text, ...evidence } = answer;
                             this.delivery = {
-                                ...answer,
-                                handle: this.freshnessHandle(),
-                                turnId: reservation.turnId,
-                                audienceIds: this.audience.map(
-                                    (person) => person.id
-                                ),
-                                expiresAt: Date.now() + DELIVERY_TTL_MS,
+                                text,
+                                inspection: {
+                                    ...evidence,
+                                    deliveryId: randomUUID(),
+                                    handle: this.freshnessHandle(),
+                                    turnId: reservation.turnId,
+                                    audienceIds: this.audience.map(
+                                        (person) => person.id
+                                    ),
+                                    expiresAt: Date.now() + DELIVERY_TTL_MS,
+                                    status: 'ready',
+                                    playback: 'not_reported',
+                                },
                             };
                             this.deliveryExpiry = setTimeout(
-                                () => this.revokeDelivery(),
+                                () => this.revokeDelivery('expired'),
                                 DELIVERY_TTL_MS
                             );
                             this.deliveryExpiry.unref?.();
@@ -471,28 +489,116 @@ export class RealtimeConversationState {
         return this.completed ? { ...this.completed } : undefined;
     }
 
-    /** Consumes approved text at the backend delivery boundary; taking it does not prove playback. */
-    takeDelivery(
-        handle: RealtimeFreshnessHandle
-    ): RealtimeDelivery | undefined {
-        const delivery = this.delivery;
-        if (delivery && Date.now() >= delivery.expiresAt) this.revokeDelivery();
-        if (
-            !this.delivery ||
-            !this.isDeliveryFresh(handle) ||
-            !this.isDeliveryFresh(this.delivery.handle) ||
-            !this.hasConsentingAudience() ||
-            this.intent?.turnId !== this.delivery.turnId
-        )
-            return undefined;
-        this.revokeDelivery();
-        return delivery;
+    /** Content-free snapshot of the sole delivery; reports do not prove that anyone heard it. */
+    deliveryStatus(): RealtimeDeliveryStatus | undefined {
+        this.recheckDelivery();
+        const inspection = this.delivery?.inspection;
+        return inspection
+            ? {
+                  ...inspection,
+                  handle: { ...inspection.handle },
+                  audienceIds: [...inspection.audienceIds],
+              }
+            : undefined;
     }
 
-    private revokeDelivery(): void {
+    /** Reserves this ready answer once without handing text to an audio adapter. */
+    requestDelivery(
+        handle: RealtimeFreshnessHandle
+    ): RealtimeDeliveryStatus | undefined {
+        this.recheckDelivery();
+        if (
+            this.delivery?.inspection.status !== 'ready' ||
+            !this.isDeliveryFresh(handle) ||
+            !this.isDeliveryFresh(this.delivery.inspection.handle)
+        )
+            return undefined;
+        this.delivery.inspection.status = 'requested';
+        return this.deliveryStatus();
+    }
+
+    /** Rechecks authorization at the playback boundary and hands exact text off once. */
+    startDelivery(deliveryId: string): RealtimeDelivery | undefined {
+        this.recheckDelivery();
+        const delivery = this.delivery;
+        if (
+            !delivery ||
+            delivery.inspection.deliveryId !== deliveryId ||
+            delivery.inspection.status !== 'requested' ||
+            delivery.text === undefined
+        )
+            return undefined;
+        const text = delivery.text;
+        delete delivery.text;
+        delivery.inspection.status = 'handed_off';
+        delivery.inspection.handedOffAt = Date.now();
+        return {
+            ...delivery.inspection,
+            handle: { ...delivery.inspection.handle },
+            audienceIds: [...delivery.inspection.audienceIds],
+            text,
+        };
+    }
+
+    /** Accepts ordered observations for this handoff; reports never grant or restore permission. */
+    reportPlayback(
+        deliveryId: string,
+        event: Exclude<RealtimeDeliveryStatus['playback'], 'not_reported'>
+    ): boolean {
+        this.recheckDelivery();
+        const inspection = this.delivery?.inspection;
+        if (
+            !inspection ||
+            inspection.deliveryId !== deliveryId ||
+            inspection.handedOffAt === undefined
+        )
+            return false;
+        if (event === 'started') {
+            if (inspection.playback !== 'not_reported') return false;
+            inspection.startReportedAt = Date.now();
+        } else if (event === 'completed') {
+            if (inspection.playback !== 'started') return false;
+        } else if (event === 'interrupted' || event === 'failed') {
+            if (
+                inspection.playback !== 'not_reported' &&
+                inspection.playback !== 'started'
+            )
+                return false;
+        } else return false;
+        inspection.playback = event;
+        clearTimeout(this.deliveryExpiry);
+        return true;
+    }
+
+    private recheckDelivery(): void {
+        const inspection = this.delivery?.inspection;
+        if (
+            !inspection ||
+            inspection.status === 'revoked' ||
+            inspection.status === 'expired'
+        )
+            return;
+        if (
+            !this.isDeliveryFresh(inspection.handle) ||
+            !this.hasConsentingAudience() ||
+            this.intent?.turnId !== inspection.turnId
+        )
+            this.revokeDelivery();
+        else if (
+            inspection.playback === 'not_reported' &&
+            Date.now() >= inspection.expiresAt
+        )
+            this.revokeDelivery('expired');
+    }
+
+    private revokeDelivery(status: 'revoked' | 'expired' = 'revoked'): void {
         clearTimeout(this.deliveryExpiry);
         this.deliveryExpiry = undefined;
-        this.delivery = undefined;
+        if (this.delivery) {
+            delete this.delivery.text;
+            if (this.delivery.inspection.status !== 'expired')
+                this.delivery.inspection.status = status;
+        }
         this.deliveryEpoch += 1;
     }
 
@@ -508,6 +614,7 @@ export class RealtimeConversationState {
     close(): void {
         if (this.closed) return;
         this.cancelExecution();
+        this.delivery = undefined;
         this.closed = true;
         this.revision += 1;
         this.audience = [];

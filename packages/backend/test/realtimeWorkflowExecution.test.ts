@@ -51,6 +51,280 @@ const approved = (): RealtimeWorkflowResult => ({
     },
 });
 
+test('requesting and handing off an answer do not report audible completion', async () => {
+    const state = call();
+    state.startExecution({
+        runRealtimeConversation: async (_snapshot, context) => {
+            context.onRunStarted('run-one');
+            return approved();
+        },
+    });
+    await flush();
+    const ready = state.deliveryStatus();
+    assert.equal(ready?.status, 'ready');
+    assert.equal(ready?.playback, 'not_reported');
+    assert.doesNotMatch(JSON.stringify(ready), /PRIVATE ANSWER/);
+    assert.ok(ready);
+    const request = state.requestDelivery(ready.handle);
+    assert.equal(request?.status, 'requested');
+    assert.doesNotMatch(JSON.stringify(request), /PRIVATE ANSWER/);
+    assert.equal(state.requestDelivery(ready.handle), undefined);
+    const delivery = state.startDelivery(ready.deliveryId);
+    assert.equal(delivery?.text, 'PRIVATE ANSWER');
+    assert.equal(state.deliveryStatus()?.status, 'handed_off');
+    assert.equal(state.deliveryStatus()?.playback, 'not_reported');
+    assert.equal(state.startDelivery(ready.deliveryId), undefined);
+    assert.equal(state.reportPlayback(ready.deliveryId, 'completed'), false);
+    assert.equal(state.reportPlayback(ready.deliveryId, 'started'), true);
+    assert.equal(state.deliveryStatus()?.playback, 'started');
+    assert.equal(state.reportPlayback(ready.deliveryId, 'started'), false);
+    assert.equal(state.reportPlayback(ready.deliveryId, 'completed'), true);
+    assert.equal(state.reportPlayback(ready.deliveryId, 'completed'), false);
+    assert.equal(state.deliveryStatus()?.playback, 'completed');
+    assert.equal(state.completedExecution()?.status, 'completed');
+    assert.equal(state.completedExecution()?.reviewDisposition, 'approved');
+    state.close();
+});
+
+const readyAnswer = async () => {
+    const state = call();
+    state.startExecution({
+        runRealtimeConversation: async (_snapshot, context) => {
+            context.onRunStarted('run-one');
+            return approved();
+        },
+    });
+    await flush();
+    const ready = state.deliveryStatus();
+    assert.ok(ready);
+    return { state, ready };
+};
+
+test('expiration is rechecked without waiting for the timer, including after a pending handoff', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: 1000 });
+    for (const phase of ['ready', 'requested', 'handed_off'] as const) {
+        t.mock.timers.setTime(1000);
+        const { state, ready } = await readyAnswer();
+        if (phase !== 'ready') state.requestDelivery(ready.handle);
+        if (phase === 'handed_off') state.startDelivery(ready.deliveryId);
+        t.mock.timers.setTime(31_000);
+        assert.equal(state.requestDelivery(ready.handle), undefined, phase);
+        assert.equal(state.startDelivery(ready.deliveryId), undefined, phase);
+        assert.equal(state.deliveryStatus()?.status, 'expired');
+        assert.equal(state.deliveryStatus()?.playback, 'not_reported');
+        if (phase === 'handed_off') {
+            assert.equal(
+                state.reportPlayback(ready.deliveryId, 'started'),
+                true
+            );
+            assert.equal(state.deliveryStatus()?.status, 'expired');
+            assert.equal(state.deliveryStatus()?.playback, 'started');
+            assert.equal(state.startDelivery(ready.deliveryId), undefined);
+        }
+        state.close();
+    }
+});
+
+test('a controlled playback request that expires while waiting never receives text', async (t) => {
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+    const { state, ready } = await readyAnswer();
+    const release = deferred<void>();
+    const request = state.requestDelivery(ready.handle);
+    assert.ok(request);
+    const playback = release.promise.then(() =>
+        state.startDelivery(request.deliveryId)
+    );
+    t.mock.timers.tick(30_000);
+    release.resolve();
+    assert.equal(await playback, undefined);
+    assert.equal(state.deliveryStatus()?.status, 'expired');
+    assert.equal(state.deliveryStatus()?.playback, 'not_reported');
+    assert.equal(state.reportPlayback(request.deliveryId, 'started'), false);
+    state.close();
+});
+
+test('revocation before and during playback preserves observations without confirming a stop', async () => {
+    for (const event of [
+        'interrupt',
+        'cancel',
+        'supersede',
+        'audience',
+        'consent',
+        'disconnect',
+    ] as const) {
+        for (const phase of ['requested', 'handed_off', 'started'] as const) {
+            const { state, ready } = await readyAnswer();
+            state.requestDelivery(ready.handle);
+            if (phase !== 'requested') state.startDelivery(ready.deliveryId);
+            if (phase === 'started')
+                state.reportPlayback(ready.deliveryId, 'started');
+            if (event === 'disconnect') state.close();
+            else if (event === 'audience' || event === 'consent')
+                state.setAudience([
+                    {
+                        id: 'human',
+                        displayName: 'Human',
+                        processingConsent: event !== 'consent',
+                    },
+                    ...(event === 'audience'
+                        ? [
+                              {
+                                  id: 'other',
+                                  displayName: 'Other',
+                                  processingConsent: true,
+                              },
+                          ]
+                        : []),
+                ]);
+            else
+                state.appendFinalizedTurn({
+                    role: 'user',
+                    speakerId: 'human',
+                    content: 'Changed',
+                    intent: event,
+                });
+            assert.equal(state.startDelivery(ready.deliveryId), undefined);
+            assert.equal(state.requestDelivery(ready.handle), undefined);
+            if (event === 'disconnect') {
+                assert.equal(state.deliveryStatus(), undefined);
+                assert.equal(
+                    state.reportPlayback(ready.deliveryId, 'interrupted'),
+                    false
+                );
+            } else {
+                const revoked = state.deliveryStatus();
+                assert.equal(revoked?.status, 'revoked', `${event} ${phase}`);
+                assert.equal(
+                    revoked?.playback,
+                    phase === 'started' ? 'started' : 'not_reported'
+                );
+                assert.equal(
+                    revoked?.startReportedAt !== undefined,
+                    phase === 'started'
+                );
+                assert.equal(
+                    state.reportPlayback(ready.deliveryId, 'interrupted'),
+                    phase !== 'requested'
+                );
+                assert.equal(state.deliveryStatus()?.status, 'revoked');
+                assert.equal(
+                    state.reportPlayback(ready.deliveryId, 'started'),
+                    false
+                );
+                if (event === 'interrupt')
+                    state.appendFinalizedTurn({
+                        role: 'user',
+                        speakerId: 'human',
+                        content: 'Continue',
+                        intent: 'continue',
+                    });
+                assert.equal(state.requestDelivery(ready.handle), undefined);
+                assert.equal(state.startDelivery(ready.deliveryId), undefined);
+            }
+            state.close();
+        }
+    }
+});
+
+test('reported playback can finish after the start deadline without extending retained text', async (t) => {
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+    const { state, ready } = await readyAnswer();
+    state.requestDelivery(ready.handle);
+    t.mock.timers.tick(29_999);
+    assert.ok(state.startDelivery(ready.deliveryId));
+    assert.equal(state.reportPlayback(ready.deliveryId, 'started'), true);
+    t.mock.timers.tick(30_000);
+    assert.equal(state.deliveryStatus()?.status, 'handed_off');
+    assert.equal(state.reportPlayback(ready.deliveryId, 'completed'), true);
+    assert.equal(state.deliveryStatus()?.playback, 'completed');
+    assert.doesNotMatch(
+        JSON.stringify(state.deliveryStatus()),
+        /PRIVATE ANSWER/
+    );
+    assert.equal(state.startDelivery(ready.deliveryId), undefined);
+    state.close();
+});
+
+test('late completion reports cannot undo revocation or affect a later delivery', async () => {
+    const { state, ready } = await readyAnswer();
+    state.requestDelivery(ready.handle);
+    state.startDelivery(ready.deliveryId);
+    state.reportPlayback(ready.deliveryId, 'started');
+    const finished = deferred<void>();
+    const completion = finished.promise.then(() =>
+        state.reportPlayback(ready.deliveryId, 'completed')
+    );
+    state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'human',
+        content: 'Pause',
+        intent: 'interrupt',
+    });
+    assert.equal(state.deliveryStatus()?.playback, 'started');
+    finished.resolve();
+    assert.equal(await completion, true);
+    assert.equal(state.deliveryStatus()?.status, 'revoked');
+    assert.equal(state.deliveryStatus()?.playback, 'completed');
+    assert.equal(state.completedExecution()?.reviewDisposition, 'approved');
+    state.appendFinalizedTurn({
+        role: 'user',
+        speakerId: 'human',
+        content: 'New question',
+        intent: 'question',
+    });
+    state.startExecution({
+        runRealtimeConversation: async (_snapshot, context) => {
+            context.onRunStarted('run-one');
+            return approved();
+        },
+    });
+    await flush();
+    const next = state.deliveryStatus();
+    assert.ok(next);
+    assert.notEqual(next.deliveryId, ready.deliveryId);
+    assert.equal(state.reportPlayback(ready.deliveryId, 'started'), false);
+    assert.equal(state.reportPlayback(ready.deliveryId, 'completed'), false);
+    assert.equal(state.startDelivery(ready.deliveryId), undefined);
+    assert.equal(state.deliveryStatus()?.playback, 'not_reported');
+    assert.equal(state.deliveryStatus()?.status, 'ready');
+    state.close();
+});
+
+test('interrupted and failed reports distinguish an unconfirmed start from partial playback', async () => {
+    for (const event of ['interrupted', 'failed'] as const) {
+        for (const started of [false, true]) {
+            const { state, ready } = await readyAnswer();
+            assert.equal(state.reportPlayback(ready.deliveryId, event), false);
+            state.requestDelivery(ready.handle);
+            assert.equal(
+                state.reportPlayback(ready.deliveryId, 'started'),
+                false
+            );
+            assert.equal(state.startDelivery('unknown'), undefined);
+            state.startDelivery(ready.deliveryId);
+            if (started) state.reportPlayback(ready.deliveryId, 'started');
+            assert.equal(state.reportPlayback('unknown', event), false);
+            assert.equal(state.reportPlayback(ready.deliveryId, event), true);
+            assert.equal(state.deliveryStatus()?.playback, event);
+            assert.equal(
+                state.deliveryStatus()?.startReportedAt !== undefined,
+                started
+            );
+            assert.equal(state.reportPlayback(ready.deliveryId, event), false);
+            assert.equal(
+                state.reportPlayback(ready.deliveryId, 'started'),
+                false
+            );
+            assert.equal(
+                state.reportPlayback(ready.deliveryId, 'completed'),
+                false
+            );
+            assert.equal(state.startDelivery(ready.deliveryId), undefined);
+            state.close();
+        }
+    }
+});
+
 test('late completion cannot restore speech after interruption, cancellation, audience changes or disconnect', async () => {
     for (const event of [
         'interrupt',
@@ -122,12 +396,12 @@ test('late completion cannot restore speech after interruption, cancellation, au
                 await flush();
             }
             assert.equal(
-                state.takeDelivery(handle),
+                state.requestDelivery(handle),
                 undefined,
                 `${event} ${when}`
             );
             assert.equal(
-                state.takeDelivery({
+                state.requestDelivery({
                     ...handle,
                     revision: state.snapshot().revision,
                 }),
@@ -155,7 +429,7 @@ test('a staged answer expires at thirty seconds and the settled Run outcome is p
     });
     await flush();
     t.mock.timers.tick(30_000);
-    assert.equal(state.takeDelivery(handle), undefined);
+    assert.equal(state.requestDelivery(handle), undefined);
     assert.equal(state.completedExecution()?.status, 'completed');
     assert.equal(state.completedExecution()?.reviewDisposition, 'approved');
     state.close();
@@ -190,7 +464,7 @@ test('missing evidence, wrong canonical identity and a degraded outcome never st
             },
         });
         await flush();
-        assert.equal(state.takeDelivery(handle), undefined, change);
+        assert.equal(state.requestDelivery(handle), undefined, change);
         state.close();
     }
 });
@@ -228,14 +502,16 @@ test('a reviewed final answer occupies one ephemeral slot and can be taken only 
         /PRIVATE ANSWER/
     );
     assert.equal(
-        state.takeDelivery({ ...handle, sessionCorrelationId: 'other' }),
+        state.requestDelivery({ ...handle, sessionCorrelationId: 'other' }),
         undefined
     );
-    const delivery = state.takeDelivery(handle);
+    const request = state.requestDelivery(handle);
+    assert.ok(request);
+    const delivery = state.startDelivery(request.deliveryId);
     assert.equal(delivery?.text, 'PRIVATE ANSWER');
     assert.equal(delivery?.turnId, state.snapshot().intent?.turnId);
     assert.equal(delivery?.responseId, 'response-one');
-    assert.equal(state.takeDelivery(handle), undefined);
+    assert.equal(state.requestDelivery(handle), undefined);
     state.close();
 });
 
