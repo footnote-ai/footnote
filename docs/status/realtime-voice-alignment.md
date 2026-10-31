@@ -93,14 +93,22 @@ No live voice handler invokes this path yet.
 - Completion requires an explicit receipt with response and canonical Run IDs,
   issued only after storage succeeds. Missing receipts/status and storage failures
   fail closed for voice; ordinary text storage keeps its existing fail-open behavior.
-- Canonical Workflow execution is required even in `express` mode. The entry
-  rejects runtimes without an explicit `supportsEphemeralContent` guarantee
-  before any execution. Synthetic runtimes provide this guarantee in tests.
-  **Architectural blocker:** VoltAgent 2.11.0 automatically captures input/output
-  and messages in local/WebSocket tracing and exposes no supported per-call
-  opt-out. The production adapter remains unsupported. Missing credentials or
-  remote sampling do not establish privacy; verified adapter controls are required
-  before live wiring.
+- Canonical Workflow execution is required even in `express` mode. Voice now
+  reuses the configured runtime without an ephemeral-content capability gate.
+  An intercepted real VoltAgent/AI SDK OpenRouter test covers structured planning,
+  generation, assessment, exact approved selection, usage and SQLite receipts.
+  Voice canonical content exclusions hold with Footnote model debug opt-in enabled;
+  inherited capture sessions are bypassed. Provider free-text attribution is
+  bounded to configured catalog labels in canonical receipts, including failure
+  evidence and direct OpenAI planning; unrecognized labels are withheld.
+- VoltAgent 2.11.0 local capture is allowed under the revised self-hosted policy.
+  It is separate from Footnote's canonical store and opt-in model debug capture.
+  Configured diagnostic logging can retain content in files, and configured
+  VoltOps credentials can export it. Missing credentials or remote sampling do
+  not disable local capture. Operators must disclose and control diagnostics and
+  provider transmission; see the [data-handling contract](../architecture/realtime-voice.md#voice-data-handling).
+  #963's separate HTTP executor, fixed model route and blanket fallback bans are
+  superseded; shared profiles, caching, routing and supported retries remain.
 - Execution admits text answers and only `weather_forecast` and `web_search`.
   Executor selection denies every other integration, including registry and
   fallback executors. Provider-native search is disabled at the runtime boundary;

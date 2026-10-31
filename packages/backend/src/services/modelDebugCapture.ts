@@ -124,7 +124,11 @@ export const createModelDebugCapturingRuntime = (
     generate: async (request: GenerationRequest): Promise<GenerationResult> => {
         const session = captureSession.getStore();
         const attempt = attemptIdentity.getStore();
-        if (session === undefined || attempt === undefined) {
+        if (
+            realtimeWorkflowScope() !== undefined ||
+            session === undefined ||
+            attempt === undefined
+        ) {
             return runtime.generate(request);
         }
 

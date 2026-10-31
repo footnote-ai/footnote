@@ -151,14 +151,14 @@ Settled decisions for this slice:
 
 - Voice always uses canonical Workflow execution, including when the configured
   text mode is `express`; mode selection cannot bypass Run creation.
-- Admission requires the runtime's explicit `supportsEphemeralContent` guarantee.
-  Absence fails before planning, provider execution or storage. **The current
-  VoltAgent adapter is unsupported:** installed SDK 2.11.0 automatically records
-  inputs, outputs and messages in local/WebSocket tracing, with no supported
-  per-call opt-out. Remote-export sampling and missing credentials do not disable
-  local capture. Only synthetic runtimes supply the guarantee in this slice.
-  A separately verified adapter privacy control is an architectural prerequisite
-  for live wiring; this slice does not replace SDK observability or add a runtime.
+- Voice uses the configured shared generation runtime, model profiles, routing,
+  structured output, prompt caching, usage accounting and supported fallbacks.
+  VoltAgent's local diagnostics are allowed under the self-hosted operating
+  policy; they are not canonical transcript retention. There is no blanket
+  `supportsEphemeralContent` gate or separate Voice inference transport.
+  The [data-handling contract](../architecture/realtime-voice.md#voice-data-handling)
+  distinguishes enforced canonical exclusions, operator-controlled diagnostics
+  (including possible file logging/export), and provider responsibilities.
 - Voice execution permits text answering plus the explicit read-only allowlist
   `weather_forecast` and `web_search`. The execution continuation denies other
   terminal actions. Context executor selection denies other integration names
@@ -330,8 +330,10 @@ consent before experiments. A configured key is not evidence of provider
 retention guarantees. No automatic transcript/audio storage, summaries, memory
 writes, account-memory injection, or text/call transfer is proposed. Existing
 text history/debug persistence hooks must not be inherited accidentally by
-calling `runChat`; a voice caller needs a content-free persistence policy before
-live wiring. Metadata-only Run records remain private to authorized operators.
+calling `runChat`; the backend scope enforces metadata-only canonical storage
+and bypasses Footnote model debug capture. Temporary SDK diagnostics are allowed
+and must be disclosed separately from conversation history. Metadata-only Run
+records remain private to authorized operators.
 
 Disconnect, consent withdrawal, or session expiry stops affected audio capture
 and provider forwarding, revokes delivery, aborts pending work, and clears

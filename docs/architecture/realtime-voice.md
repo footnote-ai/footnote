@@ -203,10 +203,63 @@ implemented synthetically; live provider events and audio playback remain
 disconnected. A process-owned reservation
 survives call teardown; its 60-second deadline and 5-second cancellation watchdog
 make unresolved work observably degraded without releasing capacity.
-Voice admission fails closed unless the runtime guarantees no content retention;
-the current VoltAgent adapter cannot provide that guarantee and remains blocked.
+Voice uses the same configured generation runtime as text. Temporary processing
+and operator-controlled diagnostics are allowed; canonical Voice storage remains
+metadata-only. See [Voice data handling](#voice-data-handling) for the boundary.
 The tracker describes process-local and deployment-recovery limits. Cross-surface
 continuity, consent, and retention remain under #559.
+
+## Voice data handling
+
+Voice processing consent authorizes the accepted conversation projection to go
+to the configured model providers. It does not authorize automatic transcript or
+audio history, durable answer candidates, long-term memory, account-memory
+injection, or cross-surface carryover. The backend-owned scope enforces those
+canonical storage exclusions and keeps approved answer text only in the bounded
+delivery slot. Footnote's opt-in `FOOTNOTE_DEBUG_CAPTURE_MODEL_IO` capture remains
+available for ordinary text and is bypassed for Voice, including inherited debug
+sessions. Free-form backend logs are suppressed inside the Voice Workflow scope.
+
+That canonical policy is distinct from SDK diagnostics. The installed VoltAgent
+2.11.0 captures inputs, outputs, messages and tool data in local observability.
+Its default observability store is in memory; `memory: false` disables agent
+conversation memory, not tracing. Remote sampling set to `never` keeps local
+capture, as the [upstream documentation](https://voltagent.dev/docs/observability/developer-console/)
+explains. Footnote also supplies a logger that can write diagnostic files under
+the configured logging directory's `voltagent` subdirectory, at the configured
+log level, with a 30-day rotation policy. Diagnostics can contain conversation
+content. Operators must protect these files and disclose diagnostic handling;
+this is not a guarantee that content exists only in RAM.
+
+Footnote supplies a VoltOps client when both `VOLTAGENT_PUBLIC_KEY` and
+`VOLTAGENT_SECRET_KEY` are configured. This can export content-bearing diagnostics
+outside the host. No external observability is required for Voice; operators
+must explicitly configure any external tracing and understand its retention.
+Missing credentials do not disable local capture. Custom process-wide SDK
+instrumentation or observability stores are also operator responsibilities.
+Configured model routing, prompt caching and supported fallback behavior remain
+shared with text. The direct OpenAI structured planner remains supported and
+requests `store: false`; that flag is not proof of account-level or provider-wide
+zero retention. Provider processing, caches and retention depend on the selected
+provider and account settings and must be disclosed before live use.
+
+The synthetic regression exercises the real VoltAgent/AI SDK OpenRouter and
+OpenAI paths (including direct OpenAI structured planning),
+structured planner, generation, assessment, exact approved selection and SQLite
+receipt with HTTP intercepted. It checks canonical exclusions even with Footnote
+debug opt-in enabled. Canonical model/provider labels are retained only when
+they match configured catalog identities, on both success and failure. Unknown
+labels are omitted (`modelVersion` becomes `unknown`) because provider labels
+can echo content into receipts; numeric usage and cost evidence remain. This
+limits stored labels, not which configured models may execute.
+This establishes local behavior, not a live provider retention guarantee.
+
+This replaces #963's separate HTTP executor proposal and unconditional
+`supportsEphemeralContent` requirement. Its useful synthetic receipt/debug and
+provider-attribution findings are retained through the shared runtime. No new
+model allowlist, telemetry ban, or blanket retry/fallback restriction is added.
+Existing cancellation tests require an aborted provider call not to retry;
+ordinary recoverable failures keep the configured Workflow behavior.
 
 ## Final-response approval and staging (synthetic only)
 
@@ -298,6 +351,6 @@ that a participant heard the answer, and no exactly-once audible playback is cla
 
 No provider, conversational Talker, audio generation/playback, durable replay,
 transcript retention, memory or public Trace extension is implemented. The
-VoltAgent tracing restriction, process-local capacity and recovery gates remain
-in force. Lost acknowledgements, safe speaking opportunities, adapter stop controls
+process-local capacity and recovery gates remain in force. Lost acknowledgements,
+safe speaking opportunities, adapter stop controls
 and provider capabilities must be resolved before live integration.
