@@ -1,6 +1,6 @@
 # Realtime conversation with background reasoning
 
-Status: call state, bounded background Workflow execution, final-response approval and a controlled delivery lifecycle implemented with synthetic events and playback reports; audio, conversational Talker and live wiring remain proposed. Updated 2026-10-30.
+Status: call state, bounded background Workflow execution, final-response approval and a controlled delivery lifecycle implemented with synthetic events and playback reports; audio, conversational Talker and live wiring remain proposed. Updated 2026-10-31.
 Primary owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
 Conversation continuity and retention remain governed by
 [#559](https://github.com/footnote-ai/footnote/issues/559).
@@ -26,21 +26,108 @@ Answer approval and delivery handoff are also implemented in tests, including
 [playback status tracking](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only).
 Live provider events and audio delivery are not connected.
 
-The intended Talker is a lightweight conversational model: it listens and speaks
-naturally, manages turn-taking and interruptions, and maintains attention while
-the Workflow reasons independently. It must not wait for a complete STT →
-Workflow → TTS cycle to acknowledge or respond to conversational cues. It cannot
-authorize a Run, select privileged context, or invent a substantive answer.
+Live aims for natural conversation while Workflow reasons in the background;
+Standard uses transcription and controlled speech to deliver the reviewed text.
+Neither option can authorize tools or change the Workflow's approval rules.
 
-Fixed acknowledgements and synthesis of approved text are an infrastructure
-validation path for correlation, authority, freshness, and playback. They are
-not the final Talker design or evidence that its responsiveness has been achieved.
-Natural conversational output and substantive answer delivery need distinct
-controls: the former may acknowledge, clarify, or report backend-known status;
-the latter may convey only approved material. How a chosen model/adapter
-enforces that distinction is an explicit design and evaluation gate, not a
-problem solved by prompting. Free-form paraphrasing of substantive results
-remains deferred until it preserves the approval boundary.
+Fixed acknowledgements and exact-text synthesis are useful first tests. Live
+speech needs separate evaluation: GPT-Live may speak without calling Workflow
+and may paraphrase its results. A paraphrase is not the exact approved answer,
+even when it is based on one. The mode choice must make that difference clear.
+
+
+## Voice modes and next work (planned)
+
+Footnote will offer two ways to use voice. **Standard** and **Live** are working
+names, not final UI labels. Both use the same backend call state, model profiles,
+Workflow, permissions and execution records. The difference is how audio enters
+the conversation and how Footnote speaks.
+
+- **Standard (default):** Transcribe a user turn, run the existing Workflow,
+  then synthesize the exact approved text. Start with OpenRouter STT and TTS.
+  This is the slower but more predictable option. The approved text still
+  needs the existing delivery checks, including interruption and expiry.
+- **Live (opt-in):** GPT-Live manages the spoken conversation and delegates
+  substantive tasks to Footnote. Its backend Workflow can still use OpenRouter
+  or other configured reasoning providers. GPT-Live may speak independently
+  and paraphrase verified results. Its spoken rendition must not be described
+  as the exact answer that Workflow reviewed.
+
+The existing `/call` transport is tied to OpenAI Realtime. We can replace it
+without maintaining protocol compatibility. Keep useful Discord capture,
+speaker and playback code rather than building new versions of those pieces.
+Neither option needs a separate reasoning engine or a general voice framework.
+
+### Conversation and delegation
+
+Standard uses the current `RealtimeConversationState` approval and delivery
+operations: `requestDelivery`, `startDelivery` and `reportPlayback`.
+Unassessed, stale, revoked and failed results are not sent to TTS as approved
+answers. Fixed acknowledgments are fine during initial testing; they must not
+invent facts while Workflow is running.
+
+Live should use a backend-owned GPT-Live session with
+[client delegation](https://developers.openai.com/api/docs/guides/live-delegation).
+A delegation event contains an ID and timing metadata, not the question.
+The backend must associate it with transcript fragments and the current turn
+before starting `chatOrchestrator.runRealtimeConversation`. Reuse one pending
+Workflow reservation and the existing revision, cancellation and consent checks.
+Only return verified, current results. Keep planner text, private context and
+unapproved drafts out of Live updates.
+
+The Live model can acknowledge people and handle turn-taking while Workflow
+runs. Prompts can encourage it to delegate substantive questions, but cannot
+guarantee it will never speak an unreviewed claim. `session.commentary.append`
+may paraphrase an approved answer. Record that as a Live spoken presentation
+linked to the reviewed result, not as exact-text approval or proof of playback.
+If exact speech control is needed, use Standard. Do not add a third, buffered
+Live mode before real tests show a need.
+
+### Call selection and limits
+
+Keep one `/call` command. An optional `mode` argument could select
+`standard` or `live` for that call, alongside the required voice channel.
+Setup should also offer a default mode and explain provider access and costs.
+These are suggested option values, not a finalized command or UI. Resolve the
+mode before opening a connection; switching modes should start another call.
+If a provider is unavailable, explain why instead of silently changing modes.
+
+Start with a 60-second call limit for both modes, a separate setup timeout,
+and one consenting human participant. This clock is **not** the existing
+60-second Workflow execution deadline. Ending a call stops local audio,
+revokes delivery and requests cancellation; it does not prove that remote
+generation or billing has stopped. A verified administrator may choose a
+longer but still bounded call, initially five minutes. Reuse the existing
+Discord developer/administrator identity and trusted backend connection where
+appropriate; never trust a client-supplied admin flag. The override changes
+duration only, not consent or tool permissions. Do not add account-level
+preferences or a new authorization framework for this experiment.
+
+GPT-Live requires a separately billed OpenAI API key; ChatGPT Plus is not an
+API allowance. The operator plans to add a key, but access and costs have not
+been tested. Keep provider credentials out of Discord. Start with one active
+Live session per backend process, and preserve the current process-local
+pending-Workflow limit. Neither reconnect nor a call restart should clear an
+unsettled reservation.
+
+### Implementation order
+
+1. **Call policy:** Add mode admission, the 60-second deadline, a bounded
+   admin override and reliable teardown. Test with fake sessions and no paid
+   provider calls.
+2. **Standard speech:** Connect existing Discord audio capture to OpenRouter
+   transcription, Workflow, approved-text synthesis and playback reporting.
+   Test speaker ambiguity, consent, interruption, expiry and storage failure.
+3. **Live speech:** Connect GPT-Live transcript/delegation events to the same
+   Workflow and call state. Verify duplicate/stale delegation handling,
+   revocation and the distinction between reviewed answers and paraphrases.
+4. **Setup and evaluation:** Expose both choices after they work. Measure
+   time to first useful speech, time to approved answer, interruption stop
+   delay, usage and cost. Paid tests require separate approval.
+
+These are proposed slices under [#558](https://github.com/footnote-ai/footnote/issues/558).
+[#559](https://github.com/footnote-ai/footnote/issues/559) still owns multi-person
+consent, retention and cross-surface continuity. No new umbrella issue is needed.
 
 ## What the references establish
 
@@ -408,16 +495,15 @@ persistent bidirectional Realtime WebSocket session with VAD, cancellation,
 dynamic result updates, and playback control. Treat that capability as
 unverified, not supported merely because a model accepts audio.
 
-OpenRouter is preferred for later experiments because the operator reports an
-existing key; no direct OpenAI key is available for this phase. No credentials
-were inspected and no provider call was made. Current backend wiring constructs
-the OpenAI Realtime adapter only when a direct key is present; an OpenRouter key
-does not activate it. Prefer a bounded STT → existing Workflow → controlled TTS
-experiment if documented persistent Realtime support remains unavailable. That
-tests delivery/latency, not full-duplex Realtime equivalence, and needs adapter
-work: the existing TTS boundary returns a complete base64 artifact. This is an
-infrastructure validation path, not the final Talker architecture. It must not
-be used to close the conversational latency/turn-taking acceptance criteria.
+The planned Standard option uses OpenRouter speech-to-text and text-to-speech,
+with the existing Workflow between them. The current TTS adapter returns a
+complete base64 artifact, so streaming playback needs its own implementation
+and measurements. This path does not claim full-duplex Realtime support.
+
+The planned Live option uses OpenAI GPT-Live client delegation. The operator
+intends to supply a separately billed API key; no live access, latency or cost
+has been verified. Its delegated reasoning can still use OpenRouter through
+Footnote's configured generation runtime.
 
 Evaluate the intersection of provider/model features and the concrete adapter:
 finalized input and speaker association, controlled speech, cancellation,
@@ -429,10 +515,10 @@ only capabilities actually required by the selected experiment.
 
 ## Small follow-up sequence
 
-Each row is an independently reviewable slice. The first three now have synthetic
-implementation through single-use handoff and controlled playback reports; actual
-speech remains in slice 4. The remaining
-rows are proposed child scopes, not newly created issues or duplicate umbrellas.
+The first three slices have synthetic tests for handoff and playback reporting.
+The two speech modes are still proposed. The
+[implementation order](#implementation-order) above divides the remaining
+work into smaller PRs; this table preserves the broader #558 tracking scope.
 
 | Order / owner                                                                                              | Scope                                                                                                                                                                                                                               | Acceptance evidence                                                                                                                                                                                                                                                                                |
 | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -456,12 +542,11 @@ not assume it is sufficient. A full Talker–Reasoner agent framework, durable
 queue, conversation store, or streaming knowledge-chunk protocol adds lifecycle
 and privacy obligations without solving the first missing boundary. Defer them.
 
-#558 aims for a conversational Talker, not just a pipeline that reads answers
-aloud. Before closing it, demonstrate that the Talker can listen and respond
-naturally while a Run is pending, recover from interruptions, deliver approved
-answers without changing their meaning, and meet separately measured response
-and answer latencies. The model and adapter are still open choices, subject to
-approval and provider feasibility.
+#558 should verify both paths. Standard must deliver reviewed text and stop
+stale playback after interruption or revocation. Live must handle conversation
+during a pending Run, recover from interruptions and distinguish paraphrased
+speech from the reviewed answer. Measure their latency and cost separately;
+passing an STT → Workflow → TTS test doesn't prove Live responsiveness.
 
 The conservative eligibility mapping and slot bounds above are implemented.
 Broader fallback permission, single-call lifecycle/defaults, and the later provider

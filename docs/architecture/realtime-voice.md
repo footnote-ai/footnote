@@ -8,6 +8,13 @@ At a high level, the Discord bot handles the Discord-specific work: joining the 
 
 Discord does not connect to OpenAI directly. It connects to Footnote's backend at `/api/internal/voice/realtime`, which opens and manages the provider session.
 
+**Scope:** This document covers the current OpenAI-only Realtime transport and
+synthetic Workflow approval work. The [two-mode Voice plan](../proposals/realtime-talker-reasoner.md#voice-modes-and-next-work-planned)
+proposes replacing that transport with Standard (reviewed-text TTS) and Live
+(GPT-Live client delegation). Neither mode, the 60-second call limit nor a
+mode selector is implemented. The old transport does not require compatibility
+support.
+
 ## High-Level Flow
 
 ```mermaid

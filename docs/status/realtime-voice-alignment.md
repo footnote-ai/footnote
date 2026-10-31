@@ -1,7 +1,7 @@
 # Realtime Voice alignment
 
-Updated: 2026-10-30. Baseline: merged #961 at `e4ebb62`,
-plus the synthetic final-response approval and controlled-delivery slice below. Owner:
+Updated: 2026-10-31. Baseline: merged #964 and the earlier synthetic
+call-state, Workflow and controlled-delivery slices. Owner:
 [#558](https://github.com/footnote-ai/footnote/issues/558), still open.
 
 This page tracks what the code does and which tests cover it. Synthetic tests
@@ -188,6 +188,29 @@ still unwired. A playback report cannot prove a listener heard the answer or
 that delivery happened exactly once. Unassessed or unresolved fallback answers
 remain ineligible for speech until the policy changes.
 
+
+## Proposed Voice modes (not implemented)
+
+The [current plan](../proposals/realtime-talker-reasoner.md#voice-modes-and-next-work-planned)
+uses one shared Workflow with two speech paths. Standard (proposed default)
+will transcribe the user's turn, review the answer and play its approved text
+through TTS, starting with OpenRouter. Live will use OpenAI GPT-Live client
+delegation to converse while the same Workflow runs in the background.
+GPT-Live may speak on its own or paraphrase a reviewed answer; that is not
+the same as exact approved playback.
+
+The existing OpenAI-only `/call` transport is legacy code, not a compatibility
+requirement for either option. The names Standard and Live are provisional;
+there is no `/call mode` option or setup selection in the implementation.
+Calls are proposed to last 60 seconds by default, with a bounded admin
+override (initially five minutes). Neither the call timeout nor the override
+exists yet. The current 60-second **Workflow execution** deadline is separate.
+
+Start with one consenting human and existing process-local capacity. Test
+provider events and limits synthetically before paid calls. The operator
+plans to add an OpenAI API key, but Live credentials and cost have not been
+verified. Multi-speaker consent and history transfer belong to #559.
+
 ## Proposed decisions and remaining gates
 
 The proposal recommends a single-call ephemeral scope, one pending Run handle,
@@ -221,8 +244,8 @@ assign identity, asynchronous delivery, gating and adapter work to #558.
 [#559](https://github.com/footnote-ai/footnote/issues/559) must separately approve
 cross-surface consent, retention/deletion and historical playback policy.
 
-Provider feasibility is unverified in Footnote: the operator reports an
-OpenRouter key and no direct OpenAI key. No credentials, provider availability,
-voice audition, audio quality, latency, or savings were tested in this pass.
-Use fake runtimes/deferred Runs first; any later paid experiment needs separate
-authorization. No new umbrella issues are needed.
+Provider feasibility is still unverified in Footnote. OpenRouter STT/TTS and
+OpenAI GPT-Live client delegation are documented, but neither planned path has
+been exercised here. No credentials, live audio, latency, voice quality or
+cost were checked in this planning update. Start with fake sessions and
+intercepted requests. Paid experiments need separate approval.
