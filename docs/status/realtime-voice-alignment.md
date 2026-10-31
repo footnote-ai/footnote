@@ -93,22 +93,17 @@ No live voice handler invokes this path yet.
 - Completion requires an explicit receipt with response and canonical Run IDs,
   issued only after storage succeeds. Missing receipts/status and storage failures
   fail closed for voice; ordinary text storage keeps its existing fail-open behavior.
-- Canonical Workflow execution is required even in `express` mode. Voice now
-  reuses the configured runtime without an ephemeral-content capability gate.
-  An intercepted real VoltAgent/AI SDK OpenRouter test covers structured planning,
-  generation, assessment, exact approved selection, usage and SQLite receipts.
-  Voice canonical content exclusions hold with Footnote model debug opt-in enabled;
-  inherited capture sessions are bypassed. Provider free-text attribution is
-  bounded to configured catalog labels in canonical receipts, including failure
-  evidence and direct OpenAI planning; unrecognized labels are withheld.
-- VoltAgent 2.11.0 local capture is allowed under the revised self-hosted policy.
-  It is separate from Footnote's canonical store and opt-in model debug capture.
-  Configured diagnostic logging can retain content in files, and configured
-  VoltOps credentials can export it. Missing credentials or remote sampling do
-  not disable local capture. Operators must disclose and control diagnostics and
-  provider transmission; see the [data-handling contract](../architecture/realtime-voice.md#voice-data-handling).
-  #963's separate HTTP executor, fixed model route and blanket fallback bans are
-  superseded; shared profiles, caching, routing and supported retries remain.
+- Canonical Workflow execution is required even in `express` mode. Voice Workflow
+  uses the configured generation runtime and model profiles. Intercepted real
+  VoltAgent/AI SDK OpenRouter and OpenAI tests, including direct OpenAI structured
+  planning, cover generation, assessment, exact approved selection, usage and
+  SQLite receipts. They verify canonical content exclusions with Footnote debug
+  opt-in enabled, inherited debug-session bypass, and canonical label filtering
+  on success and failure. Recognized normalized model identities are retained.
+- Canonical storage and operator-accessible SDK diagnostics have separate
+  boundaries; see the [data-handling contract](../architecture/realtime-voice.md#voice-data-handling).
+  Provider retention and configured diagnostic exports have not been verified
+  with live providers.
 - Execution admits text answers and only `weather_forecast` and `web_search`.
   Executor selection denies every other integration, including registry and
   fallback executors. Provider-native search is disabled at the runtime boundary;

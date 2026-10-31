@@ -193,21 +193,20 @@ Realtime is a separate streaming session, not another route through
 records implemented behavior, intentional differences, gaps, evidence, and issue
 ownership relative to ordinary chat.
 
-The proposed [conversation with background reasoning](../proposals/realtime-talker-reasoner.md)
-reuses the existing Workflow and conversation projection boundaries. It is a
-proposal under #558. Backend-local call state and background Workflow execution
-now have synthetic implementation, using the existing orchestrator with enforced
-answer/read-only scope and content-free execution records. Final-response approval
-and one ephemeral delivery slot with controlled playback reports are also
-implemented synthetically; live provider events and audio playback remain
-disconnected. A process-owned reservation
-survives call teardown; its 60-second deadline and 5-second cancellation watchdog
-make unresolved work observably degraded without releasing capacity.
-Voice uses the same configured generation runtime as text. Temporary processing
-and operator-controlled diagnostics are allowed; canonical Voice storage remains
-metadata-only. See [Voice data handling](#voice-data-handling) for the boundary.
-The tracker describes process-local and deployment-recovery limits. Cross-surface
-continuity, consent, and retention remain under #559.
+Voice Workflow uses the existing orchestrator and configured generation runtime,
+including model profiles, routing, structured planning, prompt caching, usage
+accounting and supported fallbacks. Backend-local call state enforces answer/read-only
+scope, final-response approval and one bounded delivery slot with playback reports.
+These paths are tested synthetically; live provider events and audio playback
+remain disconnected. A process-owned reservation survives call teardown. Its
+60-second deadline and 5-second cancellation watchdog mark unresolved work as
+degraded without releasing capacity.
+
+Canonical Voice storage is metadata-only; operator-controlled diagnostics have a
+separate boundary described below. The [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
+describes the remaining conversational work under #558. The alignment tracker
+records implementation evidence and process-local recovery limits. Cross-surface
+continuity and durable consent/retention policy remain under #559.
 
 ## Voice data handling
 
@@ -243,23 +242,13 @@ requests `store: false`; that flag is not proof of account-level or provider-wid
 zero retention. Provider processing, caches and retention depend on the selected
 provider and account settings and must be disclosed before live use.
 
-The synthetic regression exercises the real VoltAgent/AI SDK OpenRouter and
-OpenAI paths (including direct OpenAI structured planning),
-structured planner, generation, assessment, exact approved selection and SQLite
-receipt with HTTP intercepted. It checks canonical exclusions even with Footnote
-debug opt-in enabled. Canonical model/provider labels are retained only when
-they match configured catalog identities, on both success and failure. Unknown
-labels are omitted (`modelVersion` becomes `unknown`) because provider labels
-can echo content into receipts; numeric usage and cost evidence remain. This
-limits stored labels, not which configured models may execute.
-This establishes local behavior, not a live provider retention guarantee.
-
-This replaces #963's separate HTTP executor proposal and unconditional
-`supportsEphemeralContent` requirement. Its useful synthetic receipt/debug and
-provider-attribution findings are retained through the shared runtime. No new
-model allowlist, telemetry ban, or blanket retry/fallback restriction is added.
-Existing cancellation tests require an aborted provider call not to retry;
-ordinary recoverable failures keep the configured Workflow behavior.
+Canonical model/provider labels are retained only when they match configured
+catalog identities, including normalized model names, on both success and failure.
+Unknown labels are omitted (`modelVersion` becomes `unknown`) because provider
+labels can echo content into receipts. Numeric usage and cost evidence remain.
+This limits stored labels without restricting generation routes. An aborted
+provider call is not retried; recoverable failures use the configured Workflow
+retry and fallback behavior.
 
 ## Final-response approval and staging (synthetic only)
 

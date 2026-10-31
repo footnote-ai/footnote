@@ -153,12 +153,9 @@ Settled decisions for this slice:
   text mode is `express`; mode selection cannot bypass Run creation.
 - Voice uses the configured shared generation runtime, model profiles, routing,
   structured output, prompt caching, usage accounting and supported fallbacks.
-  VoltAgent's local diagnostics are allowed under the self-hosted operating
-  policy; they are not canonical transcript retention. There is no blanket
-  `supportsEphemeralContent` gate or separate Voice inference transport.
-  The [data-handling contract](../architecture/realtime-voice.md#voice-data-handling)
-  distinguishes enforced canonical exclusions, operator-controlled diagnostics
-  (including possible file logging/export), and provider responsibilities.
+  Live integration must preserve the [data-handling contract](../architecture/realtime-voice.md#voice-data-handling),
+  including the distinction between metadata-only canonical storage and
+  operator-accessible diagnostics.
 - Voice execution permits text answering plus the explicit read-only allowlist
   `weather_forecast` and `web_search`. The execution continuation denies other
   terminal actions. Context executor selection denies other integration names
