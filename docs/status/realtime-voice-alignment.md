@@ -4,13 +4,12 @@ Updated: 2026-10-30. Baseline: merged #961 at `e4ebb62`,
 plus the synthetic final-response approval and controlled-delivery slice below. Owner:
 [#558](https://github.com/footnote-ai/footnote/issues/558), still open.
 
-This tracker records source/test evidence, not live-provider validation. Update
-the affected rows and evidence with each implementation PR. Keep proposals
-separate from implemented behavior. The
-[current architecture](../architecture/realtime-voice.md) describes transport;
-the [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md) describes
-the broader design. Call state and background Workflow execution have synthetic
-implementation, including final-response approval, handoff and controlled playback reports; live provider wiring and audio delivery remain proposed.
+This page tracks what the code does and which tests cover it. Synthetic tests
+exercise call state, background Workflow execution, answer approval and playback
+reports; live audio is not wired up. Update the relevant evidence as work lands.
+The [architecture guide](../architecture/realtime-voice.md) explains the current
+transport, while the [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
+covers the planned conversational behavior.
 
 ## Alignment matrix
 
@@ -48,10 +47,9 @@ foundation without a provider; they do not establish live voice behavior.
   and measurement, not demonstrated savings or Realtime cache instrumentation.
   Direct comparison and local packaging follow-ups remain #957/#958.
 
-The earlier matrix in the architecture page was delivered by #803/#846; this
-page is now its maintained successor. The context proposal predates the current
-implementation: its speculative segment/cache model is not a live conversation
-store. See its [implementation note](../proposals/conversation_context_boundary.md#implementation-and-realtime-follow-up).
+This is the maintained alignment matrix following #803/#846. The older context
+proposal's segment/cache design is not a working conversation store; see its
+[implementation note](../proposals/conversation_context_boundary.md#implementation-and-realtime-follow-up).
 
 ## Synthetic call-state foundation
 
@@ -79,8 +77,8 @@ and Run/Trace records are unchanged. No live handler calls it yet.
 `backend/test/realtimeConversationState.test.ts` exercises these rules with
 synthetic turns and participant events. This slice adds no provider connection,
 speech delivery, transcript persistence, memory, or cross-session continuity.
-The following slices add the bounded Workflow handoff and final-response staging;
-controlled speech remains a separate gate.
+Background Workflow execution and answer staging are covered below. Live
+speech delivery is still separate.
 
 ## Synthetic Workflow execution
 
@@ -93,29 +91,32 @@ No live voice handler invokes this path yet.
 - Completion requires an explicit receipt with response and canonical Run IDs,
   issued only after storage succeeds. Missing receipts/status and storage failures
   fail closed for voice; ordinary text storage keeps its existing fail-open behavior.
-- Canonical Workflow execution is required even in `express` mode. The entry
-  rejects runtimes without an explicit `supportsEphemeralContent` guarantee
-  before any execution. Synthetic runtimes provide this guarantee in tests.
-  **Architectural blocker:** VoltAgent 2.11.0 automatically captures input/output
-  and messages in local/WebSocket tracing and exposes no supported per-call
-  opt-out. The production adapter remains unsupported. Missing credentials or
-  remote sampling do not establish privacy; verified adapter controls are required
-  before live wiring.
+- Canonical Workflow execution is required even in `express` mode. Voice Workflow
+  uses the configured generation runtime and model profiles. Intercepted real
+  VoltAgent/AI SDK OpenRouter and OpenAI tests, including direct OpenAI structured
+  planning, cover generation, assessment, exact approved selection, usage and
+  SQLite receipts. They verify canonical content exclusions with Footnote debug
+  opt-in enabled, inherited debug-session bypass, and canonical label filtering
+  on success and failure. Recognized normalized model identities are retained.
+- Canonical storage and operator-accessible SDK diagnostics have separate
+  boundaries; see the [data-handling contract](../architecture/realtime-voice.md#voice-data-handling).
+  Provider retention and configured diagnostic exports have not been verified
+  with live providers.
 - Execution admits text answers and only `weather_forecast` and `web_search`.
   Executor selection denies every other integration, including registry and
   fallback executors. Provider-native search is disabled at the runtime boundary;
   integration hints cannot widen the scope. Planner terminal actions, including
   reactions, images, silence and TTS, are denied before continuation execution.
-- The scope is backend-only async context, never request/planner authority. It
-  supplies no text session ID, account memories, attachments or private retrieval
-  scope. Finalized turn IDs survive projection; canonical Workflow IDs bind when
-  the Workflow starts, and final response IDs bind on metadata assembly.
-- Voice persistence uses an explicit allowlist of canonical Run/Step/Attempt/Result
-  identity, status, timing, usage, cost, limits and machine decisions. Prose is
-  withheld, including planner/review text, retrieval queries, citations and bodies.
-  Candidates, publication capabilities, model debug capture and free-form logs
-  are excluded, even when operator debug capture is enabled. Tool short-circuits
-  use the same projection. Public Trace omits session and initiating-turn identity.
+- The backend establishes the Voice scope; requests and planner output cannot
+  set it. Voice does not inherit a text session ID, account memories, attachments
+  or private retrieval. Turn IDs survive context trimming. The Workflow receives
+  its Run ID when it starts and its response ID when metadata is assembled.
+- Voice records store only approved fields: Run/Step/Attempt/Result IDs, status,
+  timing, usage, cost, limits and validated machine decisions. They exclude
+  planner and review prose, retrieval queries and bodies, citations, candidates,
+  publication tokens, model debug output and free-form logs. The same rules apply
+  when a tool ends the Workflow early. Public Trace does not expose the call's
+  session or initiating-turn ID.
 - There is one pending handle and no queue. Duplicate intents are rejected.
   Supersession, consent/audience changes, cancellation and close request abort;
   interruptions preserve reasoning. Close clears call content and completion
@@ -131,16 +132,16 @@ No live voice handler invokes this path yet.
   Completed executions use the ordinary response-ID report. Neither endpoint
   exposes voice prompts, transcripts, candidates or provider event bodies.
 
-Capacity is process-local and independent of every call instance. Reconnects in
-that backend process cannot bypass it. Multi-process admission, crash/restart
-recovery and proof of remote stop remain gates before live wiring; restarting
-does not prove a remote Run or billing stopped. This is not a durable job service.
+The pending-work limit belongs to the backend process, so reconnecting to that
+process does not reset it. Multi-process coordination and restart recovery still
+need work before live use. Restarting the server does not prove that a remote
+request stopped or that billing ended. This is not a durable job queue.
 
 `backend/test/realtimeWorkflowExecution.test.ts` uses deferred promises, fake
-clocks, synthetic events and a truly never-settling Run. The real-orchestrator
-tests use synthetic generation and HTTP boundaries plus disposable SQLite; the
-operator tests verify auth, privacy and degraded inspection. Completion inspection retains identity, actual status and review disposition only;
-approved text is isolated in the ephemeral slot described below.
+clocks, synthetic events and a truly never-settling Run. Other tests exercise the real orchestrator with intercepted provider calls and
+a temporary SQLite database. Operator tests check authentication, privacy and
+degraded-state inspection. Completed-execution inspection exposes only IDs,
+status and review disposition. Approved text stays in the delivery slot.
 
 ## Synthetic final-response approval and staging
 
@@ -181,12 +182,11 @@ playback reports cover request versus handoff versus start, duplicate/out-of-ord
 reports, expiry while waiting, interruption before/during playback, and late
 completion after revocation. Run and review evidence remain unchanged.
 
-This establishes synthetic backend approval and a controlled delivery lifecycle.
-Provider event wiring, safe-turn scheduling, audio delivery/cancellation and
-trustworthy live playback reports remain unimplemented. Adapter reports are not
-proof that the audience heard anything or an exactly-once guarantee. The
-conversational Talker is not complete. Broader permission for
-unassessed or unresolved fallbacks remains an explicit policy decision.
+Backend tests cover answer approval, handoff and playback-report ordering.
+Live provider events, safe speaking times, audio playback and cancellation are
+still unwired. A playback report cannot prove a listener heard the answer or
+that delivery happened exactly once. Unassessed or unresolved fallback answers
+remain ineligible for speech until the policy changes.
 
 ## Proposed decisions and remaining gates
 

@@ -7,6 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { withRealtimeWorkflowScope } from '../src/services/realtimeWorkflowScope.js';
 import {
     boundAndRedactDebugText,
     createModelDebugCapturingRuntime,
@@ -170,6 +171,38 @@ test('does not capture outside an opted-in workflow Attempt', async () => {
     );
 
     assert.deepEqual(records, []);
+});
+
+test('Voice bypasses an inherited debug session while ordinary text still captures', async () => {
+    const records: import('../src/services/modelDebugCapture.js').ModelDebugCaptureRecord[] =
+        [];
+    const runtime = createModelDebugCapturingRuntime({
+        kind: 'synthetic',
+        generate: async () => ({ text: 'answer' }),
+    });
+    const generate = () =>
+        withModelDebugAttempt({ stepId: 'generate', attempt: 1 }, () =>
+            runtime.generate({
+                messages: [{ role: 'user', content: 'question' }],
+            })
+        );
+    await withModelDebugCaptureSession(
+        { runId: 'run-1', records, omittedInvocationCount: 0 },
+        async () => {
+            await withRealtimeWorkflowScope(
+                {
+                    sessionCorrelationId: 'voice',
+                    turnId: 'turn-1',
+                    onRunStarted: () => undefined,
+                },
+                generate
+            );
+            assert.equal(records.length, 0);
+            await generate();
+            assert.equal(records.length, 1);
+            assert.equal(records[0].outputText, 'answer');
+        }
+    );
 });
 
 test('reuses a matching response candidate instead of storing its output again', () => {

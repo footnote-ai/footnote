@@ -1,9 +1,9 @@
 /**
- * @description: Carries backend-only voice execution restrictions and projects content-free evidence.
+ * @description: Applies Voice execution limits and keeps conversation text out of stored receipts.
  * @footnote-scope: core
  * @footnote-module: RealtimeWorkflowScope
  * @footnote-risk: high - Scope loss can enable tools or persist private voice content.
- * @footnote-ethics: high - Voice processing consent never authorizes retained conversation content.
+ * @footnote-ethics: high - Consent to Voice processing does not permit automatic conversation history.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
@@ -19,6 +19,8 @@ import {
 import { ExecutionReasonCodeSchema } from '@footnote/contracts/web/schemas';
 import type { RealtimeWorkflowResult } from './realtimeConversationState.js';
 import type { ResponseCandidate } from '@footnote/contracts/web';
+import { runtimeConfig } from '../config.js';
+import { toFootnoteModel } from '@footnote/agent-runtime/voltagentRuntime';
 
 export type RealtimeReviewDisposition =
     | 'approved'
@@ -30,7 +32,7 @@ export type RealtimeReviewDisposition =
     | 'workflow_not_completed'
     | 'unsupported_response';
 
-/** Backend-only evidence about the selected response; text exists only for approved answers. */
+/** Keep selected-answer evidence private to the backend; only approved answers carry text. */
 export type RealtimeFinalResponse =
     | {
           disposition: Exclude<RealtimeReviewDisposition, 'approved'>;
@@ -263,6 +265,37 @@ const projectOutcome = (outcome: StepOutcome): StepOutcome => {
     };
 };
 
+// Provider response/error labels are free text; retain only operator-configured identities.
+const projectModelLabel = (value: string | undefined): string | undefined =>
+    runtimeConfig.modelProfiles.catalog.some(
+        (profile) =>
+            value === profile.id ||
+            value === profile.providerModel ||
+            value === toFootnoteModel(profile.providerModel) ||
+            value === `${profile.provider}/${profile.providerModel}`
+    )
+        ? value
+        : undefined;
+
+const projectProviderLabel = (value: string | undefined): string | undefined =>
+    runtimeConfig.modelProfiles.catalog.some(
+        (profile) => value === profile.provider
+    )
+        ? value
+        : undefined;
+
+const projectAttemptLabels = (attempt: {
+    requestedProvider?: string;
+    requestedModel?: string;
+    actualProvider?: string;
+    actualModel?: string;
+}) => ({
+    requestedProvider: projectProviderLabel(attempt.requestedProvider),
+    requestedModel: projectModelLabel(attempt.requestedModel),
+    actualProvider: projectProviderLabel(attempt.actualProvider),
+    actualModel: projectModelLabel(attempt.actualModel),
+});
+
 const projectAttempt = (
     attempt: WorkflowAttemptRecord
 ): WorkflowAttemptRecord => ({
@@ -273,13 +306,10 @@ const projectAttempt = (
         'finishedAt',
         'durationMs',
         'profileId',
-        'requestedProvider',
-        'requestedModel',
-        'actualProvider',
-        'actualModel',
         'usage',
         'cost',
     ]),
+    ...projectAttemptLabels(attempt),
     ...(ExecutionReasonCodeSchema.safeParse(attempt.reasonCode).success
         ? { reasonCode: attempt.reasonCode }
         : {}),
@@ -304,10 +334,6 @@ const projectAttempt = (
                   ...pick(route, [
                       'index',
                       'profileId',
-                      'requestedProvider',
-                      'requestedModel',
-                      'actualProvider',
-                      'actualModel',
                       'status',
                       'providerCallStatus',
                       'usage',
@@ -319,6 +345,7 @@ const projectAttempt = (
                       'chooseOneSelectedIndex',
                       'selectionSource',
                   ]),
+                  ...projectAttemptLabels(route),
                   ...(route.completion === undefined
                       ? {}
                       : {
@@ -331,7 +358,7 @@ const projectAttempt = (
           }),
 });
 
-/** Allowlist execution structure; summaries, queries, review prose, source bodies and debug text never cross storage. */
+/** Store execution metadata without planner prose, retrieval content or debug text. */
 export const projectRealtimeWorkflowMetadata = (
     metadata: ResponseMetadata,
     voice: RealtimeWorkflowScope
@@ -371,12 +398,12 @@ export const projectRealtimeWorkflowMetadata = (
                           'startedAt',
                           'finishedAt',
                           'durationMs',
-                          'model',
                           'usage',
                           'cost',
                           'inputRefs',
                           'resultRefs',
                       ]),
+                      model: projectModelLabel(step.model),
                       attempts: step.attempts?.map(projectAttempt),
                       outcome: projectOutcome(step.outcome),
                   })),
@@ -388,11 +415,11 @@ export const projectRealtimeWorkflowMetadata = (
             'safetyTier',
             'tradeoffCount',
             'licenseContext',
-            'modelVersion',
             'staleAfter',
             'totalDurationMs',
         ]),
-        // A transcript-derived hash is unnecessary for metadata-only voice inspection.
+        modelVersion: projectModelLabel(metadata.modelVersion) ?? 'unknown',
+        // Hash the response ID, not the call transcript.
         chainHash: createHash('sha256')
             .update(metadata.responseId)
             .digest('hex')
@@ -404,7 +431,7 @@ export const projectRealtimeWorkflowMetadata = (
     };
 };
 
-/** Both ordinary completion and tool short-circuits use the same content-free storage boundary. */
+/** Apply the same storage rules to completed answers and tool short-circuits. */
 export const storeRealtimeWorkflowMetadata = async (
     metadata: ResponseMetadata,
     store: (metadata: ResponseMetadata) => Promise<void>,

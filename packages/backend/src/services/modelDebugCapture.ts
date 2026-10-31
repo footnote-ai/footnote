@@ -113,7 +113,7 @@ export const reuseResponseCandidateOutputs = (
         };
     });
 
-/** Captures exact runtime-boundary messages and normalized text output in memory only. */
+/** Capture model inputs and outputs for opted-in text debugging; Voice skips this wrapper. */
 export const createModelDebugCapturingRuntime = (
     runtime: GenerationRuntime
 ): GenerationRuntime => ({
@@ -124,7 +124,11 @@ export const createModelDebugCapturingRuntime = (
     generate: async (request: GenerationRequest): Promise<GenerationResult> => {
         const session = captureSession.getStore();
         const attempt = attemptIdentity.getStore();
-        if (session === undefined || attempt === undefined) {
+        if (
+            realtimeWorkflowScope() !== undefined ||
+            session === undefined ||
+            attempt === undefined
+        ) {
             return runtime.generate(request);
         }
 

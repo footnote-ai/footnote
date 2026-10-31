@@ -7,7 +7,12 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { GenerationRuntime } from '@footnote/agent-runtime';
+import {
+    createVoltAgentRuntime,
+    type GenerationRuntime,
+} from '@footnote/agent-runtime';
+import { createBoundedOllamaGenerationRuntime } from '../src/services/boundedOllamaRuntime.js';
+import { installVoiceTestObservability } from '../../agent-runtime/test/fixtures/voiceObservability.js';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import { RealtimeConversationState } from '../src/services/realtimeConversationState.js';
@@ -62,6 +67,296 @@ const answerPlan = (generation: object = {}) => ({
     },
 });
 
+for (const provider of ['openrouter', 'openai'] as const) {
+    test(`the configured ${provider} route plans, generates and assesses Voice with metadata-only SQLite receipts`, async (t) => {
+        const previousProfiles = runtimeConfig.modelProfiles;
+        const previousMode = runtimeConfig.chatWorkflow.modeId;
+        const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+        const previousDebug = process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO;
+        const previousApiKey = process.env.OPENAI_API_KEY;
+        const previousOpenAi = { ...runtimeConfig.openai };
+        const original = previousProfiles.catalog.find(
+            (entry) => entry.provider === 'openai'
+        );
+        assert.ok(original);
+        const profile = {
+            ...original,
+            id: 'shared-runtime-test',
+            enabled: true,
+            provider,
+            providerModel:
+                provider === 'openrouter' ? 'openai/gpt-5-mini' : 'gpt-5-mini',
+            providerRouting: undefined,
+        };
+        const mutable = runtimeConfig as unknown as {
+            modelProfiles: typeof previousProfiles;
+        };
+        mutable.modelProfiles = {
+            ...previousProfiles,
+            catalog: [profile],
+            defaultProfileId: profile.id,
+            plannerProfileId: profile.id,
+        };
+        runtimeConfig.chatWorkflow.modeId = 'grounded';
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+        process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO = 'true';
+        process.env.OPENAI_API_KEY = 'synthetic-key';
+        Object.assign(runtimeConfig.openai, {
+            apiKey: 'synthetic-key',
+            plannerStructuredOutputEnabled: true,
+        });
+        const observability = installVoiceTestObservability();
+        const root = await fs.mkdtemp(
+            path.join(os.tmpdir(), 'voice-shared-runtime-')
+        );
+        const store = new SqliteTraceStore({
+            dbPath: path.join(root, 'trace.db'),
+        });
+        const requests: Record<string, unknown>[] = [];
+        let failing = false;
+        let hostileLabels = true;
+        t.mock.method(
+            globalThis,
+            'fetch',
+            async (
+                url: Parameters<typeof fetch>[0],
+                init?: Parameters<typeof fetch>[1]
+            ) => {
+                assert.equal(
+                    String(url),
+                    provider === 'openrouter'
+                        ? 'https://openrouter.ai/api/v1/chat/completions'
+                        : 'https://api.openai.com/v1/responses'
+                );
+                const body = JSON.parse(String(init?.body)) as Record<
+                    string,
+                    unknown
+                >;
+                requests.push(body);
+                if (failing)
+                    return Response.json(
+                        {
+                            model: 'VOICE_SECRET ERROR MODEL',
+                            error: {
+                                message: 'VOICE_SECRET provider failure',
+                                type: 'invalid_request_error',
+                                code: 'invalid_request_error',
+                            },
+                        },
+                        { status: 400 }
+                    );
+                const text = [
+                    JSON.stringify(answerPlan()),
+                    'VOICE_SECRET APPROVED ANSWER',
+                    JSON.stringify({
+                        reviewDecision: 'finalize',
+                        reviewReason: 'VOICE_SECRET REVIEW',
+                    }),
+                ][requests.length - 1];
+                assert.ok(text, 'Unexpected generation after assessment');
+                if (provider === 'openai') {
+                    assert.equal(body.store, false);
+                    return Response.json({
+                        id: `synthetic-${requests.length}`,
+                        object: 'response',
+                        created_at: 0,
+                        status: 'completed',
+                        model: hostileLabels
+                            ? 'VOICE_SECRET MODEL'
+                            : profile.providerModel,
+                        output:
+                            requests.length === 1
+                                ? [
+                                      {
+                                          type: 'function_call',
+                                          name: 'submit_planner_decision',
+                                          arguments: text,
+                                          call_id: 'synthetic-plan',
+                                      },
+                                  ]
+                                : [
+                                      {
+                                          id: 'synthetic-message',
+                                          type: 'message',
+                                          status: 'completed',
+                                          role: 'assistant',
+                                          content: [
+                                              {
+                                                  type: 'output_text',
+                                                  annotations: [],
+                                                  logprobs: [],
+                                                  text,
+                                              },
+                                          ],
+                                      },
+                                  ],
+                        usage: {
+                            input_tokens: 10,
+                            output_tokens: 5,
+                            total_tokens: 15,
+                        },
+                    });
+                }
+                return Response.json({
+                    id: `synthetic-${requests.length}`,
+                    created: 0,
+                    model: hostileLabels
+                        ? 'VOICE_SECRET MODEL'
+                        : profile.providerModel,
+                    openrouter_metadata: {
+                        endpoints: {
+                            available: [
+                                {
+                                    selected: true,
+                                    provider: hostileLabels
+                                        ? 'VOICE_SECRET ATTRIBUTION'
+                                        : provider,
+                                    model: hostileLabels
+                                        ? 'VOICE_SECRET ATTRIBUTION'
+                                        : profile.providerModel,
+                                },
+                            ],
+                        },
+                    },
+                    choices: [
+                        {
+                            index: 0,
+                            message: { role: 'assistant', content: text },
+                            finish_reason: 'stop',
+                        },
+                    ],
+                    usage: {
+                        prompt_tokens: 10,
+                        completion_tokens: 5,
+                        total_tokens: 15,
+                    },
+                });
+            }
+        );
+        try {
+            const orchestrator = createChatOrchestrator({
+                generationRuntime: createBoundedOllamaGenerationRuntime({
+                    runtime: createVoltAgentRuntime({
+                        defaultModel: `${provider}/${profile.providerModel}`,
+                        openrouter: { apiKey: 'synthetic-key' },
+                    }),
+                    enabled: false,
+                    maxConcurrentGenerations: 1,
+                    maxQueuedGenerations: 0,
+                    logger,
+                }),
+                storeTrace: (metadata, ...rest) =>
+                    storeTrace(store, metadata, ...rest),
+                buildResponseMetadata,
+                defaultModel: profile.id,
+                recordUsage: () => undefined,
+            });
+            const result = await orchestrator.runRealtimeConversation(
+                snapshot(),
+                {
+                    signal: new AbortController().signal,
+                    onRunStarted: () => undefined,
+                }
+            );
+            assert.equal(requests.length, 3);
+            if (provider === 'openrouter') {
+                assert.ok(requests[0].response_format);
+                assert.ok(requests[2].response_format);
+                assert.ok(
+                    requests.every((request) => request.tools === undefined)
+                );
+            } else {
+                assert.deepEqual(requests[0].tool_choice, {
+                    type: 'function',
+                    name: 'submit_planner_decision',
+                });
+            }
+            assert.ok(
+                requests.every(
+                    (request) => request.model === profile.providerModel
+                )
+            );
+            assert.ok(result.finalResponse?.disposition === 'approved');
+            assert.equal(
+                result.finalResponse.text,
+                'VOICE_SECRET APPROVED ANSWER'
+            );
+            assert.ok(result.responseId);
+            const metadata = await store.retrieve(result.responseId);
+            assert.equal(metadata?.workflow?.runId, result.runId);
+            assert.equal(metadata?.workflow?.runStatus, 'completed');
+            assert.equal(
+                (await store.retrieveResponseCandidates(result.responseId))
+                    .length,
+                0
+            );
+            assert.equal(
+                (await store.retrieveModelDebugCaptures(result.responseId))
+                    .length,
+                0
+            );
+            assert.doesNotMatch(
+                JSON.stringify(metadata),
+                /VOICE_SECRET|Private Name/
+            );
+            assert.ok(
+                metadata?.workflow?.steps.some(
+                    (step) => (step.usage?.totalTokens ?? 0) > 0
+                )
+            );
+            hostileLabels = false;
+            requests.length = 0;
+            const recognized = await orchestrator.runRealtimeConversation(
+                snapshot(),
+                {
+                    signal: new AbortController().signal,
+                    onRunStarted: () => undefined,
+                }
+            );
+            assert.ok(recognized.responseId);
+            const recognizedMetadata = await store.retrieve(
+                recognized.responseId
+            );
+            assert.equal(recognizedMetadata?.modelVersion, 'gpt-5-mini');
+            assert.equal(
+                recognizedMetadata?.workflow?.steps.find(
+                    (step) => step.stepKind === 'generate'
+                )?.model,
+                'gpt-5-mini'
+            );
+            failing = true;
+            const failed = await orchestrator.runRealtimeConversation(
+                snapshot(),
+                {
+                    signal: new AbortController().signal,
+                    onRunStarted: () => undefined,
+                }
+            );
+            assert.notEqual(failed.finalResponse?.disposition, 'approved');
+            assert.ok(failed.responseId);
+            const failureMetadata = await store.retrieve(failed.responseId);
+            assert.ok(failureMetadata?.workflow);
+            assert.doesNotMatch(
+                JSON.stringify(failureMetadata),
+                /VOICE_SECRET|Private Name/
+            );
+        } finally {
+            store.close();
+            await fs.rm(root, { recursive: true, force: true });
+            await observability.shutdown();
+            mutable.modelProfiles = previousProfiles;
+            runtimeConfig.chatWorkflow.modeId = previousMode;
+            runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+            Object.assign(runtimeConfig.openai, previousOpenAi);
+            if (previousApiKey === undefined) delete process.env.OPENAI_API_KEY;
+            else process.env.OPENAI_API_KEY = previousApiKey;
+            if (previousDebug === undefined)
+                delete process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO;
+            else process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO = previousDebug;
+        }
+    });
+}
+
 test('only the selected, assessed final answer is returned for voice staging', async () => {
     const previousMode = runtimeConfig.chatWorkflow.modeId;
     const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
@@ -73,7 +368,6 @@ test('only the selected, assessed final answer is returned for voice staging', a
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'synthetic',
-                supportsEphemeralContent: true,
                 generate: async (request) => ({
                     model: request.model,
                     text:
@@ -127,7 +421,6 @@ test('an apparently final assessment cannot approve a missing Result or a differ
             const orchestrator = createChatOrchestrator({
                 generationRuntime: {
                     kind: 'synthetic',
-                    supportsEphemeralContent: true,
                     generate: async (request) => ({
                         model: request.model,
                         text:
@@ -216,7 +509,6 @@ test('revision becomes speakable only when its own selected draft is finalized',
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'synthetic',
-                supportsEphemeralContent: true,
                 generate: async (request) => ({
                     model: request.model,
                     text: outputs[calls++] ?? '',
@@ -286,7 +578,6 @@ test('delivery waits for persistence and cannot survive a failed write or cancel
             const orchestrator = createChatOrchestrator({
                 generationRuntime: {
                     kind: 'synthetic',
-                    supportsEphemeralContent: true,
                     generate: async (request) => ({
                         model: request.model,
                         text:
@@ -350,7 +641,6 @@ test('voice withholds failed assessments and unresolved revision or search reque
             const orchestrator = createChatOrchestrator({
                 generationRuntime: {
                     kind: 'synthetic',
-                    supportsEphemeralContent: true,
                     generate: async (request) => ({
                         model: request.model,
                         text:
@@ -411,7 +701,6 @@ test('voice denies planner terminal actions before execution and retains canonic
         let stored: ResponseMetadata | undefined;
         const runtime: GenerationRuntime = {
             kind: 'synthetic',
-            supportsEphemeralContent: true,
             generate: async (request) => {
                 calls += 1;
                 return {
@@ -486,7 +775,6 @@ test('allowlisted weather clarification still records content-free canonical exe
     const orchestrator = createChatOrchestrator({
         generationRuntime: {
             kind: 'synthetic',
-            supportsEphemeralContent: true,
             generate: async (request) => ({
                 model: request.model,
                 text:
@@ -537,35 +825,6 @@ test('allowlisted weather clarification still records content-free canonical exe
     assert.equal(JSON.stringify(stored).includes('VOICE_SECRET'), false);
 });
 
-test('voice rejects runtimes without an explicit content-retention guarantee before any execution', async () => {
-    let calls = 0;
-    const orchestrator = createChatOrchestrator({
-        generationRuntime: {
-            kind: 'test-runtime',
-            generate: async () => {
-                calls += 1;
-                throw new Error('Must not execute');
-            },
-        },
-        storeTrace: async () => {
-            throw new Error('Must not persist');
-        },
-        buildResponseMetadata,
-        defaultModel: 'gpt-5-mini',
-        recordUsage: () => undefined,
-    });
-    await assert.rejects(
-        orchestrator.runRealtimeConversation(snapshot(), {
-            signal: new AbortController().signal,
-            onRunStarted: () => {
-                throw new Error('Must not allocate a Run');
-            },
-        }),
-        /runtime does not support ephemeral content/
-    );
-    assert.equal(calls, 0);
-});
-
 test('express voice still executes a canonical Workflow', async () => {
     const priorMode = runtimeConfig.chatWorkflow.modeId;
     runtimeConfig.chatWorkflow.modeId = 'express';
@@ -576,7 +835,6 @@ test('express voice still executes a canonical Workflow', async () => {
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'test-runtime',
-                supportsEphemeralContent: true,
                 generate: async (request) => ({
                     model: request.model,
                     text:
@@ -615,7 +873,6 @@ test('voice cannot complete without a canonical execution receipt', async () => 
     const orchestrator = createChatOrchestrator({
         generationRuntime: {
             kind: 'test-runtime',
-            supportsEphemeralContent: true,
             generate: async (request) => ({
                 model: request.model,
                 text:
@@ -661,7 +918,6 @@ test('voice provider errors cannot enter persistent logs even with model debug c
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'synthetic',
-                supportsEphemeralContent: true,
                 generate: async () => {
                     throw new Error('VOICE_SECRET');
                 },
@@ -711,7 +967,6 @@ test('planner-requested GitHub context is unavailable at the executor boundary f
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'synthetic',
-                supportsEphemeralContent: true,
                 generate: async (request) => ({
                     model: request.model,
                     text:
@@ -814,7 +1069,6 @@ test('allowlisted web search cannot escalate its hints into provider-native tool
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'test-runtime',
-                supportsEphemeralContent: true,
                 generate: async (request) => {
                     if (calls++ === 0)
                         return {
@@ -885,7 +1139,6 @@ test('real storage withholds voice bodies and refuses completion when canonical 
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'test-runtime',
-                supportsEphemeralContent: true,
                 generate: async (request) => ({
                     model: request.model,
                     text:
@@ -992,7 +1245,6 @@ test('a cancelled real Workflow records failed attempts without retrying the abo
     const orchestrator = createChatOrchestrator({
         generationRuntime: {
             kind: 'test-runtime',
-            supportsEphemeralContent: true,
             generate: async (request) => {
                 if (calls++ === 0)
                     return {
