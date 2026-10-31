@@ -29,7 +29,6 @@ import {
     RealtimeContextParticipant,
 } from '../utils/prompting/RealtimeContextBuilder.js';
 import type { InternalVoiceRealtimeUsage } from '@footnote/contracts/voice';
-import type { InternalTtsVoiceId } from '@footnote/contracts/providers';
 
 type ClientWithHandlers = Client & {
     handlers?: {
@@ -49,7 +48,13 @@ export class VoiceSubsystem extends Event {
     private connectionManager: VoiceConnectionManager;
     private client: Client;
     private realtimeContextBuilder: RealtimeContextBuilder;
-    private initiatingVoices: Map<string, InternalTtsVoiceId> = new Map();
+    private initiatingCalls = new Map<
+        string,
+        {
+            mode: 'standard' | 'live' | undefined;
+            requestExtendedDuration: boolean;
+        }
+    >();
 
     constructor(client: Client) {
         super({
@@ -129,12 +134,22 @@ export class VoiceSubsystem extends Event {
             return;
         }
 
-        // The /call flow waits for the human participant to join before we
-        // create the realtime session. That keeps the session lifecycle tied
-        // to the actual conversation start instead of burning a socket while
-        // the bot sits alone in the channel.
+        const initiatingUserId =
+            this.userVoiceStateHandler.getInitiatingUser(guildId);
+        const humans = voiceChannel.members.filter(
+            (member) => !member.user.bot
+        );
+        if (
+            initiatingUserId &&
+            humans.size === 1 &&
+            humans.has(initiatingUserId)
+        ) {
+            await this.startConversation(guildId);
+            return;
+        }
+
         logger.info(
-            `Bot joined voice channel ${voiceChannel.name} in guild ${guildId}; waiting for the initiating user to start the session.`
+            `Bot joined voice channel ${voiceChannel.name} in guild ${guildId}; waiting for the consenting caller.`
         );
     }
 
@@ -162,15 +177,23 @@ export class VoiceSubsystem extends Event {
         return { participantMap, contextParticipants };
     }
 
-    public registerInitiatingUser(guildId: string, userId: string): void {
-        this.userVoiceStateHandler.registerInitiatingUser(guildId, userId);
-    }
-
-    public registerInitiatingVoice(
+    public async registerInitiatingCall(
         guildId: string,
-        voice: InternalTtsVoiceId
-    ): void {
-        this.initiatingVoices.set(guildId, voice);
+        userId: string,
+        mode: 'standard' | 'live' | undefined,
+        requestExtendedDuration: boolean
+    ): Promise<void> {
+        this.userVoiceStateHandler.registerInitiatingUser(guildId, userId);
+        this.initiatingCalls.set(guildId, { mode, requestExtendedDuration });
+        const channel =
+            this.client.guilds.cache.get(guildId)?.members.me?.voice.channel;
+        if (
+            channel &&
+            channel.members.filter((member) => !member.user.bot).size === 1 &&
+            channel.members.has(userId)
+        ) {
+            await this.startConversation(guildId);
+        }
     }
 
     public async createSession(
@@ -223,7 +246,7 @@ export class VoiceSubsystem extends Event {
             guildId,
             ignoredUserIds
         );
-        this.initiatingVoices.delete(guildId);
+        this.initiatingCalls.delete(guildId);
 
         logger.info(
             `Voice session created for guild ${guildId} in channel ${channelId}`
@@ -241,7 +264,7 @@ export class VoiceSubsystem extends Event {
 
         this.sessionManager.removeSession(guildId);
         this.userVoiceStateHandler.clearInitiatingUser(guildId);
-        this.initiatingVoices.delete(guildId);
+        this.initiatingCalls.delete(guildId);
         this.audioCaptureHandler.cleanupGuild(guildId);
         this.audioPlaybackHandler.cleanupGuild(guildId);
     }
@@ -293,19 +316,12 @@ export class VoiceSubsystem extends Event {
                 guildId,
                 ignoredUserIds
             );
-            this.initiatingVoices.delete(guildId);
+            this.initiatingCalls.delete(guildId);
         }
 
-        try {
-            logger.info(`Started conversation in guild ${guildId}`);
-            await session.realtimeSession.sendGreeting();
-        } catch (error) {
-            logger.error(
-                `Error starting conversation in guild ${guildId}:`,
-                error
-            );
-            throw error;
-        }
+        if (session.isActive) return;
+        session.isActive = true;
+        logger.info(`Started conversation in guild ${guildId}`);
     }
 
     private async createRealtimeSession(
@@ -317,10 +333,21 @@ export class VoiceSubsystem extends Event {
         const context = this.realtimeContextBuilder.buildContext({
             participants,
         });
-        const voiceOverride = this.initiatingVoices.get(guildId);
+        const initiatingUserId =
+            this.userVoiceStateHandler.getInitiatingUser(guildId);
+        if (!initiatingUserId)
+            throw new Error('Voice session is missing its initiating caller');
+        const humans = participants.filter((participant) => !participant.isBot);
+        if (humans.length !== 1 || humans[0]?.id !== initiatingUserId)
+            throw new Error(
+                'Voice session requires only its consenting caller'
+            );
+        const call = this.initiatingCalls.get(guildId);
         const realtimeSession = new RealtimeSession({
             context: context.sessionContext,
-            voice: voiceOverride ?? undefined,
+            mode: call?.mode,
+            initiatorId: initiatingUserId,
+            requestExtendedDuration: call?.requestExtendedDuration ?? false,
             turnDetection: runtimeConfig.realtime.turnDetection,
             turnDetectionConfig:
                 runtimeConfig.realtime.turnDetectionConfig ?? undefined,
@@ -332,21 +359,36 @@ export class VoiceSubsystem extends Event {
         if (!sessionWithListeners.listenersAttached) {
             sessionWithListeners.listenersAttached = true;
 
-            realtimeSession.on('audio', (audioData: Buffer) => {
-                if (!audioData || audioData.length === 0) return;
+            realtimeSession.on(
+                'audio',
+                (audioData: Buffer, deliveryId?: string) => {
+                    if (!audioData || audioData.length === 0) return;
 
-                const session = this.sessionManager.getSession(guildId);
-                if (!session) return;
+                    const session = this.sessionManager.getSession(guildId);
+                    if (!session) return;
 
-                void this.audioPlaybackHandler
-                    .playAudioToChannel(session.connection, audioData)
-                    .catch((error) => {
+                    const playback = deliveryId
+                        ? this.audioPlaybackHandler.playApprovedAudioToChannel(
+                              session.connection,
+                              audioData,
+                              (event) =>
+                                  realtimeSession.reportPlayback(
+                                      deliveryId,
+                                      event
+                                  )
+                          )
+                        : this.audioPlaybackHandler.playAudioToChannel(
+                              session.connection,
+                              audioData
+                          );
+                    void playback.catch((error) => {
                         logger.error(
                             '[VoiceStateHandler] Error queuing realtime audio for playback:',
                             error
                         );
                     });
-            });
+                }
+            );
 
             realtimeSession.on('greeting', () =>
                 logger.info('[BOT GREETING] Realtime greeting received.')
@@ -376,6 +418,20 @@ export class VoiceSubsystem extends Event {
             realtimeSession.on('error', (error: Error) =>
                 logger.error('[RealtimeSession] Error:', error)
             );
+            realtimeSession.on('session.closed', () => {
+                this.audioPlaybackHandler.stopPlayback(guildId);
+                const connection = getVoiceConnection(guildId);
+                if (connection) {
+                    void this.connectionManager
+                        .cleanupVoiceConnection(connection, this.client)
+                        .catch((error: unknown) =>
+                            logger.error(
+                                `Failed to close voice call in guild ${guildId}:`,
+                                error
+                            )
+                        );
+                }
+            });
 
             realtimeSession.on('connected', () =>
                 logger.info(

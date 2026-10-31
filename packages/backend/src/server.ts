@@ -79,6 +79,8 @@ import { SqliteRecoverableTaskStore } from './storage/recoverableTaskStore.js';
 import { createInternalVoiceTtsService } from './services/internalVoiceTts.js';
 import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
+import { createOpenAiLiveVoiceSession } from './services/openAiLiveVoice.js';
+import { createOpenRouterVoiceService } from './services/openRouterVoice.js';
 import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
 import { createChatProfilesHandler } from './handlers/chatProfiles.js';
 import { createBoundedOllamaGenerationRuntime } from './services/boundedOllamaRuntime.js';
@@ -139,6 +141,16 @@ let internalVoiceTtsService: ReturnType<
     typeof createInternalVoiceTtsService
 > | null = null;
 let realtimeVoiceRuntime: RealtimeVoiceRuntime | null = null;
+let openRouterVoiceService: ReturnType<
+    typeof createOpenRouterVoiceService
+> | null = null;
+let openAiLiveVoiceSessionFactory:
+    | ((input: {
+          instructions: string;
+          voice: string;
+          signal?: AbortSignal;
+      }) => ReturnType<typeof createOpenAiLiveVoiceSession>)
+    | null = null;
 let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
 let serviceRateLimiter: SimpleRateLimiter | null = null;
@@ -232,6 +244,12 @@ const initializeServices = () => {
     // Chat runtime can run when at least one provider is configured.
     const hasOpenAiProvider = Boolean(runtimeConfig.openai.apiKey);
     const hasOpenRouterProvider = Boolean(runtimeConfig.openrouter.apiKey);
+    openRouterVoiceService = runtimeConfig.openrouter.apiKey
+        ? createOpenRouterVoiceService({
+              apiKey: runtimeConfig.openrouter.apiKey,
+              baseUrl: runtimeConfig.openrouter.baseUrl,
+          })
+        : null;
     const hasOllamaCatalogProfiles = runtimeConfig.modelProfiles.catalog.some(
         (profile) => profile.provider === 'ollama'
     );
@@ -364,6 +382,13 @@ const initializeServices = () => {
 
     // --- OpenAI-only services ---
     if (runtimeConfig.openai.apiKey) {
+        openAiLiveVoiceSessionFactory = ({ instructions, voice, signal }) =>
+            createOpenAiLiveVoiceSession({
+                apiKey: runtimeConfig.openai.apiKey!,
+                instructions,
+                voice,
+                signal,
+            });
         imageGenerationRuntime = createOpenAiImageRuntime({
             apiKey: runtimeConfig.openai.apiKey,
             requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
@@ -392,6 +417,7 @@ const initializeServices = () => {
             logger: openAiRealtimeLogger,
         });
     } else {
+        openAiLiveVoiceSessionFactory = null;
         imageGenerationRuntime = null;
         internalImageTaskService = null;
         internalVoiceTtsService = null;
@@ -865,9 +891,41 @@ const { handleInternalVoiceTtsRequest } = createInternalVoiceTtsHandler({
             window: runtimeConfig.rateLimits.chatService.windowMs,
         }),
 });
+// Chat is the backend-standardized conversation interface (adapter-facing, Turnstile + rate-limited for public web calls).
+const executionContractTrustGraphRuntimeOptions =
+    resolveExecutionContractTrustGraphRuntimeOptions(
+        runtimeConfig.executionContractTrustGraph
+    );
+
+const handleChatRequest = createChatHandler({
+    generationRuntime,
+    alertRouter: incidentAlertRouter,
+    weatherForecastTool: weatherForecastTool ?? undefined,
+    internalImageDescriptionTaskService,
+    ipRateLimiter,
+    sessionRateLimiter,
+    serviceRateLimiter,
+    storeTrace: storeTraceWithStore,
+    logRequest,
+    buildResponseMetadata,
+    maxChatBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+    executionContractTrustGraph: executionContractTrustGraphRuntimeOptions,
+    accountAuthService,
+    accountStore,
+});
 const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
     createInternalVoiceRealtimeHandler({
         realtimeVoiceRuntime,
+        openAiLiveVoiceSessionFactory,
+        defaultMode: runtimeConfig.voice.defaultMode,
+        openRouterVoiceService,
+        workflowRunner: handleChatRequest.runRealtimeConversation
+            ? {
+                  runRealtimeConversation:
+                      handleChatRequest.runRealtimeConversation,
+              }
+            : null,
+        developerUserId: runtimeConfig.voice.developerUserId,
         profile: runtimeConfig.profile,
         fallbackOptions: {
             model: runtimeConfig.openai.defaultRealtimeModel,
@@ -907,28 +965,6 @@ const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
             await storeTraceWithStore(metadata);
         },
     });
-// Chat is the backend-standardized conversation interface (adapter-facing, Turnstile + rate-limited for public web calls).
-const executionContractTrustGraphRuntimeOptions =
-    resolveExecutionContractTrustGraphRuntimeOptions(
-        runtimeConfig.executionContractTrustGraph
-    );
-
-const handleChatRequest = createChatHandler({
-    generationRuntime,
-    alertRouter: incidentAlertRouter,
-    weatherForecastTool: weatherForecastTool ?? undefined,
-    internalImageDescriptionTaskService,
-    ipRateLimiter,
-    sessionRateLimiter,
-    serviceRateLimiter,
-    storeTrace: storeTraceWithStore,
-    logRequest,
-    buildResponseMetadata,
-    maxChatBodyBytes: runtimeConfig.reflect.maxBodyBytes,
-    executionContractTrustGraph: executionContractTrustGraphRuntimeOptions,
-    accountAuthService,
-    accountStore,
-});
 const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
     handlers: {
         handleTraceRequest,

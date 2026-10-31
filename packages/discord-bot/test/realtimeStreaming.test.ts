@@ -22,6 +22,7 @@ class FakeRealtimeSession {
         buffer: Buffer;
         userId?: string;
     }[] = [];
+    public commitCount = 0;
 
     async sendAudio(
         buffer: Buffer,
@@ -32,10 +33,15 @@ class FakeRealtimeSession {
     }
 
     clearAudio(): void {}
+    async commitAudio(): Promise<void> {
+        this.commitCount += 1;
+    }
     disconnect(): void {}
 }
 
-const noopPlaybackHandler = {} as AudioPlaybackHandler;
+const noopPlaybackHandler = {
+    stopPlayback: () => undefined,
+} as unknown as AudioPlaybackHandler;
 const noopConnection = {} as VoiceConnection;
 
 const waitForPipeline = async (session: { audioPipeline: Promise<void> }) => {
@@ -102,7 +108,7 @@ test('RealtimeAudioHandler keeps both speakers as separate append events', async
     );
 });
 
-test('VoiceSessionManager forwards multi-speaker audio with display names', async () => {
+test('VoiceSessionManager forwards only the caller and commits their utterance boundary', async () => {
     const manager = new VoiceSessionManager();
     const audioCapture = new AudioCaptureHandler();
     const realtimeSession =
@@ -118,7 +124,8 @@ test('VoiceSessionManager forwards multi-speaker audio with display names', asyn
         realtimeSession,
         audioCapture,
         noopPlaybackHandler,
-        participants
+        participants,
+        'user-1'
     );
 
     manager.addSession('guild-1', session);
@@ -133,22 +140,25 @@ test('VoiceSessionManager forwards multi-speaker audio with display names', asyn
         userId: 'user-2',
         audioBuffer: Buffer.from([3, 4]),
     });
+    audioCapture.emit('speakerSilence', {
+        guildId: 'guild-1',
+        userId: 'user-1',
+        chunkCount: 1,
+        totalBytes: 2,
+    });
     await waitForPipeline(session);
 
     assert.deepEqual(
         realtimeSession.chunks.map(
             ({ speaker }: { speaker: string }) => speaker
         ),
-        ['Alice', 'Bob']
+        ['Alice']
     );
     assert.deepEqual(
         Array.from(realtimeSession.chunks[0].buffer.values()),
         [1, 2]
     );
-    assert.deepEqual(
-        Array.from(realtimeSession.chunks[1].buffer.values()),
-        [3, 4]
-    );
+    assert.equal(realtimeSession.commitCount, 1);
 
     manager.removeSession('guild-1');
 });

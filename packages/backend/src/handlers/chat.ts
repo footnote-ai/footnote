@@ -18,6 +18,7 @@ import type { CreateChatServiceOptions } from '../services/chatService.js';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import { runtimeConfig } from '../config.js';
 import { createChatOrchestrator } from '../services/chatOrchestrator.js';
+import type { RealtimeWorkflowRunner } from '../services/realtimeConversationState.js';
 import { ConversationContextAssemblyError } from '../services/conversationContextService.js';
 import type { IncidentAlertRouter } from '../services/incidentAlerts.js';
 import type { WeatherForecastTool } from '../services/contextIntegrations/weather/index.js';
@@ -74,6 +75,12 @@ type ChatHandlerDeps = {
               >)
         | null;
     accountStore?: AccountStore | null;
+};
+
+export type ChatRequestHandler = {
+    (req: IncomingMessage, res: ServerResponse): Promise<void>;
+    runRealtimeConversation:
+        RealtimeWorkflowRunner['runRealtimeConversation'] | null;
 };
 
 // The handler keeps transport concerns here and pushes business logic into helpers/services.
@@ -171,7 +178,7 @@ const createChatHandler = ({
     executionContractTrustGraph,
     accountAuthService = null,
     accountStore = null,
-}: ChatHandlerDeps) => {
+}: ChatHandlerDeps): ChatRequestHandler => {
     const chatOrchestrator = generationRuntime
         ? createChatOrchestrator({
               generationRuntime,
@@ -200,7 +207,10 @@ const createChatHandler = ({
      * @api.operationId: optionsChat
      * @api.path: OPTIONS /api/chat
      */
-    return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    const handleChatRequest = async (
+        req: IncomingMessage,
+        res: ServerResponse
+    ): Promise<void> => {
         const requestAbortController = new AbortController();
         if (req.aborted) {
             requestAbortController.abort();
@@ -437,6 +447,11 @@ const createChatHandler = ({
             logRequest(req, res, `chat generation-error ${errorMessage}`);
         }
     };
+
+    return Object.assign(handleChatRequest, {
+        runRealtimeConversation:
+            chatOrchestrator?.runRealtimeConversation ?? null,
+    }) as ChatRequestHandler;
 };
 
 export { createChatHandler };

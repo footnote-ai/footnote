@@ -78,10 +78,7 @@ export const envEntries = [
         description:
             'OpenAI API key used when OpenAI-backed profiles or OpenAI-only routes are enabled.',
         defaultValue: noDefault(),
-        usedBy: [
-            'packages/backend/src/config.ts',
-            'packages/discord-bot/src/config.ts',
-        ],
+        usedBy: ['packages/backend/src/config.ts'],
     }),
 
     defineEnv({
@@ -807,9 +804,12 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Developer Discord user ID used for privileged bot actions.',
+            'Developer Discord user ID used for privileged bot actions and the bounded voice-call time override.',
         defaultValue: noDefault(),
-        usedBy: ['packages/discord-bot/src/config.ts'],
+        usedBy: [
+            'packages/backend/src/config.ts',
+            'packages/discord-bot/src/config.ts',
+        ],
     }),
 
     defineEnv({
@@ -1876,6 +1876,22 @@ export const envEntries = [
             'When true, planner falls back to text JSON compatibility parsing when structured planner execution fails.',
         defaultValue: literal(false),
         usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
+        key: 'VOICE_DEFAULT_MODE',
+        owner: 'shared',
+        stage: 'runtime',
+        section: 'voice',
+        required: false,
+        secret: false,
+        kind: 'enum',
+        description: 'Default mode for Discord voice calls.',
+        defaultValue: literal('standard'),
+        allowedValues: ['standard', 'live'],
+        usedBy: [
+            'packages/backend/src/config.ts',
+            'packages/discord-bot/src/config.ts',
+        ],
     }),
     defineEnv({
         key: 'REALTIME_DEFAULT_MODEL',

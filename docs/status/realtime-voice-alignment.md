@@ -1,17 +1,29 @@
 # Realtime Voice alignment
 
-Updated: 2026-10-31. Baseline: merged #964 and the earlier synthetic
-call-state, Workflow and controlled-delivery slices. Owner:
+Updated: 2026-10-31. PR #965 adds synthetic Standard and Live voice paths to the
+earlier call-state, Workflow and controlled-delivery slices. Owner:
 [#558](https://github.com/footnote-ai/footnote/issues/558), still open.
 
-This page tracks what the code does and which tests cover it. Synthetic tests
-exercise call state, background Workflow execution, answer approval and playback
-reports; live audio is not wired up. Update the relevant evidence as work lands.
-The [architecture guide](../architecture/realtime-voice.md) explains the current
-transport, while the [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
-covers the planned conversational behavior.
+This page tracks what the code does and which tests cover it. PR #965 connects
+Discord Standard and Live modes to the bounded Workflow and approval state.
+Synthetic tests cover the adapters and call path; live provider use and real
+Discord playback remain unverified. The [architecture guide](../architecture/realtime-voice.md)
+describes the current modes, while the [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
+tracks remaining evaluation and consent work.
 
 ## Alignment matrix
+
+| Area                      | Current implementation in PR #965                                                                                                                                                                                                            | Evidence / remaining limit                                                                                                                           |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Standard                  | OpenRouter transcription → existing Workflow → approved exact-text synthesis; Discord streams PCM and reports local playback state.                                                                                                          | Backend adapter/handler and Discord synthetic tests. Paid provider behavior, usage completeness and human audibility are unverified.                 |
+| Live                      | Backend-owned GPT-Live session accepts only the initiating caller's audio. Client delegation is matched to bounded transcript context and current turn before starting the same Workflow; only an approved result is appended as commentary. | Synthetic WebSocket and handler tests. Transcript timing, independent model speech, paraphrase, provider retention, cost and latency are unverified. |
+| Selection and limits      | `/call mode` selects standard/live; `VOICE_DEFAULT_MODE` supplies the default. Calls are 60 seconds; configured developer may request five minutes. One human is admitted.                                                                   | Config, command and handler tests. Deployment configuration and real Discord participant events remain unverified.                                   |
+| Interruption and playback | Caller audio interrupts local playback; disconnect, caller mute/deafen/leave, or another human joining closes the call. Standard reports local start/end/failure; Live audio has no reviewed-text delivery receipt.                          | Discord synthetic tests. Local playback state cannot prove a listener heard audio or remote generation stopped.                                      |
+| Privacy and capacity      | Transcript and audio remain transient; call closes clear state and cancel/revoke local work. Process-local Workflow capacity remains occupied until work settles. Provider failure does not switch modes.                                    | Backend privacy/cancellation tests. Provider retention and deployment recovery are unverified.                                                       |
+
+The detailed matrix below records the pre-PR #965 baseline through #964. Its
+older `Gap` entries are historical and are superseded by the current matrix
+above; remaining work is listed after the foundation sections.
 
 Paths in the evidence column are relative to `packages/`.
 "Implemented" means present in code. Synthetic call-state tests exercise the new
@@ -51,12 +63,13 @@ This is the maintained alignment matrix following #803/#846. The older context
 proposal's segment/cache design is not a working conversation store; see its
 [implementation note](../proposals/conversation_context_boundary.md#implementation-and-realtime-follow-up).
 
-## Synthetic call-state foundation
+## Call-state foundation
 
 `backend/src/services/realtimeConversationState.ts` holds one call's transient
 state beside the existing session correlation. It reuses
 `projectConversationMessages` and the conversation envelope; text-chat assembly
-and Run/Trace records are unchanged. No live handler calls it yet.
+and Run/Trace records are unchanged. PR #965 connects one-caller Live transcript
+and delegation events to this state; Standard finalizes caller turns after STT.
 
 - Finalized turns receive stable IDs that survive projection and trimming.
   Intent revisions invalidate earlier questions after correction or cancellation.
@@ -86,7 +99,8 @@ speech delivery is still separate.
 dispatching `chatOrchestrator.runRealtimeConversation`. That backend-only entry
 uses `runChat` and the existing policy, planner, Context Integrations and Workflow
 over the accepted projection. It does not call the public chat HTTP endpoint.
-No live voice handler invokes this path yet.
+PR #965 invokes it from Standard after transcription and from Live only after
+matching a client delegation to bounded transcript context and the current turn.
 
 - Completion requires an explicit receipt with response and canonical Run IDs,
   issued only after storage succeeds. Missing receipts/status and storage failures
@@ -182,42 +196,42 @@ playback reports cover request versus handoff versus start, duplicate/out-of-ord
 reports, expiry while waiting, interruption before/during playback, and late
 completion after revocation. Run and review evidence remain unchanged.
 
-Backend tests cover answer approval, handoff and playback-report ordering.
-Live provider events, safe speaking times, audio playback and cancellation are
-still unwired. A playback report cannot prove a listener heard the answer or
-that delivery happened exactly once. Unassessed or unresolved fallback answers
-remain ineligible for speech until the policy changes.
+Backend and Discord tests cover answer approval, handoff, playback-report
+ordering, local playback and interruption. Provider events and audio are
+connected through synthetic adapters; no real provider/Discord call has been
+verified. A playback report cannot prove a listener heard the answer or that
+delivery happened exactly once. Unassessed or unresolved fallback answers
+remain ineligible for Standard speech.
 
+## Voice modes and remaining gates
 
-## Proposed Voice modes (not implemented)
+PR #965 implements both speech paths around one shared Workflow. Standard is
+the default: OpenRouter transcribes, Workflow reviews, then OpenRouter TTS
+synthesizes only the approved exact text. Live is opt-in: OpenAI GPT-Live handles
+conversation and client delegation, while Footnote invokes the same Workflow
+and appends only an approved result as commentary. GPT-Live may speak on its own
+or paraphrase a reviewed answer; that is not exact approved playback.
 
-The [current plan](../proposals/realtime-talker-reasoner.md#voice-modes-and-next-work-planned)
-uses one shared Workflow with two speech paths. Standard (proposed default)
-will transcribe the user's turn, review the answer and play its approved text
-through TTS, starting with OpenRouter. Live will use OpenAI GPT-Live client
-delegation to converse while the same Workflow runs in the background.
-GPT-Live may speak on its own or paraphrase a reviewed answer; that is not
-the same as exact approved playback.
+The `/call` mode option and `VOICE_DEFAULT_MODE` select standard/live before
+connection. Calls have a 60-second default cap and configured developer-only
+five-minute override. The call cap is distinct from the 60-second Workflow
+execution deadline. Only the initiating human's audio is forwarded; another
+human joining or the caller muting, deafening or leaving closes the session.
+The older OpenAI Realtime path remains as a compatibility/test fallback, not a
+silent provider or mode fallback.
 
-The existing OpenAI-only `/call` transport is legacy code, not a compatibility
-requirement for either option. The names Standard and Live are provisional;
-there is no `/call mode` option or setup selection in the implementation.
-Calls are proposed to last 60 seconds by default, with a bounded admin
-override (initially five minutes). Neither the call timeout nor the override
-exists yet. The current 60-second **Workflow execution** deadline is separate.
+Tests use synthetic providers. Live credentials, deployment configuration,
+provider retention, transcript timing, latency, voice quality, usage/cost
+completeness and real Discord playback have not been verified. Multi-person
+consent and history transfer belong to #559.
 
-Start with one consenting human and existing process-local capacity. Test
-provider events and limits synthetically before paid calls. The operator
-plans to add an OpenAI API key, but Live credentials and cost have not been
-verified. Multi-speaker consent and history transfer belong to #559.
+## Remaining decisions and gates
 
-## Proposed decisions and remaining gates
-
-The proposal recommends a single-call ephemeral scope, one pending Run handle,
-one result slot, explicit freshness/approval gates, and controlled speech of
-approved text. The ephemeral call-state foundation below is implemented in
-isolation. Pending execution and the controlled-delivery lifecycle are implemented above; live audio delivery remains proposed.
-No general conversation coordinator is needed.
+The single-call ephemeral scope, one pending Run handle, one result slot,
+freshness/approval gates and controlled Standard speech are connected in PR #965.
+Live commentary remains a model-mediated presentation and is not proof of the
+exact approved words reaching a listener. No general conversation coordinator
+was added.
 
 The target is a lightweight conversational Talker that listens, speaks naturally,
 and manages turn-taking while reasoning proceeds independently. Fixed
@@ -234,18 +248,16 @@ content. Reconnect must not bypass the held reservation; confirmed stop or
 settlement restores admission, otherwise operator recovery is required. This is
 implemented for the synthetic process-local boundary above, not a live-provider stop guarantee.
 
-Before provider integration, settle broader fallback permission,
-live speaker/consent events, deployment capacity/recovery ownership, and controlled
-speech capability. The bounded Workflow admission/persistence and deadline
-decisions above and the 30-second result TTL are implemented; audio buffering and call lifetime limits
-belong to the later adapter and delivery slices.
+Before paid/live rollout, verify provider behavior and retention, deployment
+capacity/recovery ownership and local playback on real Discord. The bounded
+Workflow admission/persistence, 30-second result TTL, audio path and call
+lifetime limits are implemented with synthetic evidence.
 The [ordered slices](../proposals/realtime-talker-reasoner.md#small-follow-up-sequence)
 assign identity, asynchronous delivery, gating and adapter work to #558.
 [#559](https://github.com/footnote-ai/footnote/issues/559) must separately approve
 cross-surface consent, retention/deletion and historical playback policy.
 
-Provider feasibility is still unverified in Footnote. OpenRouter STT/TTS and
-OpenAI GPT-Live client delegation are documented, but neither planned path has
-been exercised here. No credentials, live audio, latency, voice quality or
-cost were checked in this planning update. Start with fake sessions and
-intercepted requests. Paid experiments need separate approval.
+Provider behavior is unverified in Footnote. OpenRouter STT/TTS and OpenAI
+GPT-Live client delegation have synthetic adapter tests, but no live audio,
+latency, voice quality, retention or complete cost measurement has been checked.
+Paid experiments need separate approval.

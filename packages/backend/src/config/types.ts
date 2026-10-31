@@ -91,6 +91,10 @@ export type RuntimeConfig = {
         apiKey: string | null;
         baseUrl: string;
     };
+    voice: {
+        defaultMode: 'standard' | 'live';
+        developerUserId: string | null;
+    };
     imageDescription: {
         provider: SupportedProvider;
         baseUrl: string | null;

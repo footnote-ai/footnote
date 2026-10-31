@@ -216,6 +216,9 @@ export class RealtimeConversationState {
     private completed: RealtimeCompletion | undefined;
     private delivery:
         { inspection: RealtimeDeliveryStatus; text?: string } | undefined;
+    private readonly deliveryReadyListeners = new Set<
+        (handle: RealtimeFreshnessHandle) => void
+    >();
     private deliveryEpoch = 0;
     private deliveryExpiry: ReturnType<typeof setTimeout> | undefined;
 
@@ -458,6 +461,14 @@ export class RealtimeConversationState {
                                 DELIVERY_TTL_MS
                             );
                             this.deliveryExpiry.unref?.();
+                            for (const listener of this
+                                .deliveryReadyListeners) {
+                                try {
+                                    listener(this.freshnessHandle());
+                                } catch {
+                                    // Adapter notification failures do not alter the recorded Workflow result.
+                                }
+                            }
                         }
                     }
                 },
@@ -504,6 +515,20 @@ export class RealtimeConversationState {
             : undefined;
     }
 
+    /** Subscribes to eligible answers without exposing their text to observers. */
+    onDeliveryReady(
+        listener: (handle: RealtimeFreshnessHandle) => void
+    ): () => void {
+        if (this.closed) return () => undefined;
+        this.deliveryReadyListeners.add(listener);
+        return () => this.deliveryReadyListeners.delete(listener);
+    }
+
+    /** Revokes a pending speech answer when new audio starts before transcription finishes. */
+    interruptDelivery(): void {
+        this.revokeDelivery();
+    }
+
     /** Reserves this ready answer once without handing text to an audio adapter. */
     requestDelivery(
         handle: RealtimeFreshnessHandle
@@ -531,6 +556,13 @@ export class RealtimeConversationState {
             return undefined;
         const text = delivery.text;
         delete delivery.text;
+        delivery.inspection.expiresAt = Date.now() + DELIVERY_TTL_MS;
+        clearTimeout(this.deliveryExpiry);
+        this.deliveryExpiry = setTimeout(
+            () => this.revokeDelivery('expired'),
+            DELIVERY_TTL_MS
+        );
+        this.deliveryExpiry.unref?.();
         delivery.inspection.status = 'handed_off';
         delivery.inspection.handedOffAt = Date.now();
         return {
@@ -554,7 +586,13 @@ export class RealtimeConversationState {
         )
             return false;
         if (event === 'started') {
-            if (inspection.playback !== 'not_reported') return false;
+            if (
+                inspection.playback !== 'not_reported' ||
+                inspection.status === 'expired' ||
+                inspection.status === 'revoked' ||
+                Date.now() >= inspection.expiresAt
+            )
+                return false;
             inspection.startReportedAt = Date.now();
         } else if (event === 'completed') {
             if (inspection.playback !== 'started') return false;
@@ -615,6 +653,7 @@ export class RealtimeConversationState {
         if (this.closed) return;
         this.cancelExecution();
         this.delivery = undefined;
+        this.deliveryReadyListeners.clear();
         this.closed = true;
         this.revision += 1;
         this.audience = [];

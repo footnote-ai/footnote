@@ -89,6 +89,11 @@ export class GuildAudioPipeline {
         await this.writePCM(padding);
     }
 
+    public async finish(): Promise<void> {
+        await this.flushResidualBuffer();
+        if (!this.isDestroyed) this.pcmStream.end();
+    }
+
     public getPlayer(): AudioPlayer {
         return this.player;
     }

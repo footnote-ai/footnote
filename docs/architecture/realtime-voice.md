@@ -8,12 +8,13 @@ At a high level, the Discord bot handles the Discord-specific work: joining the 
 
 Discord does not connect to OpenAI directly. It connects to Footnote's backend at `/api/internal/voice/realtime`, which opens and manages the provider session.
 
-**Scope:** This document covers the current OpenAI-only Realtime transport and
-synthetic Workflow approval work. The [two-mode Voice plan](../proposals/realtime-talker-reasoner.md#voice-modes-and-next-work-planned)
-proposes replacing that transport with Standard (reviewed-text TTS) and Live
-(GPT-Live client delegation). Neither mode, the 60-second call limit nor a
-mode selector is implemented. The old transport does not require compatibility
-support.
+**Scope:** PR #965 implements Standard and Live voice modes around the existing
+Workflow and synthetic approval state. Standard transcribes through OpenRouter,
+then synthesizes only approved text. Live uses a backend-owned GPT-Live session
+and client delegation into the same Workflow; GPT-Live can speak independently
+or paraphrase. The [alignment tracker](../status/realtime-voice-alignment.md)
+records test evidence and remaining limits. No paid provider session or live
+Discord call has been tested.
 
 ## High-Level Flow
 
@@ -22,44 +23,84 @@ sequenceDiagram
     participant User as User in Discord
     participant VoiceState as VoiceStateHandler
     participant Session as RealtimeSession
-    participant Capture as AudioCaptureHandler
     participant Manager as VoiceSessionManager
     participant Backend as /api/internal/voice/realtime
-    participant Prompt as Realtime prompt composer
-    participant Runtime as OpenAI realtime runtime
-    participant OpenAI as OpenAI realtime websocket
-    participant Events as RealtimeEventHandler
-    participant Playback as AudioPlaybackHandler
+    participant Workflow as Existing Workflow
+    participant OpenRouter
+    participant GPTLive as OpenAI GPT-Live
+    participant Playback as Discord audio playback
 
-    User->>VoiceState: Starts /call and joins voice
-    VoiceState->>Session: Start realtime session
-    Session->>Backend: session.start
-    Backend->>Prompt: Build instructions
-    Prompt-->>Backend: Instructions
-    Backend->>Runtime: Open provider session
-    Runtime->>OpenAI: session.update
+    User->>VoiceState: Starts /call with mode and joins
+    VoiceState->>Session: Start selected mode
+    Session->>Backend: session.start (caller, mode, duration)
+    Backend-->>Session: session.ready
 
-    loop User turn
-        User->>Capture: Speaks
-        Capture->>Manager: PCM chunks
-        Manager->>Session: input_audio.append
-        Session->>Backend: Forward audio
-        Backend->>Runtime: Forward audio
-        Runtime->>OpenAI: Append input audio
-        Capture-->>Manager: speakerSilence
-        Manager-->>Session: Optional silence tail for server VAD
+    alt Standard
+        loop Caller turn
+            User->>Manager: Caller PCM
+            Manager->>Backend: Bounded turn audio
+            Backend->>OpenRouter: Transcribe
+            OpenRouter-->>Backend: Transcript
+            Backend->>Workflow: Run existing Workflow
+            Workflow-->>Backend: Persisted, approved answer
+            Backend->>OpenRouter: Synthesize approved text
+            OpenRouter-->>Backend: PCM audio
+            Backend-->>Playback: Approved audio + delivery ID
+            Playback-->>Backend: Local playback reports
+            Playback-->>User: Spoken approved text
+        end
+    else Live
+        Backend->>GPTLive: Open GPT-Live session
+        loop Caller turn
+            User->>Manager: Caller PCM
+            Manager->>Backend: Caller audio only
+            Backend->>GPTLive: Append audio
+            GPTLive-->>Backend: Transcript and client delegation
+            Backend->>Backend: Match delegation to transcript and turn
+            Backend->>Workflow: Run existing Workflow
+            Workflow-->>Backend: Persisted, approved answer
+            Backend->>GPTLive: Append approved commentary
+            GPTLive-->>Backend: Conversational audio deltas
+            Backend-->>Playback: Live audio without exact-text delivery ID
+            Playback-->>User: Spoken Live response
+        end
     end
-
-    OpenAI-->>Runtime: Audio + text + completion events
-    Runtime-->>Backend: Normalized realtime events
-    Backend-->>Session: Forwarded realtime events
-    Session-->>Events: Output events
-    Events-->>Playback: Audio deltas
-    Playback-->>User: Spoken reply
-    Events-->>VoiceState: response.done / errors
 ```
 
-## Settings
+## Current mode implementation
+
+The `/call` command offers `standard` and `live` modes and an optional
+developer-only `extended` flag. `VOICE_DEFAULT_MODE` supplies the default.
+Calls are limited to 60 seconds, or five minutes for the configured developer.
+The backend verifies the caller identity across the trusted service boundary;
+Discord forwards audio from that caller only. A second human joining or the
+caller muting, deafening or leaving closes the session.
+
+### Standard
+
+`internalVoiceRealtime.ts` bounds each PCM turn, sends it to the OpenRouter
+transcription adapter and runs the existing Realtime Workflow. The approved
+exact answer is passed to OpenRouter TTS. Discord starts playback only with the
+single-use delivery handoff, reports local start/completion/interruption/failure,
+and stops stale playback on caller interruption. Synthesis is a complete PCM
+artifact; Discord streams it through the existing guild playback pipeline.
+
+### Live
+
+`openAiLiveVoice.ts` owns the GPT-Live WebSocket on the backend. Discord sends
+only the initiating caller's audio. The handler bounds transcript fragments and
+associates client delegation events with the current transcript/turn before
+calling the same Workflow. Missing or ambiguous transcript evidence fails
+closed. Only a persisted, approved Workflow answer is appended as commentary.
+GPT-Live may also speak without delegation and may paraphrase that commentary;
+Live audio therefore carries no exact-text approval or playback receipt.
+
+Provider failures close the selected mode; they do not switch to another
+provider or mode. Realtime call state and transcript content are transient.
+Provider retention, real audio timing, quality, complete usage/cost and local
+playback on Discord are not verified by synthetic tests.
+
+## Legacy OpenAI Realtime settings
 
 These are the main settings that change realtime voice behavior.
 
@@ -77,7 +118,7 @@ These are the main settings that change realtime voice behavior.
 | `REALTIME_VAD_EAGERNESS`          | provider default    | Enum (`low`, `medium`, `high`, `auto`)                                                       | Optional semantic VAD eagerness for `semantic_vad`.                                                                                  |
 | `/call voice`                     | per-call override   | Enum (same values as `REALTIME_DEFAULT_VOICE`)                                               | Overrides the default voice for one call session.                                                                                    |
 
-## System Breakdown
+## Legacy OpenAI Realtime system breakdown
 
 ## 1. Discord Entry and Session Start
 
@@ -201,12 +242,14 @@ records implemented behavior, intentional differences, gaps, evidence, and issue
 ownership relative to ordinary chat.
 
 Voice Workflow uses the same orchestrator, model profiles, routing, planning,
-caching, accounting and fallback settings as text chat. The backend restricts
-Voice to answering and approved read-only tools. It also checks answers before
-speech and tracks one pending delivery. These paths have synthetic tests, but
-aren't connected to live audio. One process-wide reservation remains occupied
-until work settles, even after a call ends. A 60-second execution deadline and
-5-second cancellation watchdog flag work that has not stopped.
+caching, accounting and fallback settings as text chat. Standard and Live call
+the backend Workflow after their respective turn/delegation checks. The backend
+restricts Voice to answering and approved read-only tools, checks answers before
+speech and tracks one pending delivery. Synthetic provider and Discord tests
+cover the integrated paths; no paid provider or live Discord call has been run.
+One process-wide reservation remains occupied until work settles, even after a
+call ends. A 60-second execution deadline and 5-second cancellation watchdog
+flag work that has not stopped.
 
 Canonical Voice storage is metadata-only; operator-controlled diagnostics have a
 separate boundary described below. The [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
@@ -256,7 +299,7 @@ receipt. Usage and cost numbers remain available, and routing is unchanged.
 Aborted provider calls are not retried. Other recoverable failures follow the
 configured Workflow retry and fallback rules.
 
-## Final-response approval and staging (synthetic only)
+## Final-response approval and staging
 
 Finishing a Workflow does not mean Footnote can speak its answer. In
 `realtimeWorkflowScope.ts`, the backend checks the selected candidate and its
@@ -337,15 +380,16 @@ restore text or permit a retry. Closing clears the entire slot, and replacing it
 causes old callbacks to be ignored. Cancellation remains a request until settlement;
 it does not prove remote work, audio or billing stopped.
 
-These operations currently run only in backend tests. A live adapter will need
-to call `startDelivery` when it's safe to speak, respect deadlines and revocation,
-stop queued or playing audio when required, and report what happened. Audio may
-already have played by the time the backend revokes permission. Even a playback
-report cannot prove someone heard the answer, and delivery is not guaranteed
-exactly once.
+Standard calls these operations before synthesizing and before local playback;
+the Discord adapter reports local playback state and stops queued/playing audio
+on interruption. Live calls them before appending approved commentary, but its
+spoken rendition is model-controlled and has no exact-text delivery receipt.
+Audio may already have played by the time the backend revokes permission. Even
+a playback report cannot prove someone heard the answer, and delivery is not
+guaranteed exactly once.
 
-No provider, conversational Talker, audio generation/playback, durable replay,
-transcript retention, memory or public Trace extension is implemented. The
-process-local capacity and recovery gates remain in force. Lost acknowledgements,
-safe speaking opportunities, adapter stop controls
-and provider capabilities must be resolved before live integration.
+The provider adapters, call lifecycle and local playback path are implemented
+with synthetic tests. Durable replay, transcript retention, memory and public
+Trace extension remain out of scope. Process-local capacity and recovery gates
+remain in force; provider cancellation and billing stop are not established by
+local session closure.

@@ -29,10 +29,6 @@ import {
     cleanupVoiceConnection,
 } from '../events/VoiceStateHandler.js';
 import { runtimeConfig } from '../config.js';
-import {
-    supportedOpenAITtsVoices,
-    type InternalTtsVoiceId,
-} from '@footnote/contracts/providers';
 
 /**
  * Sends a voice invite and keeps reply failures separate from invite creation.
@@ -73,7 +69,7 @@ export const sendVoiceChannelInvite = async (
 /**
  * @name call
  * @description: Have a voice conversation with the AI using Discord's voice features
- * @usage /call <voice channel>
+ * @usage /call <voice channel> [mode] [extended]
  * 1. Check if the bot is already in a voice channel in this server/guild (Discord limitation: only one voice channel at a time per server/guild) - If yes, give the user an error message
  * 2. Try to join the voice channel provided - If it fails, give the user an error message
  * 3. Invite the user to join the voice channel
@@ -92,18 +88,24 @@ const callCommand: Command = {
                 .setRequired(true)
                 .addChannelTypes(ChannelType.GuildVoice)
         )
-        .addStringOption((option) => {
+        .addStringOption((option) =>
             option
-                .setName('voice')
+                .setName('mode')
                 .setDescription(
-                    "Optional voice override for this call (defaults to the bot's configured voice)"
+                    'Standard: reviewed OpenRouter speech. Live: OpenAI voice may paraphrase. API charges apply.'
                 )
-                .setRequired(false);
-            supportedOpenAITtsVoices.forEach((voice) => {
-                option.addChoices({ name: voice, value: voice });
-            });
-            return option;
-        })
+                .addChoices(
+                    { name: 'Standard', value: 'standard' },
+                    { name: 'Live', value: 'live' }
+                )
+                .setRequired(false)
+        )
+        .addBooleanOption((option) =>
+            option
+                .setName('extended')
+                .setDescription('Developer only: allow up to five minutes')
+                .setRequired(false)
+        )
         .addStringOption((option) =>
             option // Debug options only available to the bot owner/superuser
                 .setName('debug_options')
@@ -125,9 +127,22 @@ const callCommand: Command = {
         let voiceConnection: VoiceConnection | null = null;
 
         const debugOption = interaction.options.getString('debug_options');
-        const voiceOption = interaction.options.getString(
-            'voice'
-        ) as InternalTtsVoiceId | null;
+        const mode =
+            (interaction.options.getString('mode') as
+                'standard' | 'live' | null) ?? undefined;
+        const requestExtendedDuration =
+            interaction.options.getBoolean('extended') ?? false;
+
+        if (
+            requestExtendedDuration &&
+            interaction.user.id !== runtimeConfig.developerUserId
+        ) {
+            await safeReply(
+                interaction,
+                'Only the configured developer can request an extended voice call.'
+            );
+            return;
+        }
 
         // Check rate limit per user, channel, and guild
         // Bypass for developer user
@@ -302,16 +317,12 @@ const callCommand: Command = {
             }
 
             // Register the initiating user
-            await voiceStateHandler.registerInitiatingUser(
+            await voiceStateHandler.registerInitiatingCall(
                 voiceChannel.guild.id,
-                interaction.user.id
+                interaction.user.id,
+                mode,
+                requestExtendedDuration
             );
-            if (voiceOption) {
-                await voiceStateHandler.registerInitiatingVoice(
-                    voiceChannel.guild.id,
-                    voiceOption
-                );
-            }
             logger.debug(
                 `Registered initiating user ${interaction.user.id} for guild ${voiceChannel.guild.id}`
             );

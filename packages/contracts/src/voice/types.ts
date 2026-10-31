@@ -221,6 +221,9 @@ export type InternalVoiceRealtimeClientEvent =
     | {
           type: 'session.start';
           context: InternalVoiceSessionContext;
+          mode?: 'standard' | 'live';
+          initiatorId?: string;
+          requestExtendedDuration?: boolean;
           options?: InternalVoiceRealtimeOptions;
       }
     | {
@@ -238,6 +241,11 @@ export type InternalVoiceRealtimeClientEvent =
     | { type: 'input_audio.commit' }
     | { type: 'input_audio.clear' }
     | { type: 'response.create' }
+    | {
+          type: 'delivery.playback';
+          deliveryId: string;
+          event: 'started' | 'completed' | 'interrupted' | 'failed';
+      }
     | { type: 'session.close' };
 
 /**
@@ -245,7 +253,11 @@ export type InternalVoiceRealtimeClientEvent =
  * @api.path: GET /api/internal/voice/realtime
  */
 export type InternalVoiceRealtimeServerEvent =
-    | { type: 'session.ready'; speechSelection?: SpeechSelectionMetadata }
+    | {
+          type: 'session.ready';
+          mode?: 'standard' | 'live';
+          speechSelection?: SpeechSelectionMetadata;
+      }
     | { type: 'response.started'; responseId: string }
     | {
           type: 'session.closed';
@@ -255,6 +267,7 @@ export type InternalVoiceRealtimeServerEvent =
     | {
           type: 'output_audio.delta';
           audioBase64: string;
+          deliveryId?: string;
       }
     | {
           type: 'output_text.delta';

@@ -54,7 +54,7 @@ export class RealtimeEventHandler extends EventEmitter {
                     const audioData = Buffer.from(event.delta, 'base64');
 
                     // Playback wants bytes, not protocol envelopes.
-                    this.emit('audio', audioData);
+                    this.emit('audio', audioData, event.deliveryId);
 
                     // Keep the raw event available for listeners that care
                     // about the exact per-chunk payload.
@@ -62,6 +62,9 @@ export class RealtimeEventHandler extends EventEmitter {
                         type: 'response.output_audio.delta',
                         delta: event.delta,
                         audioData: audioData,
+                        ...(event.deliveryId
+                            ? { deliveryId: event.deliveryId }
+                            : {}),
                     });
 
                     // We keep a temporary per-response buffer only so the

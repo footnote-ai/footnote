@@ -8,7 +8,6 @@
 
 import type { Client, ClientEvents, VoiceState } from 'discord.js';
 import type { VoiceConnection } from '@discordjs/voice';
-import type { InternalTtsVoiceId } from '@footnote/contracts/providers';
 import { Events } from 'discord.js';
 import { Event } from './Event.js';
 import { createLoadOnce } from '../utils/loadOnce.js';
@@ -46,18 +45,18 @@ export class VoiceStateHandler extends Event {
         await (await this.loadSubsystem()).execute(oldState, newState);
     }
 
-    public async registerInitiatingUser(
+    public async registerInitiatingCall(
         guildId: string,
-        userId: string
+        userId: string,
+        mode: 'standard' | 'live' | undefined,
+        requestExtendedDuration: boolean
     ): Promise<void> {
-        (await this.loadSubsystem()).registerInitiatingUser(guildId, userId);
-    }
-
-    public async registerInitiatingVoice(
-        guildId: string,
-        voice: InternalTtsVoiceId
-    ): Promise<void> {
-        (await this.loadSubsystem()).registerInitiatingVoice(guildId, voice);
+        (await this.loadSubsystem()).registerInitiatingCall(
+            guildId,
+            userId,
+            mode,
+            requestExtendedDuration
+        );
     }
 
     /** Cleans up voice resources only when the subsystem was activated. */

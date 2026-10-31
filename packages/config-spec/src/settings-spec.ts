@@ -75,6 +75,7 @@ const ENV_PATH_OVERRIDES: Record<string, string[]> = {
     BOT_PROFILE_REALTIME_MODEL: ['speech', 'realtime-model'],
     BOT_PROFILE_REALTIME_VOICE: ['speech', 'realtime-voice'],
     BOT_PROFILE_REALTIME_DELIVERY: ['speech', 'realtime-delivery'],
+    VOICE_DEFAULT_MODE: ['voice', 'default-mode'],
     CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE: [
         'chat-workflow',
         'max-duration-ms-override',
