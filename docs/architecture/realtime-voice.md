@@ -6,7 +6,7 @@ The realtime voice system is the part of Footnote that lets the Discord bot have
 
 At a high level, the Discord bot handles the Discord-specific work: joining the channel, listening for speech, and playing audio back into the room. The backend handles the AI-specific work: building instructions, opening the provider session, translating provider events, and recording usage.
 
-That split is the main point of the design. The bot does not talk to the OpenAI realtime API directly. It opens a trusted websocket to Footnote's backend at `/api/internal/voice/realtime`, and the backend owns the provider connection from there.
+Discord does not connect to OpenAI directly. It connects to Footnote's backend at `/api/internal/voice/realtime`, which opens and manages the provider session.
 
 ## High-Level Flow
 
@@ -86,7 +86,7 @@ When conversation start is triggered, `VoiceStateHandler`:
 - initializes Discord audio capture
 - sends the configured greeting
 
-This keeps the session lifecycle tied to real human participation instead of opening a provider session while the bot is sitting alone in a voice channel.
+The bot waits for a participant instead of opening a provider session while alone in the channel.
 
 ## 2. Discord-Side Realtime Session
 
@@ -110,7 +110,7 @@ Discord voice activity mode can stop sending audio immediately when the user sto
 
 To compensate, [VoiceSessionManager.ts](../../packages/discord-bot/src/voice/VoiceSessionManager.ts) listens for `speakerSilence` events and appends a short silence tail when `server_vad` is active. The silence length is derived from `REALTIME_VAD_SILENCE_MS`, clamped to a safe range. That design lets provider-side VAD stay authoritative while adapting to Discord's voice-activity behavior.
 
-The invariant is simple: Discord streams audio continuously while the user is speaking, but the provider still decides when the turn is complete.
+Discord streams audio while someone speaks. The provider still decides when their turn has ended.
 
 ## 4. Backend Trusted Boundary
 
@@ -124,7 +124,7 @@ Its responsibilities are:
 - forward normalized events back to Discord
 - record backend-owned usage and cost data on `response.done`
 
-This is the main architectural seam. If the Discord bot needs realtime voice, it goes through this handler instead of opening a provider websocket directly.
+Discord uses this handler for realtime voice rather than opening its own provider websocket.
 
 ## 5. Prompt Composition
 
@@ -156,7 +156,7 @@ Provider events are normalized by the runtime, forwarded through the backend web
 
 That event layer emits streamed audio chunks immediately so playback can begin before the full response completes. Playback is then handled by [AudioPlaybackHandler.ts](../../packages/discord-bot/src/voice/AudioPlaybackHandler.ts), which keeps a guild-local playback pipeline alive long enough to avoid clipping between chunks or turns.
 
-The result is a streamed path in both directions:
+Audio streams in both directions:
 
 - user audio goes Discord -> backend -> provider
 - model audio goes provider -> backend -> Discord playback
@@ -184,7 +184,7 @@ The current system is built around a few explicit constraints:
 - Server VAD remains authoritative for turn completion in the normal path.
 - Discord voice-activity behavior is accommodated with silence-tail injection instead of moving turn closure back into Discord logic.
 
-That gives realtime voice the same ownership story as the rest of the migration work: product-facing code uses Footnote-owned boundaries, and provider-specific behavior sits behind those boundaries.
+These boundaries keep provider-specific details out of Discord and Footnote's shared contracts.
 
 ## Alignment with normal chat
 
@@ -193,14 +193,13 @@ Realtime is a separate streaming session, not another route through
 records implemented behavior, intentional differences, gaps, evidence, and issue
 ownership relative to ordinary chat.
 
-Voice Workflow uses the existing orchestrator and configured generation runtime,
-including model profiles, routing, structured planning, prompt caching, usage
-accounting and supported fallbacks. Backend-local call state enforces answer/read-only
-scope, final-response approval and one bounded delivery slot with playback reports.
-These paths are tested synthetically; live provider events and audio playback
-remain disconnected. A process-owned reservation survives call teardown. Its
-60-second deadline and 5-second cancellation watchdog mark unresolved work as
-degraded without releasing capacity.
+Voice Workflow uses the same orchestrator, model profiles, routing, planning,
+caching, accounting and fallback settings as text chat. The backend restricts
+Voice to answering and approved read-only tools. It also checks answers before
+speech and tracks one pending delivery. These paths have synthetic tests, but
+aren't connected to live audio. One process-wide reservation remains occupied
+until work settles, even after a call ends. A 60-second execution deadline and
+5-second cancellation watchdog flag work that has not stopped.
 
 Canonical Voice storage is metadata-only; operator-controlled diagnostics have a
 separate boundary described below. The [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
@@ -210,61 +209,61 @@ continuity and durable consent/retention policy remain under #559.
 
 ## Voice data handling
 
-Voice processing consent authorizes the accepted conversation projection to go
-to the configured model providers. It does not authorize automatic transcript or
-audio history, durable answer candidates, long-term memory, account-memory
-injection, or cross-surface carryover. The backend-owned scope enforces those
-canonical storage exclusions and keeps approved answer text only in the bounded
-delivery slot. Footnote's opt-in `FOOTNOTE_DEBUG_CAPTURE_MODEL_IO` capture remains
-available for ordinary text and is bypassed for Voice, including inherited debug
-sessions. Free-form backend logs are suppressed inside the Voice Workflow scope.
+When someone agrees to Voice processing, Footnote can send the conversation
+context needed for a response to the configured model provider. That consent
+doesn't cover saving transcripts, audio, answer drafts or long-term memories, or
+using call content in later text conversations. The backend excludes that content
+from Footnote's canonical records. Approved answer text stays in a limited
+in-memory delivery slot until it is handed off or discarded.
 
-That canonical policy is distinct from SDK diagnostics. The installed VoltAgent
-2.11.0 captures inputs, outputs, messages and tool data in local observability.
-Its default observability store is in memory; `memory: false` disables agent
-conversation memory, not tracing. Remote sampling set to `never` keeps local
-capture, as the [upstream documentation](https://voltagent.dev/docs/observability/developer-console/)
-explains. Footnote also supplies a logger that can write diagnostic files under
-the configured logging directory's `voltagent` subdirectory, at the configured
-log level, with a 30-day rotation policy. Diagnostics can contain conversation
-content. Operators must protect these files and disclose diagnostic handling;
-this is not a guarantee that content exists only in RAM.
+Voice also skips Footnote's optional `FOOTNOTE_DEBUG_CAPTURE_MODEL_IO` capture,
+even if a debug session is already active. Ordinary text can still use that
+feature. Free-form backend logs are suppressed during Voice Workflow.
 
-Footnote supplies a VoltOps client when both `VOLTAGENT_PUBLIC_KEY` and
-`VOLTAGENT_SECRET_KEY` are configured. This can export content-bearing diagnostics
-outside the host. No external observability is required for Voice; operators
-must explicitly configure any external tracing and understand its retention.
-Missing credentials do not disable local capture. Custom process-wide SDK
-instrumentation or observability stores are also operator responsibilities.
-Configured model routing, prompt caching and supported fallback behavior remain
-shared with text. The direct OpenAI structured planner remains supported and
-requests `store: false`; that flag is not proof of account-level or provider-wide
-zero retention. Provider processing, caches and retention depend on the selected
-provider and account settings and must be disclosed before live use.
+These limits apply to Footnote's records, not every diagnostic system.
+VoltAgent 2.11.0 captures model inputs, outputs, messages and tool data. Its
+default trace store is in memory. Setting `memory: false` disables the Agent's
+conversation memory, but not tracing; setting remote sampling to `never` also
+leaves local traces intact (see the [VoltAgent documentation](https://voltagent.dev/docs/observability/developer-console/)).
+Footnote's VoltAgent logger can write diagnostic files under the configured
+logging directory's `voltagent` subdirectory. The log level is configurable,
+and files rotate over 30 days. Those files may contain conversation content, so
+operators need to control access and explain how they handle diagnostics.
 
-Canonical model/provider labels are retained only when they match configured
-catalog identities, including normalized model names, on both success and failure.
-Unknown labels are omitted (`modelVersion` becomes `unknown`) because provider
-labels can echo content into receipts. Numeric usage and cost evidence remain.
-This limits stored labels without restricting generation routes. An aborted
-provider call is not retried; recoverable failures use the configured Workflow
-retry and fallback behavior.
+Footnote configures a VoltOps client only when both `VOLTAGENT_PUBLIC_KEY` and
+`VOLTAGENT_SECRET_KEY` are set. VoltOps can send diagnostic content outside the
+host; Voice does not require it. Without those keys, local capture still runs.
+Operators are also responsible for any custom SDK instrumentation or trace stores.
+
+Voice shares text chat's model routing, prompt caching and supported fallbacks.
+The direct OpenAI structured planner requests `store: false`, but that doesn't
+establish the provider's overall retention policy. Before enabling live Voice,
+operators need to understand and disclose the selected providers' processing,
+caching and retention behavior.
+
+Voice receipts keep provider and model labels only when they match configured
+catalog entries, including normalized model names. Unexpected labels are omitted
+on both success and failure; `modelVersion` becomes `unknown` when necessary.
+This prevents a provider-supplied label from copying conversation text into a
+receipt. Usage and cost numbers remain available, and routing is unchanged.
+Aborted provider calls are not retried. Other recoverable failures follow the
+configured Workflow retry and fallback rules.
 
 ## Final-response approval and staging (synthetic only)
 
-Workflow completion and voice delivery are separate decisions. The backend uses
-the existing candidate selection, assessment signals and named Result references
-in `realtimeWorkflowScope.ts`. `chatService.ts` supplies the normalized selected
-text before discarding candidate bodies; `chatOrchestrator.ts` checks it against
-the response actually returned by `runChat`. Ordinary text-chat behavior is unchanged.
+Finishing a Workflow does not mean Footnote can speak its answer. In
+`realtimeWorkflowScope.ts`, the backend checks the selected candidate and its
+assessment. `chatService.ts` passes along the selected text before dropping
+candidate bodies, and `chatOrchestrator.ts` checks that it matches `runChat`'s
+response. Text chat is unaffected.
 
-The receipt becomes available only after metadata persistence succeeds. Approval
-requires one selected candidate from a Generate or revision Step, an exact text
-match, its produced `draft` Result and candidate artifact link, and the final
-successful Assess Step consuming that same draft. The assessment must have a
-produced `review` Result and say `finalize`. The Run and Workflow must both be
-completed with `goal_satisfied`. Approval means that assessment accepted the text;
-it does not certify factual truth or provider privacy.
+Footnote issues a receipt only after storing the execution metadata. Before
+approving speech, it checks that exactly one candidate was selected from a
+Generate or revision Step, that the text matches, and that the candidate links
+to the produced `draft` Result. The final successful Assess Step must consume
+that draft, produce a `review` Result and return `finalize`. Both the Run and
+Workflow must finish successfully with `goal_satisfied`. Approval means the
+review accepted this answer, not that the answer is necessarily true or private.
 
 | Observed evidence                                              | Voice disposition        |
 | -------------------------------------------------------------- | ------------------------ |
@@ -293,7 +292,7 @@ turn, intent revision, call instance, private session ID, audience IDs, Run,
 response, candidate and assessment/generation Steps. `completedExecution()` still
 exposes only identity, execution status and review disposition.
 
-The same slot now separates backend permission from adapter observations:
+The delivery slot tracks permission to speak separately from playback reports:
 
 | Operation                                               | Effect                                                                                                                       |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -331,12 +330,12 @@ restore text or permit a retry. Closing clears the entire slot, and replacing it
 causes old callbacks to be ignored. Cancellation remains a request until settlement;
 it does not prove remote work, audio or billing stopped.
 
-These operations are backend-local synthetic seams, not transport events. A
-future adapter must call `startDelivery` at a safe playback boundary, honor the
-deadline and subsequent revocation, stop queued/active audio when required, and
-report what happened. An adapter that retains handed-off text or reports late can
-already have played audio; backend revocation cannot undo it. Reports are not proof
-that a participant heard the answer, and no exactly-once audible playback is claimed.
+These operations currently run only in backend tests. A live adapter will need
+to call `startDelivery` when it's safe to speak, respect deadlines and revocation,
+stop queued or playing audio when required, and report what happened. Audio may
+already have played by the time the backend revokes permission. Even a playback
+report cannot prove someone heard the answer, and delivery is not guaranteed
+exactly once.
 
 No provider, conversational Talker, audio generation/playback, durable replay,
 transcript retention, memory or public Trace extension is implemented. The

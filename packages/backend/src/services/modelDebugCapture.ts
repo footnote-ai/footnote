@@ -113,7 +113,7 @@ export const reuseResponseCandidateOutputs = (
         };
     });
 
-/** Captures exact runtime-boundary messages and normalized text output in memory only. */
+/** Capture model inputs and outputs for opted-in text debugging; Voice skips this wrapper. */
 export const createModelDebugCapturingRuntime = (
     runtime: GenerationRuntime
 ): GenerationRuntime => ({

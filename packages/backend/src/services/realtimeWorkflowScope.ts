@@ -1,9 +1,9 @@
 /**
- * @description: Carries backend-only voice execution restrictions and projects content-free evidence.
+ * @description: Applies Voice execution limits and keeps conversation text out of stored receipts.
  * @footnote-scope: core
  * @footnote-module: RealtimeWorkflowScope
  * @footnote-risk: high - Scope loss can enable tools or persist private voice content.
- * @footnote-ethics: high - Voice processing consent does not authorize canonical conversation history.
+ * @footnote-ethics: high - Consent to Voice processing does not permit automatic conversation history.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
@@ -32,7 +32,7 @@ export type RealtimeReviewDisposition =
     | 'workflow_not_completed'
     | 'unsupported_response';
 
-/** Backend-only evidence about the selected response; text exists only for approved answers. */
+/** Keep selected-answer evidence private to the backend; only approved answers carry text. */
 export type RealtimeFinalResponse =
     | {
           disposition: Exclude<RealtimeReviewDisposition, 'approved'>;
@@ -358,7 +358,7 @@ const projectAttempt = (
           }),
 });
 
-/** Allowlist execution structure; summaries, queries, review prose, source bodies and debug text never cross storage. */
+/** Store execution metadata without planner prose, retrieval content or debug text. */
 export const projectRealtimeWorkflowMetadata = (
     metadata: ResponseMetadata,
     voice: RealtimeWorkflowScope
@@ -419,7 +419,7 @@ export const projectRealtimeWorkflowMetadata = (
             'totalDurationMs',
         ]),
         modelVersion: projectModelLabel(metadata.modelVersion) ?? 'unknown',
-        // A transcript-derived hash is unnecessary for metadata-only voice inspection.
+        // Hash the response ID, not the call transcript.
         chainHash: createHash('sha256')
             .update(metadata.responseId)
             .digest('hex')
@@ -431,7 +431,7 @@ export const projectRealtimeWorkflowMetadata = (
     };
 };
 
-/** Both ordinary completion and tool short-circuits use the same content-free storage boundary. */
+/** Apply the same storage rules to completed answers and tool short-circuits. */
 export const storeRealtimeWorkflowMetadata = async (
     metadata: ResponseMetadata,
     store: (metadata: ResponseMetadata) => Promise<void>,

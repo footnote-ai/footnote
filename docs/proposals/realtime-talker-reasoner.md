@@ -7,11 +7,11 @@ Conversation continuity and retention remain governed by
 
 ## Recommendation
 
-Separate conversational responsiveness from substantive answering. A lightweight
-Talker listens, acknowledges, manages attention, and speaks approved material.
-The existing backend Workflow performs planning, retrieval, generation,
-assessment, revision, and policy decisions asynchronously. Its approved output
-can arrive after the next conversational turn.
+Let the Talker handle the conversation while Footnote's existing Workflow
+works on the answer. The Talker listens, acknowledges people, manages turn-taking
+and speaks approved material. Workflow handles planning, retrieval, generation,
+review and policy decisions in the background. An answer may arrive after the
+conversation has moved on.
 
 Start with one active call, one pending question, and one deliverable result.
 Keep their state beside the backend Realtime session. Reuse the workflow core,
@@ -19,14 +19,12 @@ conversation projection, speech resolver, and execution records. Do not add a
 conversation database, event bus, agent framework, or general-purpose coordinator.
 The [alignment tracker](../status/realtime-voice-alignment.md) records what exists;
 everything below describes proposed behavior unless explicitly identified as current.
-The first slice now has a backend-local state boundary and synthetic tests; see
-the [implemented foundation](../status/realtime-voice-alignment.md#synthetic-call-state-foundation).
-The next slice now starts bounded background Runs through the existing orchestrator;
-see [implemented Workflow admission and capacity](#implemented-workflow-admission-and-capacity).
-The third slice now checks the selected final response and stages approved text,
-with separate request, handoff and adapter-reported playback transitions;
-see [implemented approval and staging](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only).
-None of these slices connects live provider events or delivers speech.
+Backend call state and background Workflow execution have synthetic tests; see
+the [alignment tracker](../status/realtime-voice-alignment.md#synthetic-call-state-foundation)
+and [execution details](#implemented-workflow-admission-and-capacity).
+Answer approval and delivery handoff are also implemented in tests, including
+[playback status tracking](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only).
+Live provider events and audio delivery are not connected.
 
 The intended Talker is a lightweight conversational model: it listens and speaks
 naturally, manages turn-taking and interruptions, and maintains attention while
@@ -55,10 +53,10 @@ These are design references, not dependencies or Footnote evaluation results.
 | [LiveKit Agents: Subagent delegation](https://docs.livekit.io/agents/logic/patterns/subagent-delegation/)                                                                                    | Nonblocking work acknowledges before completion; separate reasoning context, duplicate rejection, cancellation, and follow-up delivery help coherence. Late results need explicit handling because newer turns or handoffs can hide them. | These are documented framework techniques. Footnote should reuse its Workflow, not install LiveKit or inherit the example's permission to answer simple questions freely. Cancel the underlying work where possible, not just its filler.                        |
 | [UW ConvFill: Thinking While Speaking (2026)](https://convfill.cs.washington.edu/)                                                                                                           | Semantically complete knowledge chunks can reach a Talker between spoken phrases; knowledge and speech queues separate reasoning latency from first response latency.                                                                     | The authors report results for trained small models and their study, not Footnote. Do not assume arbitrary hosted voice models accept mid-generation knowledge. Start with one final approved result; independently reviewed incremental chunks are future work. |
 
-Shared state here means bounded, authorized working context, not hidden reasoning
-or a general shared mutable Workflow object. Conversational latency (hearing an
-acknowledgement) and reasoning latency (hearing an approved answer) must be
-measured separately. No latency or financial improvement is demonstrated here.
+The Talker and Workflow share only the conversation context they're allowed to
+use, not hidden reasoning or a mutable Workflow object. Measure the time to a
+spoken acknowledgement separately from the time to an approved answer. Neither
+latency nor cost savings have been demonstrated.
 
 ## Conversation, session, and execution identity
 
@@ -135,17 +133,17 @@ flowchart TD
    Record delivery status separately from Run success. Provider completion is
    not evidence that Discord played the audio or that the audience heard it.
 
-The workflow remains the Reasoner; no extra reasoning agent wraps it. Existing
-Context Integrations and `buildModelInput` retain retrieval scope, advisory
-evidence roles, source reporting, and backend-owned prompt ordering.
+The existing Workflow does the reasoning; there's no additional agent around
+it. Context Integrations and `buildModelInput` still control retrieval,
+source reporting, evidence roles and prompt order.
 
 ## Implemented Workflow admission and capacity
 
-The synthetic backend boundary now uses `RealtimeConversationState.startExecution`
-and `chatOrchestrator.runRealtimeConversation`. The latter supplies the accepted
-conversation projection directly to the existing `runChat` service, including
-its normal planner, policy, Workflow and Context Integration setup. It does not
-call a public HTTP endpoint, install another Reasoner or add a conversation coordinator.
+Backend tests exercise `RealtimeConversationState.startExecution` and
+`chatOrchestrator.runRealtimeConversation`. The latter passes the permitted
+conversation context to `runChat`, so planning, policy, Context Integrations
+and Workflow execution follow the existing path. There's no separate reasoning
+agent or public HTTP round trip.
 
 Settled decisions for this slice:
 
@@ -206,10 +204,10 @@ lists synthetic and disposable-storage evidence.
 
 ## Result and delivery rules
 
-The following are session delivery states, not additions to the Workflow's
-canonical status enums. A Run's observed facts must remain intact.
-Fixed wording below describes infrastructure validation or a bounded fallback;
-the target Talker may express the same permitted conversational intent naturally.
+These states describe speech delivery, not the Workflow's Run status. Recording
+an interruption or failed delivery must not change what happened during the Run.
+The example phrases are placeholders for testing; a conversational Talker may
+express the same permitted messages naturally.
 
 | State                        | Backend behavior                                                                                                                    | What the conversation may hear                                                                                                      |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -229,20 +227,20 @@ and actual Run outcome remain distinct. Unassessed fail-open text remains valid
 under text-chat policy but is withheld from voice. Whether to permit a particular
 fallback later is an unresolved policy decision, not implicit approval.
 
-The slot holds at most 16 KiB. Its start deadline is 30 seconds after staging,
-including time spent requested or handed off without a start report. Requesting
-delivery returns no text; the backend rechecks scope and expiry before handing
-text off once at the intended playback boundary. Handoff does not report a start
-or completion. Ordered synthetic adapter reports record started, completed,
-interrupted or failed playback; completion requires a prior start report.
-Text is cleared at handoff, expiry or revocation. After a timely start report,
-only content-free evidence remains and playback may finish beyond that deadline.
+The delivery slot holds at most 16 KiB of text. The adapter must report that
+playback started within 30 seconds of staging, including any time spent waiting
+for handoff. Requesting delivery doesn't return the text. The backend checks
+permission and expiry again before releasing it once at a speaking boundary.
+Handoff alone doesn't count as playback. Synthetic reports distinguish started,
+completed, interrupted and failed playback; completion requires a start report.
+The text is cleared at handoff, expiry or revocation. Playback may continue past
+the deadline if its start was reported in time.
 
 Interruptions and ambiguous speech now discard queued text and revoke late staging without
 aborting reasoning. Continuation does not revive that text; a new question is
-required. This is more conservative than the proposed hold-and-revalidate behavior
-below. Revocation preserves the last handoff's playback evidence: a start report
-without an end report remains an unconfirmed stop. Late reports may record what
+required. The current behavior discards the text instead of holding it for later.
+Revocation keeps reports from the last handoff: a start report without an end
+report does not confirm that audio stopped. Late reports may record what
 the adapter says happened, but cannot restore permission or replay the answer.
 Reports for a replaced or disconnected slot are ignored. Live safe-turn selection,
 local playback cancellation and evidence of audible delivery are still proposed.
@@ -458,13 +456,12 @@ not assume it is sufficient. A full Talker–Reasoner agent framework, durable
 queue, conversation store, or streaming knowledge-chunk protocol adds lifecycle
 and privacy obligations without solving the first missing boundary. Defer them.
 
-Progression from controlled TTS validation to a conversational Talker is part of
-#558, not an optional polish phase. Before calling the target design delivered,
-demonstrate listening and natural conversational responses during a pending Run,
-barge-in recovery, coherent approved-result incorporation, and separate
-conversational versus answer latency measurements. A successful serial audio
-pipeline does not satisfy those criteria. The lightweight model and adapter
-remain open choices; approval and provider feasibility remain hard gates.
+#558 aims for a conversational Talker, not just a pipeline that reads answers
+aloud. Before closing it, demonstrate that the Talker can listen and respond
+naturally while a Run is pending, recover from interruptions, deliver approved
+answers without changing their meaning, and meet separately measured response
+and answer latencies. The model and adapter are still open choices, subject to
+approval and provider feasibility.
 
 The conservative eligibility mapping and slot bounds above are implemented.
 Broader fallback permission, single-call lifecycle/defaults, and the later provider
