@@ -197,11 +197,107 @@ The proposed [conversation with background reasoning](../proposals/realtime-talk
 reuses the existing Workflow and conversation projection boundaries. It is a
 proposal under #558. Backend-local call state and background Workflow execution
 now have synthetic implementation, using the existing orchestrator with enforced
-answer/read-only scope and content-free execution records. They remain disconnected
-from live provider events, approval and speech delivery. A process-owned reservation
+answer/read-only scope and content-free execution records. Final-response approval
+and one ephemeral delivery slot with controlled playback reports are also
+implemented synthetically; live provider events and audio playback remain
+disconnected. A process-owned reservation
 survives call teardown; its 60-second deadline and 5-second cancellation watchdog
 make unresolved work observably degraded without releasing capacity.
 Voice admission fails closed unless the runtime guarantees no content retention;
 the current VoltAgent adapter cannot provide that guarantee and remains blocked.
 The tracker describes process-local and deployment-recovery limits. Cross-surface
 continuity, consent, and retention remain under #559.
+
+## Final-response approval and staging (synthetic only)
+
+Workflow completion and voice delivery are separate decisions. The backend uses
+the existing candidate selection, assessment signals and named Result references
+in `realtimeWorkflowScope.ts`. `chatService.ts` supplies the normalized selected
+text before discarding candidate bodies; `chatOrchestrator.ts` checks it against
+the response actually returned by `runChat`. Ordinary text-chat behavior is unchanged.
+
+The receipt becomes available only after metadata persistence succeeds. Approval
+requires one selected candidate from a Generate or revision Step, an exact text
+match, its produced `draft` Result and candidate artifact link, and the final
+successful Assess Step consuming that same draft. The assessment must have a
+produced `review` Result and say `finalize`. The Run and Workflow must both be
+completed with `goal_satisfied`. Approval means that assessment accepted the text;
+it does not certify factual truth or provider privacy.
+
+| Observed evidence                                              | Voice disposition        |
+| -------------------------------------------------------------- | ------------------------ |
+| Selected final draft with all required evidence                | `approved`               |
+| No assessment, including assessment skipped by mode/policy     | `unassessed`             |
+| Failed, unparseable or incomplete assessment evidence          | `assessment_failed`      |
+| Last assessment asks for revision                              | `revision_requested`     |
+| Last assessment asks for more retrieval                        | `search_requested`       |
+| Missing/ambiguous candidate selection, text or draft linkage   | `selection_unverified`   |
+| Finalized draft but Run/Workflow did not complete successfully | `workflow_not_completed` |
+| Non-answer, terminal action or unsupported candidate stage     | `unsupported_response`   |
+
+Only `approved` carries text. These dispositions do not replace Run status or
+Workflow termination reasons. A revision needs its own final assessment; an
+earlier accepted draft cannot approve later text. Budget-limited, failed and
+fail-open paths retain their actual evidence and cannot authorize an answer.
+Tool clarification and status copy do not enter this reviewed-answer slot.
+Whether any unassessed or unresolved fallback should later be spoken remains
+unresolved; this implementation withholds it. Trace alignment describes metadata
+alignment, not a second content approval decision.
+
+`RealtimeConversationState` holds at most one answer, bounded to 16 KiB of UTF-8
+text. Its **30-second deadline runs from staging until a playback start is
+reported**, without restarting when delivery is requested. It binds the initiating
+turn, intent revision, call instance, private session ID, audience IDs, Run,
+response, candidate and assessment/generation Steps. `completedExecution()` still
+exposes only identity, execution status and review disposition.
+
+The same slot now separates backend permission from adapter observations:
+
+| Operation                                               | Effect                                                                                                                       |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Workflow stages an eligible answer                      | `ready`; no playback reported                                                                                                |
+| `requestDelivery(handle)`                               | Rechecks session/instance, audience consent, intent and deadline; moves once to `requested`, returning metadata without text |
+| `startDelivery(deliveryId)`                             | Rechecks those conditions at the intended playback boundary; returns exact text once and moves to `handed_off`               |
+| `reportPlayback(deliveryId, 'started')`                 | Records the adapter's start report, not a grant of permission                                                                |
+| `reportPlayback(deliveryId, 'completed')`               | Records completion only after a start report; handoff alone cannot complete delivery                                         |
+| `reportPlayback(deliveryId, 'interrupted' or 'failed')` | Records an incomplete outcome after handoff, whether or not a start was reported                                             |
+
+`deliveryStatus()` returns a detached, content-free snapshot. Its `status` records
+authorization (`ready`, `requested`, `handed_off`, `revoked`, `expired`); `playback`
+separately records what the adapter reported. `handedOffAt` is backend time and
+`startReportedAt` is receipt time, not a reconstructed audio timestamp. This
+distinguishes no handoff, an unconfirmed start, and reported partial playback.
+Duplicate reports, completion before start, reports before handoff and callbacks
+for another delivery ID are rejected. Each new staged answer gets a fresh ID.
+
+Text is removed from the slot at handoff, revocation or expiry. Until start is
+reported, expiry remains active even after handoff. Every boundary checks the
+clock as well as the timer, so a delayed timer cannot authorize stale text.
+A timely start report clears that deadline: it is a start limit, not a maximum
+playback duration. Only content-free evidence remains while playback finishes.
+
+Interruptions and ambiguous user input discard text and revoke that
+execution's ability to stage later text, while reasoning may continue. An explicit
+continuation resumes intent but cannot restore revoked speech; a new question is
+needed. Corrections, cancellation, roster/consent changes and disconnect also
+discard text. Captured execution revisions and a delivery revocation counter
+prevent late callbacks from restoring it. Expiration clears the body and leaves
+the completed Run outcome intact. Revocation does not rewrite a playback start
+as a confirmed stop. Ordered late reports about the last handoff may still update
+playback evidence while its authorization remains revoked or expired; they never
+restore text or permit a retry. Closing clears the entire slot, and replacing it
+causes old callbacks to be ignored. Cancellation remains a request until settlement;
+it does not prove remote work, audio or billing stopped.
+
+These operations are backend-local synthetic seams, not transport events. A
+future adapter must call `startDelivery` at a safe playback boundary, honor the
+deadline and subsequent revocation, stop queued/active audio when required, and
+report what happened. An adapter that retains handed-off text or reports late can
+already have played audio; backend revocation cannot undo it. Reports are not proof
+that a participant heard the answer, and no exactly-once audible playback is claimed.
+
+No provider, conversational Talker, audio generation/playback, durable replay,
+transcript retention, memory or public Trace extension is implemented. The
+VoltAgent tracing restriction, process-local capacity and recovery gates remain
+in force. Lost acknowledgements, safe speaking opportunities, adapter stop controls
+and provider capabilities must be resolved before live integration.

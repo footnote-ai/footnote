@@ -13,6 +13,10 @@ import type {
     ConversationContextServiceOutput,
 } from './conversationContextService.js';
 import { projectConversationMessages } from './conversationContextService.js';
+import type {
+    RealtimeFinalResponse,
+    RealtimeReviewDisposition,
+} from './realtimeWorkflowScope.js';
 
 const MAX_CONTEXT_TURNS = 12;
 const MAX_CONTEXT_BYTES = 16 * 1024;
@@ -20,6 +24,7 @@ const MAX_AUDIENCE_PARTICIPANTS = 32;
 const MAX_PARTICIPANT_FIELD_LENGTH = 128;
 const EXECUTION_DEADLINE_MS = 60_000;
 const CANCELLATION_WATCHDOG_MS = 5000;
+const DELIVERY_TTL_MS = 30_000;
 const INTENT_ACTIONS = new Set<RealtimeIntentAction>([
     'question',
     'supersede',
@@ -65,14 +70,39 @@ export type RealtimeWorkflowResult = {
     responseId?: string;
     runId?: string;
     status?: 'completed' | 'degraded' | 'failed' | 'rejected';
+    finalResponse?: RealtimeFinalResponse;
 };
 
-/** Internal backend service seam; results carry identity only, never speech authority. */
+/** Internal backend service seam carrying canonical identity and final-response evidence for staging. */
 export type RealtimeWorkflowRunner = {
     runRealtimeConversation: (
         snapshot: RealtimeConversationSnapshot,
         context: { signal: AbortSignal; onRunStarted: (runId: string) => void }
     ) => Promise<RealtimeWorkflowResult>;
+};
+
+export type RealtimeDelivery = Extract<
+    RealtimeFinalResponse,
+    { disposition: 'approved' }
+> & {
+    deliveryId: string;
+    handle: RealtimeFreshnessHandle;
+    turnId: string;
+    audienceIds: string[];
+    expiresAt: number;
+};
+
+/** Local authorization and adapter-reported playback are independent facts. */
+export type RealtimeDeliveryStatus = Omit<RealtimeDelivery, 'text'> & {
+    status: 'ready' | 'requested' | 'handed_off' | 'revoked' | 'expired';
+    playback:
+        'not_reported' | 'started' | 'completed' | 'interrupted' | 'failed';
+    handedOffAt?: number;
+    startReportedAt?: number;
+};
+
+type RealtimeCompletion = Omit<RealtimeWorkflowResult, 'finalResponse'> & {
+    reviewDisposition?: RealtimeReviewDisposition;
 };
 
 type ExecutionReservation = {
@@ -183,7 +213,11 @@ export class RealtimeConversationState {
     private intent: RealtimeConversationSnapshot['intent'] = null;
     private closed = false;
     private lastStartedRevision: number | undefined;
-    private completed: RealtimeWorkflowResult | undefined;
+    private completed: RealtimeCompletion | undefined;
+    private delivery:
+        { inspection: RealtimeDeliveryStatus; text?: string } | undefined;
+    private deliveryEpoch = 0;
+    private deliveryExpiry: ReturnType<typeof setTimeout> | undefined;
 
     constructor(private readonly sessionCorrelationId: string) {
         this.sessionCorrelationId = requireBoundedText(
@@ -348,6 +382,8 @@ export class RealtimeConversationState {
         reservation.deadlineWatchdog.unref?.();
         this.lastStartedRevision = this.revision;
         this.completed = undefined;
+        this.revokeDelivery();
+        const deliveryEpoch = this.deliveryEpoch;
         void Promise.resolve()
             .then(() => {
                 const accepted = snapshot;
@@ -380,7 +416,49 @@ export class RealtimeConversationState {
                             responseId: result.responseId,
                             runId: result.runId,
                             status,
+                            ...(result.finalResponse === undefined
+                                ? {}
+                                : {
+                                      reviewDisposition:
+                                          result.finalResponse.disposition,
+                                  }),
                         };
+                        const answer = result.finalResponse;
+                        if (
+                            status === 'completed' &&
+                            answer?.disposition === 'approved' &&
+                            answer.responseId === result.responseId &&
+                            answer.runId === result.runId &&
+                            reservation.runId === result.runId &&
+                            this.intent?.status === 'pending' &&
+                            this.intent.turnId === reservation.turnId &&
+                            this.hasConsentingAudience() &&
+                            deliveryEpoch === this.deliveryEpoch &&
+                            answer.text.trim().length > 0 &&
+                            utf8Bytes(answer.text) <= MAX_CONTEXT_BYTES
+                        ) {
+                            const { text, ...evidence } = answer;
+                            this.delivery = {
+                                text,
+                                inspection: {
+                                    ...evidence,
+                                    deliveryId: randomUUID(),
+                                    handle: this.freshnessHandle(),
+                                    turnId: reservation.turnId,
+                                    audienceIds: this.audience.map(
+                                        (person) => person.id
+                                    ),
+                                    expiresAt: Date.now() + DELIVERY_TTL_MS,
+                                    status: 'ready',
+                                    playback: 'not_reported',
+                                },
+                            };
+                            this.deliveryExpiry = setTimeout(
+                                () => this.revokeDelivery('expired'),
+                                DELIVERY_TTL_MS
+                            );
+                            this.deliveryExpiry.unref?.();
+                        }
                     }
                 },
                 () => {
@@ -409,12 +487,124 @@ export class RealtimeConversationState {
     }
 
     /** Identity and disposition only: completion never grants permission to speak. */
-    completedExecution(): RealtimeWorkflowResult | undefined {
+    completedExecution(): RealtimeCompletion | undefined {
         return this.completed ? { ...this.completed } : undefined;
+    }
+
+    /** Content-free snapshot of the sole delivery; reports do not prove that anyone heard it. */
+    deliveryStatus(): RealtimeDeliveryStatus | undefined {
+        this.recheckDelivery();
+        const inspection = this.delivery?.inspection;
+        return inspection
+            ? {
+                  ...inspection,
+                  handle: { ...inspection.handle },
+                  audienceIds: [...inspection.audienceIds],
+              }
+            : undefined;
+    }
+
+    /** Reserves this ready answer once without handing text to an audio adapter. */
+    requestDelivery(
+        handle: RealtimeFreshnessHandle
+    ): RealtimeDeliveryStatus | undefined {
+        this.recheckDelivery();
+        if (
+            this.delivery?.inspection.status !== 'ready' ||
+            !this.isDeliveryFresh(handle) ||
+            !this.isDeliveryFresh(this.delivery.inspection.handle)
+        )
+            return undefined;
+        this.delivery.inspection.status = 'requested';
+        return this.deliveryStatus();
+    }
+
+    /** Rechecks authorization at the playback boundary and hands exact text off once. */
+    startDelivery(deliveryId: string): RealtimeDelivery | undefined {
+        this.recheckDelivery();
+        const delivery = this.delivery;
+        if (
+            delivery?.inspection.deliveryId !== deliveryId ||
+            delivery.inspection.status !== 'requested' ||
+            delivery.text === undefined
+        )
+            return undefined;
+        const text = delivery.text;
+        delete delivery.text;
+        delivery.inspection.status = 'handed_off';
+        delivery.inspection.handedOffAt = Date.now();
+        return {
+            ...delivery.inspection,
+            handle: { ...delivery.inspection.handle },
+            audienceIds: [...delivery.inspection.audienceIds],
+            text,
+        };
+    }
+
+    /** Accepts ordered observations for this handoff; reports never grant or restore permission. */
+    reportPlayback(
+        deliveryId: string,
+        event: Exclude<RealtimeDeliveryStatus['playback'], 'not_reported'>
+    ): boolean {
+        this.recheckDelivery();
+        const inspection = this.delivery?.inspection;
+        if (
+            inspection?.deliveryId !== deliveryId ||
+            inspection.handedOffAt === undefined
+        )
+            return false;
+        if (event === 'started') {
+            if (inspection.playback !== 'not_reported') return false;
+            inspection.startReportedAt = Date.now();
+        } else if (event === 'completed') {
+            if (inspection.playback !== 'started') return false;
+        } else if (event === 'interrupted' || event === 'failed') {
+            if (
+                inspection.playback !== 'not_reported' &&
+                inspection.playback !== 'started'
+            )
+                return false;
+        } else return false;
+        inspection.playback = event;
+        clearTimeout(this.deliveryExpiry);
+        return true;
+    }
+
+    private recheckDelivery(): void {
+        const inspection = this.delivery?.inspection;
+        if (
+            !inspection ||
+            inspection.status === 'revoked' ||
+            inspection.status === 'expired'
+        )
+            return;
+        if (
+            !this.isDeliveryFresh(inspection.handle) ||
+            !this.hasConsentingAudience() ||
+            this.intent?.turnId !== inspection.turnId
+        )
+            this.revokeDelivery();
+        else if (
+            inspection.playback === 'not_reported' &&
+            Date.now() >= inspection.expiresAt
+        )
+            this.revokeDelivery('expired');
+    }
+
+    private revokeDelivery(status: 'revoked' | 'expired' = 'revoked'): void {
+        clearTimeout(this.deliveryExpiry);
+        this.deliveryExpiry = undefined;
+        if (this.delivery) {
+            delete this.delivery.text;
+            if (this.delivery.inspection.status !== 'expired')
+                this.delivery.inspection.status = status;
+        }
+        this.deliveryEpoch += 1;
     }
 
     /** Requests a stop; only settlement releases the independent capacity reservation. */
     private cancelExecution(): void {
+        this.revokeDelivery();
         if (executionReservation?.owner === this.instanceId)
             requestExecutionCancellation(executionReservation);
         this.completed = undefined;
@@ -424,6 +614,7 @@ export class RealtimeConversationState {
     close(): void {
         if (this.closed) return;
         this.cancelExecution();
+        this.delivery = undefined;
         this.closed = true;
         this.revision += 1;
         this.audience = [];
@@ -523,6 +714,7 @@ export class RealtimeConversationState {
             action === 'interrupt' &&
             this.intent?.status === 'pending'
         ) {
+            this.revokeDelivery();
             this.intent.status = 'interrupted';
         } else if (
             action === 'continue' &&
@@ -533,6 +725,7 @@ export class RealtimeConversationState {
     }
 
     private holdDeliveryForAmbiguousSpeech(): void {
+        this.revokeDelivery();
         if (this.intent?.status === 'pending')
             this.intent.status = 'interrupted';
     }
