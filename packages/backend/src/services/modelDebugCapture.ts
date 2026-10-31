@@ -118,10 +118,19 @@ export const createModelDebugCapturingRuntime = (
     runtime: GenerationRuntime
 ): GenerationRuntime => ({
     kind: runtime.kind,
+    ...(runtime.supportsEphemeralContent === true && {
+        supportsEphemeralContent: true,
+    }),
     ...(runtime.resolveCapabilityFacts !== undefined && {
         resolveCapabilityFacts: runtime.resolveCapabilityFacts.bind(runtime),
     }),
     generate: async (request: GenerationRequest): Promise<GenerationResult> => {
+        // A qualified transport must remain private even inside an opted-in debug session.
+        if (
+            runtime.supportsEphemeralContent === true ||
+            realtimeWorkflowScope() !== undefined
+        )
+            return runtime.generate(request);
         const session = captureSession.getStore();
         const attempt = attemptIdentity.getStore();
         if (session === undefined || attempt === undefined) {

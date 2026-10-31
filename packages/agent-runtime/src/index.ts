@@ -806,6 +806,8 @@ export {
     type CreateOpenAiRealtimeVoiceRuntimeOptions,
     type OpenAiRealtimeRuntimeLogger,
 } from './openAiRealtimeVoiceRuntime.js';
+
+export { createEphemeralOpenRouterRuntime } from './ephemeralOpenRouterRuntime.js';
 export {
     createVoltAgentRuntime,
     type CreateVoltAgentRuntimeOptions,

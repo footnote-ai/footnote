@@ -32,6 +32,27 @@ const createResult = (request: GenerationRequest): GenerationResult => ({
     citations: [],
 });
 
+test('bounded admission preserves only an explicit ephemeral guarantee', () => {
+    for (const qualified of [true, false]) {
+        const runtime: GenerationRuntime = {
+            kind: 'synthetic',
+            ...(qualified && { supportsEphemeralContent: true as const }),
+            generate: async (request) => createResult(request),
+        };
+        const bounded = createBoundedOllamaGenerationRuntime({
+            runtime,
+            enabled: true,
+            maxConcurrentGenerations: 1,
+            maxQueuedGenerations: 1,
+            logger,
+        });
+        assert.equal(
+            bounded.supportsEphemeralContent,
+            qualified ? true : undefined
+        );
+    }
+});
+
 test('local Ollama generations are admitted one at a time and queued FIFO', async () => {
     let active = 0;
     let maximumActive = 0;

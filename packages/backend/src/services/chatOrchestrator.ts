@@ -228,6 +228,9 @@ export const createChatOrchestrator = ({
 }: CreateChatOrchestratorOptions) => {
     const generationRuntime = createModelDebugCapturingRuntime({
         kind: rawGenerationRuntime.kind,
+        ...(rawGenerationRuntime.supportsEphemeralContent === true && {
+            supportsEphemeralContent: true,
+        }),
         ...(rawGenerationRuntime.resolveCapabilityFacts === undefined
             ? {}
             : {
@@ -236,9 +239,17 @@ export const createChatOrchestrator = ({
                           rawGenerationRuntime
                       ),
               }),
-        generate: (request) => {
-            if (realtimeWorkflowScope() === undefined)
+        generate: async (request) => {
+            const voice = realtimeWorkflowScope();
+            if (voice === undefined)
                 return rawGenerationRuntime.generate(request);
+            if (voice.generationFailed)
+                throw Object.assign(
+                    new Error(
+                        'Realtime generation is unavailable after a failed attempt.'
+                    ),
+                    { preProviderCallFailure: true }
+                );
             // Only backend Context Integrations may retrieve during voice execution.
             const bounded = { ...request };
             delete bounded.search;
@@ -248,7 +259,12 @@ export const createChatOrchestrator = ({
                     ...bounded.capabilities,
                     canUseSearch: false,
                 };
-            return rawGenerationRuntime.generate(bounded);
+            try {
+                return await rawGenerationRuntime.generate(bounded);
+            } catch (error) {
+                voice.generationFailed = true;
+                throw error;
+            }
         },
     });
     const chatOrchestratorLogger =
@@ -546,6 +562,7 @@ export const createChatOrchestrator = ({
                         };
                     }
                     const directOpenAiStructuredExecutor =
+                        realtimeWorkflowScope() === undefined &&
                         activePlannerProfile.provider === 'openai' &&
                         runtimeConfig.openai.apiKey !== null
                             ? createOpenAiChatPlannerStructuredExecutor({
@@ -553,6 +570,7 @@ export const createChatOrchestrator = ({
                               })
                             : undefined;
                     if (
+                        realtimeWorkflowScope() === undefined &&
                         activePlannerProfile.provider === 'openai' &&
                         directOpenAiStructuredExecutor !== undefined
                     ) {
@@ -789,6 +807,7 @@ export const createChatOrchestrator = ({
                     plannerResult = await executePlannerGeneration(useJsonMode);
                 } catch (error) {
                     if (
+                        realtimeWorkflowScope() !== undefined ||
                         !useJsonMode ||
                         !isTypedOutputTransportUnavailable(error)
                     ) {
@@ -859,6 +878,7 @@ export const createChatOrchestrator = ({
                 };
             },
             allowTextJsonCompatibilityFallback:
+                realtimeWorkflowScope() === undefined &&
                 runtimeConfig.openai.plannerAllowTextJsonCompatibilityFallback,
             defaultModel: plannerProfile.providerModel,
             recordUsage,
@@ -1154,6 +1174,9 @@ export const createChatOrchestrator = ({
                         input.request,
                         input.invocationContext
                     );
+                    const voice = realtimeWorkflowScope();
+                    if (voice && plannerResult.execution.status === 'failed')
+                        voice.generationFailed = true;
                     const transportOutcome =
                         plannerResult.execution.structuredOutputOutcome;
                     if (

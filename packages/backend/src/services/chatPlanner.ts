@@ -78,6 +78,7 @@ export type {
     ChatPlannerInvocationPurpose,
 } from './chatPlannerInvocation.js';
 import { runtimeConfig } from '../config.js';
+import { realtimeWorkflowScope } from './realtimeWorkflowScope.js';
 import {
     findGitHubObjectReferenceInConversation,
     isGitHubObjectReferenceBoundToRepository,
@@ -2414,6 +2415,7 @@ export const createChatPlanner = ({
             requestPayload.signal?.throwIfAborted();
             let resolvedError: unknown = error;
             const shouldAttemptCompatibilityFallback =
+                realtimeWorkflowScope() === undefined &&
                 executePlannerStructured &&
                 executePlanner &&
                 (allowTextJsonCompatibilityFallback ||

@@ -156,9 +156,11 @@ Settled decisions for this slice:
   VoltAgent adapter is unsupported:** installed SDK 2.11.0 automatically records
   inputs, outputs and messages in local/WebSocket tracing, with no supported
   per-call opt-out. Remote-export sampling and missing credentials do not disable
-  local capture. Only synthetic runtimes supply the guarantee in this slice.
-  A separately verified adapter privacy control is an architectural prerequisite
-  for live wiring; this slice does not replace SDK observability or add a runtime.
+  local capture. A separate [OpenRouter HTTP text factory](../status/realtime-voice-alignment.md#qualified-local-text-transport)
+  now qualifies one local transport using intercepted requests, without constructing
+  an Agent. Voice planning also uses that shared boundary rather than the direct
+  OpenAI planner shortcut. Production wiring remains unchanged; provider-side
+  privacy and live behavior are separate prerequisites, not established guarantees.
 - Voice execution permits text answering plus the explicit read-only allowlist
   `weather_forecast` and `web_search`. The execution continuation denies other
   terminal actions. Context executor selection denies other integration names

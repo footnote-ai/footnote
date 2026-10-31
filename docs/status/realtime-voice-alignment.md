@@ -100,7 +100,8 @@ No live voice handler invokes this path yet.
   and messages in local/WebSocket tracing and exposes no supported per-call
   opt-out. The production adapter remains unsupported. Missing credentials or
   remote sampling do not establish privacy; verified adapter controls are required
-  before live wiring.
+  before live wiring. The isolated HTTP executor described below qualifies one
+  local text transport; production wiring still uses VoltAgent and remains blocked.
 - Execution admits text answers and only `weather_forecast` and `web_search`.
   Executor selection denies every other integration, including registry and
   fallback executors. Provider-native search is disabled at the runtime boundary;
@@ -143,6 +144,43 @@ operator tests verify auth, privacy and degraded inspection. Completion inspecti
 approved text is isolated in the ephemeral slot described below.
 
 ## Synthetic final-response approval and staging
+
+### Qualified local text transport
+
+`agent-runtime/src/ephemeralOpenRouterRuntime.ts` supplies a separate factory for
+one route: OpenRouter Chat Completions with `openai/gpt-5-mini`. It reuses the
+existing executor injection, capability resolution, request controls and result
+normalization without constructing a VoltAgent Agent or calling AI SDK generation.
+Intercepted HTTP tests qualify local behavior, not provider availability or retention.
+No server or Discord startup path selects this factory.
+
+Admission checks the pinned AI SDK's global telemetry registry on every call and
+rejects registered or uninspectable instrumentation before HTTP. HTTP itself never
+dispatches SDK content callbacks, including registrations during an in-flight
+request. Only explicit text/JSON/schema requests on that model are accepted;
+provider-native search, user identifiers, enabled prompt caching, other providers
+or models, and requested provider fallbacks are denied. The endpoint is fixed,
+redirects fail, plugins are disabled, and requests are not retried. Error messages
+and causes cannot carry raw provider bodies or parser/transport diagnostics.
+Only the fixed model identity and normalized numeric usage cross the result
+metadata boundary. Free-text endpoint attribution is omitted because a provider
+could echo conversation content there; unknown or failed finish reasons reject.
+
+Voice structured planning always uses the supplied qualified runtime, including
+when a direct OpenAI key exists. Text planning retains its existing direct path.
+Voice does not downgrade structured planning to compatibility transports after a
+failure, and a generation failure prevents later fallback generation in the same
+Workflow. The bounded Ollama wrapper preserves an existing ephemeral guarantee;
+the debug wrapper preserves it by bypassing content capture entirely for qualified
+runtimes. Neither wrapper grants it to an unqualified runtime.
+
+Tests cover invocation-time instrumentation refusal, sentinel content, structured
+planner/reviewer requests, usage, errors, cancellation, unsupported routing, and
+the real synthetic Workflow with SQLite receipts and exact approved selection.
+Backend read-only integration restrictions remain in force. Provider account
+settings, upstream retention, real inference and audio remain unverified; the
+VoltAgent route remains unqualified. This factory does not enable live Voice or
+resolve process recovery, speaker/consent wiring, or playback acknowledgment.
 
 The [architecture mapping](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only)
 describes the implemented dispositions. `realtimeWorkflowScope.ts` checks the

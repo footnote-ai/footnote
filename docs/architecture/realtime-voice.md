@@ -205,6 +205,11 @@ survives call teardown; its 60-second deadline and 5-second cancellation watchdo
 make unresolved work observably degraded without releasing capacity.
 Voice admission fails closed unless the runtime guarantees no content retention;
 the current VoltAgent adapter cannot provide that guarantee and remains blocked.
+An isolated OpenRouter HTTP text executor now qualifies one local route through
+the existing runtime seam, with synthetic coverage for planning, review and
+content-free receipts. Production wiring does not select it; provider retention
+and live behavior remain unverified. See the
+[transport qualification](../status/realtime-voice-alignment.md#qualified-local-text-transport).
 The tracker describes process-local and deployment-recovery limits. Cross-surface
 continuity, consent, and retention remain under #559.
 

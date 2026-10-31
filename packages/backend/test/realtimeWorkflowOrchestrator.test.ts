@@ -7,7 +7,11 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { GenerationRuntime } from '@footnote/agent-runtime';
+import {
+    createEphemeralOpenRouterRuntime,
+    type GenerationRuntime,
+} from '@footnote/agent-runtime';
+import { createBoundedOllamaGenerationRuntime } from '../src/services/boundedOllamaRuntime.js';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import { RealtimeConversationState } from '../src/services/realtimeConversationState.js';
@@ -60,6 +64,322 @@ const answerPlan = (generation: object = {}) => ({
         },
         ...generation,
     },
+});
+
+test('the qualified HTTP route runs planning, generation and assessment with a persisted private receipt', async (t) => {
+    const previousProfiles = runtimeConfig.modelProfiles;
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    const previousDebug = process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO;
+    const original = previousProfiles.catalog.find(
+        (entry) => entry.provider === 'openai'
+    );
+    assert.ok(original);
+    const profile = {
+        ...original,
+        id: 'voice-qualified-test',
+        enabled: true,
+        provider: 'openrouter' as const,
+        providerModel: 'openai/gpt-5-mini',
+        providerRouting: undefined,
+    };
+    const mutable = runtimeConfig as unknown as {
+        modelProfiles: typeof previousProfiles;
+    };
+    mutable.modelProfiles = {
+        ...previousProfiles,
+        catalog: [profile],
+        defaultProfileId: profile.id,
+        plannerProfileId: profile.id,
+    };
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO = 'true';
+    const root = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'voice-private-http-')
+    );
+    const store = new SqliteTraceStore({ dbPath: path.join(root, 'trace.db') });
+    const requests: Record<string, unknown>[] = [];
+    let disallowed = false;
+    t.mock.method(
+        globalThis,
+        'fetch',
+        async (url: string, init: NonNullable<Parameters<typeof fetch>[1]>) => {
+            assert.equal(url, 'https://openrouter.ai/api/v1/chat/completions');
+            const body = JSON.parse(String(init.body)) as Record<
+                string,
+                unknown
+            >;
+            requests.push(body);
+            assert.equal(body.model, 'openai/gpt-5-mini');
+            assert.equal(body.tools, undefined);
+            const text = disallowed
+                ? JSON.stringify({
+                      ...answerPlan(),
+                      action: 'react',
+                      reaction: '👍',
+                  })
+                : [
+                      JSON.stringify(answerPlan()),
+                      'PRIVATE APPROVED ANSWER',
+                      JSON.stringify({
+                          reviewDecision: 'finalize',
+                          reviewReason: 'PRIVATE REVIEW',
+                      }),
+                  ][requests.length - 1];
+            assert.ok(text);
+            return Response.json({
+                model: 'openai/gpt-5-mini',
+                openrouter_metadata: {
+                    endpoints: {
+                        available: [
+                            {
+                                selected: true,
+                                provider: 'PRIVATE ATTRIBUTION',
+                                model: 'PRIVATE ATTRIBUTION',
+                            },
+                        ],
+                    },
+                },
+                choices: [
+                    { message: { content: text }, finish_reason: 'stop' },
+                ],
+                usage: {
+                    prompt_tokens: 10,
+                    completion_tokens: 5,
+                    total_tokens: 15,
+                },
+            });
+        }
+    );
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createBoundedOllamaGenerationRuntime({
+                runtime: createEphemeralOpenRouterRuntime({
+                    apiKey: 'synthetic-key',
+                }),
+                enabled: false,
+                maxConcurrentGenerations: 1,
+                maxQueuedGenerations: 0,
+                logger,
+            }),
+            storeTrace: (metadata, ...rest) =>
+                storeTrace(store, metadata, ...rest),
+            buildResponseMetadata,
+            defaultModel: profile.id,
+            recordUsage: () => undefined,
+        });
+        const accepted = snapshot();
+        const result = await orchestrator.runRealtimeConversation(accepted, {
+            signal: new AbortController().signal,
+            onRunStarted: () => undefined,
+        });
+        assert.equal(requests.length, 3);
+        assert.ok(requests[0].response_format);
+        assert.ok(requests[2].response_format);
+        assert.equal(result.finalResponse?.disposition, 'approved');
+        assert.ok(result.finalResponse?.disposition === 'approved');
+        assert.equal(result.finalResponse.text, 'PRIVATE APPROVED ANSWER');
+        assert.ok(result.responseId);
+        const metadata = await store.retrieve(result.responseId);
+        assert.equal(metadata?.workflow?.runId, result.runId);
+        assert.equal(
+            metadata?.workflow?.initiatingTurnId,
+            accepted.intent?.turnId
+        );
+        assert.equal(metadata?.workflow?.runStatus, 'completed');
+        assert.equal(
+            (await store.retrieveResponseCandidates(result.responseId)).length,
+            0
+        );
+        assert.equal(
+            (await store.retrieveModelDebugCaptures(result.responseId)).length,
+            0
+        );
+        assert.doesNotMatch(JSON.stringify(metadata), /PRIVATE|VOICE_SECRET/);
+        disallowed = true;
+        requests.length = 0;
+        const rejected = await orchestrator.runRealtimeConversation(
+            snapshot(),
+            {
+                signal: new AbortController().signal,
+                onRunStarted: () => undefined,
+            }
+        );
+        assert.equal(requests.length, 1);
+        assert.equal(rejected.status, 'rejected');
+        assert.notEqual(rejected.finalResponse?.disposition, 'approved');
+        const instrumentation = globalThis.AI_SDK_TELEMETRY_INTEGRATIONS;
+        try {
+            globalThis.AI_SDK_TELEMETRY_INTEGRATIONS = [
+                {
+                    onStart: () =>
+                        assert.fail('No telemetry may receive content'),
+                },
+            ];
+            requests.length = 0;
+            const denied = await orchestrator.runRealtimeConversation(
+                snapshot(),
+                {
+                    signal: new AbortController().signal,
+                    onRunStarted: () => undefined,
+                }
+            );
+            assert.equal(requests.length, 0);
+            assert.ok(denied.responseId);
+            const deniedMetadata = await store.retrieve(denied.responseId);
+            const routes =
+                deniedMetadata?.workflow?.steps.flatMap(
+                    (step) =>
+                        step.attempts?.flatMap(
+                            (attempt) => attempt.routingAttempts ?? []
+                        ) ?? []
+                ) ?? [];
+            assert.ok(routes.length > 0);
+            assert.ok(
+                routes.every(
+                    (route) => route.providerCallStatus === 'not_called'
+                )
+            );
+            assert.doesNotMatch(
+                JSON.stringify(deniedMetadata),
+                /PRIVATE|VOICE_SECRET/
+            );
+        } finally {
+            globalThis.AI_SDK_TELEMETRY_INTEGRATIONS = instrumentation;
+        }
+    } finally {
+        store.close();
+        await fs.rm(root, { recursive: true, force: true });
+        mutable.modelProfiles = previousProfiles;
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+        if (previousDebug === undefined)
+            delete process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO;
+        else process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO = previousDebug;
+    }
+});
+
+test('voice structured planning cannot bypass the qualified runtime through direct OpenAI', async (t) => {
+    const profiles = runtimeConfig.modelProfiles;
+    const openai = { ...runtimeConfig.openai };
+    const mode = runtimeConfig.chatWorkflow.modeId;
+    const review = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    const profile = profiles.catalog.find(
+        (entry) => entry.provider === 'openai'
+    );
+    assert.ok(profile);
+    const mutable = runtimeConfig as unknown as {
+        modelProfiles: typeof profiles;
+    };
+    mutable.modelProfiles = {
+        ...profiles,
+        catalog: [{ ...profile, enabled: true }],
+        defaultProfileId: profile.id,
+        plannerProfileId: profile.id,
+    };
+    Object.assign(runtimeConfig.openai, {
+        apiKey: 'synthetic-key',
+        plannerStructuredOutputEnabled: true,
+    });
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    const remote = t.mock.method(globalThis, 'fetch', async () => {
+        throw new Error('Unqualified direct transport');
+    });
+    const requests: Parameters<GenerationRuntime['generate']>[0][] = [];
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: {
+                kind: 'qualified-synthetic',
+                supportsEphemeralContent: true,
+                generate: async (request) => {
+                    requests.push(request);
+                    return {
+                        text:
+                            [
+                                JSON.stringify(answerPlan()),
+                                'Reviewed answer.',
+                                JSON.stringify({
+                                    reviewDecision: 'finalize',
+                                    reviewReason: 'Ready.',
+                                }),
+                            ][requests.length - 1] ?? '',
+                        model: request.model,
+                    };
+                },
+            },
+            storeTrace: async () => undefined,
+            buildResponseMetadata,
+            defaultModel: profile.id,
+            recordUsage: () => undefined,
+        });
+        const result = await orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: () => undefined,
+        });
+        assert.equal(remote.mock.callCount(), 0);
+        assert.ok(requests[0]?.structuredOutput);
+        assert.equal(result.finalResponse?.disposition, 'approved');
+    } finally {
+        mutable.modelProfiles = profiles;
+        Object.assign(runtimeConfig.openai, openai);
+        runtimeConfig.chatWorkflow.modeId = mode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = review;
+    }
+});
+
+test('a failed voice generation cannot silently retry through planner or response fallback', async () => {
+    let attempts = 0;
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: {
+            kind: 'qualified-synthetic',
+            supportsEphemeralContent: true,
+            generate: async () => {
+                attempts += 1;
+                throw new Error('Qualified transport unavailable');
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+    const result = await orchestrator.runRealtimeConversation(snapshot(), {
+        signal: new AbortController().signal,
+        onRunStarted: () => undefined,
+    });
+    assert.equal(attempts, 1);
+    assert.notEqual(result.finalResponse?.disposition, 'approved');
+});
+
+test('a policy-invalid structured plan cannot downgrade or trigger response fallback in voice', async () => {
+    let attempts = 0;
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: {
+            kind: 'qualified-synthetic',
+            supportsEphemeralContent: true,
+            generate: async () => {
+                attempts += 1;
+                return {
+                    text: JSON.stringify({
+                        action: 'unknown-action',
+                        PRIVATE_FIELD: 'PRIVATE INPUT',
+                    }),
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+    const result = await orchestrator.runRealtimeConversation(snapshot(), {
+        signal: new AbortController().signal,
+        onRunStarted: () => undefined,
+    });
+    assert.equal(attempts, 1);
+    assert.notEqual(result.finalResponse?.disposition, 'approved');
 });
 
 test('only the selected, assessed final answer is returned for voice staging', async () => {

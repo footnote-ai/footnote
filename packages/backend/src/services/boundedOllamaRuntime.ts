@@ -226,6 +226,9 @@ export const createBoundedOllamaGenerationRuntime = ({
 
     return {
         kind: runtime.kind,
+        ...(runtime.supportsEphemeralContent === true && {
+            supportsEphemeralContent: true,
+        }),
         ...(runtime.resolveCapabilityFacts !== undefined && {
             resolveCapabilityFacts:
                 runtime.resolveCapabilityFacts.bind(runtime),

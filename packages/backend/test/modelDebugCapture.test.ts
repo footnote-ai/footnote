@@ -16,6 +16,36 @@ import {
     withModelDebugCaptureSession,
 } from '../src/services/modelDebugCapture.js';
 
+test('a qualified runtime keeps its guarantee and bypasses even an active debug session', async () => {
+    const session = {
+        runId: 'private-run',
+        records: [],
+        omittedInvocationCount: 0,
+    };
+    const runtime = createModelDebugCapturingRuntime({
+        kind: 'qualified-synthetic',
+        supportsEphemeralContent: true,
+        generate: async () => ({ text: 'PRIVATE ANSWER' }),
+    });
+    assert.equal(runtime.supportsEphemeralContent, true);
+    const result = await withModelDebugCaptureSession(session, () =>
+        withModelDebugAttempt({ stepId: 'step', attempt: 1 }, () =>
+            runtime.generate({
+                messages: [{ role: 'user', content: 'PRIVATE INPUT' }],
+            })
+        )
+    );
+    assert.equal(result.text, 'PRIVATE ANSWER');
+    assert.deepEqual(session.records, []);
+    assert.equal(
+        createModelDebugCapturingRuntime({
+            kind: 'ordinary',
+            generate: async () => ({ text: '' }),
+        }).supportsEphemeralContent,
+        undefined
+    );
+});
+
 test('model debug text redacts credential-shaped fields before storing', () => {
     const result = boundAndRedactDebugText(
         'Authorization: Bearer abc123\napi_key="secret-value"\ntoken=session-token\n' +

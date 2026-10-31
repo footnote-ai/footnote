@@ -141,6 +141,7 @@ export type RealtimeWorkflowScope = {
     turnId: string;
     onRunStarted: (runId: string) => void;
     actionRejected?: boolean;
+    generationFailed?: boolean;
     recorded?: Required<
         Pick<RealtimeWorkflowResult, 'responseId' | 'runId' | 'status'>
     > & { finalResponse: RealtimeFinalResponse };
