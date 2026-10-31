@@ -51,8 +51,10 @@ const approved = (): RealtimeWorkflowResult => ({
     },
 });
 
-test('the delivery slot enforces its own 16 KiB UTF-8 bound for every runner', async () => {
+test('the delivery slot requires nonblank text within 16 KiB UTF-8 for every runner', async () => {
     for (const [text, fits] of [
+        ['', false],
+        [' \t\n', false],
         ['x'.repeat(16 * 1024), true],
         ['x'.repeat(16 * 1024 + 1), false],
         ['é'.repeat(8 * 1024), true],

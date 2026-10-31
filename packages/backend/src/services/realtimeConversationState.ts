@@ -434,6 +434,7 @@ export class RealtimeConversationState {
                             this.intent.turnId === reservation.turnId &&
                             this.hasConsentingAudience() &&
                             deliveryEpoch === this.deliveryEpoch &&
+                            answer.text.trim().length > 0 &&
                             utf8Bytes(answer.text) <= MAX_CONTEXT_BYTES
                         ) {
                             const { text, ...evidence } = answer;
