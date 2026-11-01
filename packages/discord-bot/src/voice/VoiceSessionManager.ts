@@ -15,8 +15,6 @@ import {
     SpeakerSilenceEvent,
 } from './AudioCaptureHandler.js';
 import { AudioPlaybackHandler } from './AudioPlaybackHandler.js';
-import { AUDIO_CONSTANTS } from '../constants/voice.js';
-import { runtimeConfig } from '../config.js';
 
 /**
  * @footnote-logger: voiceSessionManager
@@ -45,11 +43,6 @@ type VoiceSessionWithHandlers = VoiceSession & {
     audioChunkHandler?: (event: AudioChunkEvent) => void;
     speakerSilenceHandler?: (event: SpeakerSilenceEvent) => void;
 };
-
-const BYTES_PER_SAMPLE = 2; // 16-bit PCM
-const DEFAULT_SILENCE_TAIL_MS = 600;
-const MIN_SILENCE_TAIL_MS = 200;
-const MAX_SILENCE_TAIL_MS = 1200;
 
 export class VoiceSessionManager {
     private activeSessions: Map<string, VoiceSession> = new Map();
@@ -107,7 +100,13 @@ export class VoiceSessionManager {
                 return;
             }
             this.enqueueAudioTask(guildId, async () => {
-                await this.appendSilenceTail(guildId, event.userId);
+                const active = this.activeSessions.get(guildId);
+                if (
+                    !active?.initiatingUserId ||
+                    event.userId !== active.initiatingUserId
+                )
+                    return;
+                await active.realtimeSession.commitAudio();
             });
         };
 
@@ -160,6 +159,15 @@ export class VoiceSessionManager {
             return;
         }
 
+        if (!session.initiatingUserId || userId !== session.initiatingUserId) {
+            voiceSessionLogger.warn(
+                `Ignored audio from a non-caller in guild ${guildId}`
+            );
+            return;
+        }
+
+        session.audioPlaybackHandler.stopPlayback(guildId);
+
         const label = session.participantLabels.get(userId) || userId;
 
         try {
@@ -172,66 +180,6 @@ export class VoiceSessionManager {
             );
             throw error;
         }
-    }
-
-    private getSilenceTailMs(): number | null {
-        if (runtimeConfig.realtime.turnDetection !== 'server_vad') {
-            return null;
-        }
-
-        const configuredMs =
-            runtimeConfig.realtime.turnDetectionConfig?.serverVad
-                ?.silenceDurationMs;
-        const baseMs =
-            typeof configuredMs === 'number'
-                ? configuredMs
-                : DEFAULT_SILENCE_TAIL_MS;
-
-        return Math.min(
-            MAX_SILENCE_TAIL_MS,
-            Math.max(MIN_SILENCE_TAIL_MS, baseMs)
-        );
-    }
-
-    private async appendSilenceTail(
-        guildId: string,
-        userId: string
-    ): Promise<void> {
-        const session = this.activeSessions.get(guildId);
-        if (!session) {
-            return;
-        }
-
-        const tailMs = this.getSilenceTailMs();
-        if (!tailMs) {
-            return;
-        }
-
-        const totalSamples = Math.max(
-            1,
-            Math.floor((AUDIO_CONSTANTS.REALTIME_SAMPLE_RATE * tailMs) / 1000)
-        );
-        const totalBytes = totalSamples * BYTES_PER_SAMPLE;
-        const chunkSize = AUDIO_CONSTANTS.MIN_AUDIO_BUFFER_SIZE;
-        const label = session.participantLabels.get(userId) || userId;
-
-        voiceSessionLogger.debug(
-            `Appending ${tailMs}ms silence tail for ${label} (${userId}) in guild ${guildId}`,
-            { totalBytes }
-        );
-
-        let remaining = totalBytes;
-        while (remaining > 0) {
-            const size = Math.min(chunkSize, remaining);
-            const silenceChunk = Buffer.alloc(size);
-            await session.realtimeSession.sendAudio(
-                silenceChunk,
-                label,
-                userId
-            );
-            remaining -= size;
-        }
-        session.lastAudioTime = Date.now();
     }
 
     private cleanupSessionEventListeners(session: VoiceSession): void {

@@ -10,8 +10,6 @@ import type {
     ConfiguredProviderModel,
     SupportedLogLevel,
     SupportedNodeEnv,
-    SupportedOpenAIRealtimeModel,
-    SupportedOpenAITtsVoice,
     SupportedProvider,
     SupportedReasoningEffort,
     SupportedVerbosity,
@@ -73,8 +71,6 @@ export type RuntimeConfig = {
         defaultModel: ConfiguredProviderModel;
         plannerStructuredOutputEnabled: boolean;
         plannerAllowTextJsonCompatibilityFallback: boolean;
-        defaultRealtimeModel: SupportedOpenAIRealtimeModel;
-        defaultRealtimeVoice: SupportedOpenAITtsVoice;
         defaultReasoningEffort: SupportedReasoningEffort;
         defaultVerbosity: SupportedVerbosity;
         defaultChannelContext: { channelId: string };
@@ -90,6 +86,11 @@ export type RuntimeConfig = {
     openrouter: {
         apiKey: string | null;
         baseUrl: string;
+    };
+    voice: {
+        defaultMode: 'standard' | 'live';
+        maxAnswerTokens: number;
+        developerUserId: string | null;
     };
     imageDescription: {
         provider: SupportedProvider;

@@ -129,6 +129,49 @@ test('requesting and handing off an answer do not report audible completion', as
     state.close();
 });
 
+test('delivery playback-start deadline begins when synthesis receives the approved text', async (t) => {
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+    const state = call();
+    state.startExecution({
+        runRealtimeConversation: async (_snapshot, context) => {
+            context.onRunStarted('run-one');
+            return approved();
+        },
+    });
+    await flush();
+    const ready = state.deliveryStatus();
+    assert.ok(ready);
+    const request = state.requestDelivery(ready.handle);
+    assert.ok(request);
+    t.mock.timers.tick(29_999);
+    const handoff = state.startDelivery(request.deliveryId);
+    assert.ok(handoff);
+    assert.equal(handoff.expiresAt, 60_999);
+    t.mock.timers.tick(29_999);
+    assert.equal(state.reportPlayback(handoff.deliveryId, 'started'), true);
+    state.close();
+});
+
+test('approved delivery readiness notifies the adapter with a freshness handle', async () => {
+    const state = call();
+    let readyHandle: unknown;
+    const unsubscribe = state.onDeliveryReady((handle) => {
+        readyHandle = handle;
+    });
+    state.startExecution({
+        runRealtimeConversation: async (_snapshot, context) => {
+            context.onRunStarted('run-one');
+            return approved();
+        },
+    });
+    await flush();
+    const ready = state.deliveryStatus();
+    assert.ok(ready);
+    assert.deepEqual(readyHandle, ready.handle);
+    unsubscribe();
+    state.close();
+});
+
 const readyAnswer = async () => {
     const state = call();
     state.startExecution({
@@ -158,10 +201,10 @@ test('expiration is rechecked without waiting for the timer, including after a p
         if (phase === 'handed_off') {
             assert.equal(
                 state.reportPlayback(ready.deliveryId, 'started'),
-                true
+                false
             );
             assert.equal(state.deliveryStatus()?.status, 'expired');
-            assert.equal(state.deliveryStatus()?.playback, 'started');
+            assert.equal(state.deliveryStatus()?.playback, 'not_reported');
             assert.equal(state.startDelivery(ready.deliveryId), undefined);
         }
         state.close();

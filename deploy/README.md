@@ -219,6 +219,11 @@ discord-bots:
           mention-aliases: []
 ```
 
+Set `DISCORD_USER_ID` to the authorized developer's Discord user ID, not
+the bot's ID. Use the same value in the backend and each bot process to permit
+five-minute Voice calls. If it is unset in the backend, extended calls are
+rejected; normal calls still have a 60-second limit.
+
 ## Fly.io
 
 Single-app deploy:

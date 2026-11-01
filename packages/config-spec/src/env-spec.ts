@@ -13,10 +13,8 @@ import {
     supportedLogLevels,
     supportedNodeEnvs,
     supportedProviders,
-    supportedOpenAIRealtimeModels,
     supportedOpenAIRealtimeTurnDetections,
     supportedOpenAIRealtimeVadEagerness,
-    supportedOpenAITtsVoices,
     supportedReasoningEfforts,
     supportedVerbosityLevels,
 } from '@footnote/contracts/providers';
@@ -78,10 +76,7 @@ export const envEntries = [
         description:
             'OpenAI API key used when OpenAI-backed profiles or OpenAI-only routes are enabled.',
         defaultValue: noDefault(),
-        usedBy: [
-            'packages/backend/src/config.ts',
-            'packages/discord-bot/src/config.ts',
-        ],
+        usedBy: ['packages/backend/src/config.ts'],
     }),
 
     defineEnv({
@@ -807,9 +802,12 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Developer Discord user ID used for privileged bot actions.',
+            'Developer Discord user ID used for privileged bot actions and the bounded voice-call time override.',
         defaultValue: noDefault(),
-        usedBy: ['packages/discord-bot/src/config.ts'],
+        usedBy: [
+            'packages/backend/src/config.ts',
+            'packages/discord-bot/src/config.ts',
+        ],
     }),
 
     defineEnv({
@@ -1878,36 +1876,33 @@ export const envEntries = [
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'REALTIME_DEFAULT_MODEL',
+        key: 'VOICE_DEFAULT_MODE',
         owner: 'shared',
         stage: 'runtime',
-        section: 'openai',
+        section: 'voice',
         required: false,
         secret: false,
         kind: 'enum',
-        description: 'Default model used by realtime voice sessions.',
-        defaultValue: literal('gpt-realtime-mini'),
-        allowedValues: supportedOpenAIRealtimeModels,
+        description: 'Default mode for Discord voice calls.',
+        defaultValue: literal('standard'),
+        allowedValues: ['standard', 'live'],
         usedBy: [
             'packages/backend/src/config.ts',
             'packages/discord-bot/src/config.ts',
         ],
     }),
     defineEnv({
-        key: 'REALTIME_DEFAULT_VOICE',
-        owner: 'shared',
+        key: 'VOICE_MAX_ANSWER_TOKENS',
+        owner: 'backend',
         stage: 'runtime',
-        section: 'openai',
+        section: 'voice',
         required: false,
         secret: false,
-        kind: 'enum',
-        description: 'Default voice used by realtime voice sessions.',
-        defaultValue: literal('echo'),
-        allowedValues: supportedOpenAITtsVoices,
-        usedBy: [
-            'packages/backend/src/config.ts',
-            'packages/discord-bot/src/config.ts',
-        ],
+        kind: 'integer',
+        description:
+            'Maximum estimated tokens in a delivered Voice answer. This is a ceiling, not a target.',
+        defaultValue: literal(160),
+        usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
         key: 'REALTIME_TURN_DETECTION',

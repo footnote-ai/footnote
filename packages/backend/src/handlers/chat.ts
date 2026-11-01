@@ -18,6 +18,7 @@ import type { CreateChatServiceOptions } from '../services/chatService.js';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import { runtimeConfig } from '../config.js';
 import { createChatOrchestrator } from '../services/chatOrchestrator.js';
+import type { RealtimeWorkflowRunner } from '../services/realtimeConversationState.js';
 import { ConversationContextAssemblyError } from '../services/conversationContextService.js';
 import type { IncidentAlertRouter } from '../services/incidentAlerts.js';
 import type { WeatherForecastTool } from '../services/contextIntegrations/weather/index.js';
@@ -53,6 +54,11 @@ type BuildResponseMetadata = (
     runtimeContext: ResponseMetadataRuntimeContext
 ) => ResponseMetadata;
 
+type SuccessfulChatAuth = Extract<
+    ReturnType<typeof resolveChatAuth>,
+    { success: true }
+>['data'];
+
 type ChatHandlerDeps = {
     generationRuntime: GenerationRuntime | null;
     alertRouter?: IncidentAlertRouter;
@@ -74,6 +80,12 @@ type ChatHandlerDeps = {
               >)
         | null;
     accountStore?: AccountStore | null;
+};
+
+export type ChatRequestHandler = {
+    (req: IncomingMessage, res: ServerResponse): Promise<void>;
+    runRealtimeConversation:
+        RealtimeWorkflowRunner['runRealtimeConversation'] | null;
 };
 
 // The handler keeps transport concerns here and pushes business logic into helpers/services.
@@ -171,7 +183,7 @@ const createChatHandler = ({
     executionContractTrustGraph,
     accountAuthService = null,
     accountStore = null,
-}: ChatHandlerDeps) => {
+}: ChatHandlerDeps): ChatRequestHandler => {
     const chatOrchestrator = generationRuntime
         ? createChatOrchestrator({
               generationRuntime,
@@ -194,13 +206,177 @@ const createChatHandler = ({
         serviceRateLimiter,
     });
 
+    const handleRequestMethod = (
+        req: IncomingMessage,
+        res: ServerResponse
+    ): boolean => {
+        // Apply CORS before any early return so browser failures retain the allowed origin.
+        setCorsHeaders(res, req);
+        if (req.method === 'OPTIONS') {
+            // Only answer preflight when the browser supplied the required fields.
+            const hasOrigin =
+                typeof req.headers.origin === 'string' &&
+                req.headers.origin.trim().length > 0;
+            const requestedMethod =
+                req.headers['access-control-request-method'];
+            const hasRequestedMethod =
+                typeof requestedMethod === 'string' &&
+                requestedMethod.trim().length > 0;
+            if (!hasOrigin || !hasRequestedMethod) {
+                sendJson(res, 400, { error: 'Invalid CORS preflight' });
+                logRequest(req, res, 'chat preflight-invalid');
+                return false;
+            }
+            res.statusCode = 204;
+            res.end();
+            logRequest(req, res, 'chat options-preflight');
+            return false;
+        }
+        if (req.method !== 'POST') {
+            sendJson(res, 405, { error: 'Method not allowed' });
+            logRequest(req, res, 'chat method-not-allowed');
+            return false;
+        }
+        return true;
+    };
+
+    const authenticateRequest = async (
+        req: IncomingMessage,
+        res: ServerResponse,
+        identity: ReturnType<typeof getRequestIdentity>
+    ): Promise<SuccessfulChatAuth | null> => {
+        const authResult = resolveChatAuth(req);
+        if (!authResult.success) {
+            sendJson(
+                res,
+                authResult.error.statusCode,
+                authResult.error.payload,
+                authResult.error.extraHeaders
+            );
+            logRequest(req, res, authResult.error.logLabel);
+            return null;
+        }
+
+        // Trusted services and public callers use separate rate-limit buckets.
+        const rateLimitResult = rateLimitController.checkRateLimit(
+            authResult.data.serviceAuth,
+            identity
+        );
+        if (!rateLimitResult.success) {
+            sendJson(
+                res,
+                rateLimitResult.error.statusCode,
+                rateLimitResult.error.payload,
+                rateLimitResult.error.extraHeaders
+            );
+            logRequest(req, res, rateLimitResult.error.logLabel);
+            return null;
+        }
+
+        if (!authResult.data.skipCaptcha) {
+            // Trusted services skip CAPTCHA; public callers must satisfy Turnstile.
+            logger.debug(
+                `Turnstile token extraction: source=${authResult.data.tokenSource}, length=${authResult.data.turnstileToken?.length || 0}`
+            );
+            const captchaResult = await verifyTurnstileCaptcha({
+                clientIp: identity.clientIp,
+                requestHost:
+                    typeof req.headers.host === 'string'
+                        ? req.headers.host
+                        : undefined,
+                requestOrigin:
+                    typeof req.headers.origin === 'string'
+                        ? req.headers.origin
+                        : undefined,
+                turnstileToken: authResult.data.turnstileToken,
+                tokenSource: authResult.data.tokenSource,
+            });
+            if (!captchaResult.success) {
+                sendJson(
+                    res,
+                    captchaResult.error.statusCode,
+                    captchaResult.error.payload,
+                    captchaResult.error.extraHeaders
+                );
+                logRequest(req, res, captchaResult.error.logLabel);
+                return null;
+            }
+        }
+
+        logSuccessfulAuthStep(req, res, logRequest, authResult.data);
+        return authResult.data;
+    };
+
+    const resolveMemoryContext = (
+        req: IncomingMessage,
+        chatRequest: PostChatRequest,
+        authContext: SuccessfulChatAuth
+    ): AdvisoryUserMemoryContext => {
+        let memoryContext: AdvisoryUserMemoryContext;
+        try {
+            memoryContext = resolveAdvisoryUserMemories({
+                surface: chatRequest.surface,
+                session:
+                    chatRequest.surface === 'web' && accountAuthService !== null
+                        ? readAccountSession(req, accountAuthService)
+                        : null,
+                trustedDiscordUserId:
+                    chatRequest.surface === 'discord' &&
+                    authContext.serviceAuth.isTrustedService
+                        ? chatRequest.surfaceContext?.userId
+                        : undefined,
+                accountAuthService,
+                accountStore,
+            });
+        } catch {
+            // User memory is advisory and cannot block ordinary chat.
+            memoryContext = { memories: [], status: 'failed' };
+        }
+        if (memoryContext.status === 'unavailable') {
+            logger.warn('Chat user memory retrieval unavailable.');
+        } else if (memoryContext.status === 'failed') {
+            logger.error('Chat user memory resolution failed.');
+        } else if (memoryContext.status === 'corrupt') {
+            logger.warn('Chat user memory retrieval skipped corrupt records.');
+        }
+        return memoryContext;
+    };
+
+    const handleGenerationError = (
+        generationError: unknown,
+        req: IncomingMessage,
+        res: ServerResponse
+    ): void => {
+        const errorMessage =
+            generationError instanceof Error
+                ? generationError.message
+                : String(generationError);
+        if (generationError instanceof ConversationContextAssemblyError) {
+            sendJson(res, 400, {
+                error: 'Invalid conversation context',
+                details: generationError.reasonCode,
+            });
+            logRequest(
+                req,
+                res,
+                `chat context-assembly-error ${generationError.reasonCode}`
+            );
+            return;
+        }
+        sendJson(res, 502, { error: 'AI generation failed' });
+        logRequest(req, res, `chat generation-error ${errorMessage}`);
+    };
+
     /**
      * @api.operationId: postChat
      * @api.path: POST /api/chat
      * @api.operationId: optionsChat
      * @api.path: OPTIONS /api/chat
      */
-    return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    const handleChatRequest = async (
+        req: IncomingMessage,
+        res: ServerResponse
+    ): Promise<void> => {
         const requestAbortController = new AbortController();
         if (req.aborted) {
             requestAbortController.abort();
@@ -214,37 +390,7 @@ const createChatHandler = ({
         });
         try {
             requestAbortController.signal.throwIfAborted();
-            // Apply CORS before any early return so browsers get consistent headers on failures too.
-            setCorsHeaders(res, req);
-
-            if (req.method === 'OPTIONS') {
-                // Only answer preflight when the browser supplied the fields a real preflight should have.
-                const hasOrigin =
-                    typeof req.headers.origin === 'string' &&
-                    req.headers.origin.trim().length > 0;
-                const requestedMethod =
-                    req.headers['access-control-request-method'];
-                const hasRequestedMethod =
-                    typeof requestedMethod === 'string' &&
-                    requestedMethod.trim().length > 0;
-
-                if (!hasOrigin || !hasRequestedMethod) {
-                    sendJson(res, 400, { error: 'Invalid CORS preflight' });
-                    logRequest(req, res, 'chat preflight-invalid');
-                    return;
-                }
-
-                res.statusCode = 204;
-                res.end();
-                logRequest(req, res, 'chat options-preflight');
-                return;
-            }
-
-            if (req.method !== 'POST') {
-                sendJson(res, 405, { error: 'Method not allowed' });
-                logRequest(req, res, 'chat method-not-allowed');
-                return;
-            }
+            if (!handleRequestMethod(req, res)) return;
 
             // Parse and validate the body before we do any expensive auth or model work.
             const parsedRequestResult = await parseChatRequest(
@@ -274,67 +420,8 @@ const createChatHandler = ({
                 runtimeConfig.server.trustProxy
             );
 
-            // Auth decides whether this caller is a trusted service or a public browser/API caller.
-            const authResult = resolveChatAuth(req);
-            if (!authResult.success) {
-                sendJson(
-                    res,
-                    authResult.error.statusCode,
-                    authResult.error.payload,
-                    authResult.error.extraHeaders
-                );
-                logRequest(req, res, authResult.error.logLabel);
-                return;
-            }
-
-            // Rate limiting happens after auth so trusted services and public users land in different buckets.
-            const rateLimitResult = rateLimitController.checkRateLimit(
-                authResult.data.serviceAuth,
-                identity
-            );
-            if (!rateLimitResult.success) {
-                sendJson(
-                    res,
-                    rateLimitResult.error.statusCode,
-                    rateLimitResult.error.payload,
-                    rateLimitResult.error.extraHeaders
-                );
-                logRequest(req, res, rateLimitResult.error.logLabel);
-                return;
-            }
-
-            if (!authResult.data.skipCaptcha) {
-                // Trusted services skip this block. Public callers must satisfy Turnstile.
-                logger.debug(
-                    `Turnstile token extraction: source=${authResult.data.tokenSource}, length=${authResult.data.turnstileToken?.length || 0}`
-                );
-
-                const captchaResult = await verifyTurnstileCaptcha({
-                    clientIp: identity.clientIp,
-                    requestHost:
-                        typeof req.headers.host === 'string'
-                            ? req.headers.host
-                            : undefined,
-                    requestOrigin:
-                        typeof req.headers.origin === 'string'
-                            ? req.headers.origin
-                            : undefined,
-                    turnstileToken: authResult.data.turnstileToken,
-                    tokenSource: authResult.data.tokenSource,
-                });
-                if (!captchaResult.success) {
-                    sendJson(
-                        res,
-                        captchaResult.error.statusCode,
-                        captchaResult.error.payload,
-                        captchaResult.error.extraHeaders
-                    );
-                    logRequest(req, res, captchaResult.error.logLabel);
-                    return;
-                }
-            }
-
-            logSuccessfulAuthStep(req, res, logRequest, authResult.data);
+            const authContext = await authenticateRequest(req, res, identity);
+            if (!authContext) return;
 
             if (!chatOrchestrator) {
                 sendJson(
@@ -352,47 +439,18 @@ const createChatHandler = ({
             // the formatting boundary. They never select persona or policy.
             const chatRequest: PostChatRequest =
                 parsedRequestResult.data.surface === 'discord' &&
-                authResult.data.serviceAuth.isTrustedService
+                authContext.serviceAuth.isTrustedService
                     ? parsedRequestResult.data
                     : {
                           ...parsedRequestResult.data,
                           assistantIdentity: undefined,
                       };
 
-            let memoryContext: AdvisoryUserMemoryContext;
-            try {
-                memoryContext = resolveAdvisoryUserMemories({
-                    surface: chatRequest.surface,
-                    session:
-                        chatRequest.surface === 'web' &&
-                        accountAuthService !== null
-                            ? readAccountSession(req, accountAuthService)
-                            : null,
-                    trustedDiscordUserId:
-                        chatRequest.surface === 'discord' &&
-                        authResult.data.serviceAuth.isTrustedService
-                            ? chatRequest.surfaceContext?.userId
-                            : undefined,
-                    accountAuthService,
-                    accountStore,
-                });
-            } catch {
-                // Optional account context must not block ordinary chat, and
-                // diagnostic logs never include a session, account, or memory value.
-                memoryContext = {
-                    memories: [],
-                    status: 'failed',
-                };
-            }
-            if (memoryContext.status === 'unavailable') {
-                logger.warn('Chat user memory retrieval unavailable.');
-            } else if (memoryContext.status === 'failed') {
-                logger.error('Chat user memory resolution failed.');
-            } else if (memoryContext.status === 'corrupt') {
-                logger.warn(
-                    'Chat user memory retrieval skipped corrupt records.'
-                );
-            }
+            const memoryContext = resolveMemoryContext(
+                req,
+                chatRequest,
+                authContext
+            );
 
             // From here on, the request is fully normalized and can delegate to the shared workflow.
             const chatResponse = await chatOrchestrator.runChat(chatRequest, {
@@ -414,29 +472,14 @@ const createChatHandler = ({
             if (res.destroyed || requestAbortController.signal.aborted) {
                 return;
             }
-            const errorMessage =
-                generationError instanceof Error
-                    ? generationError.message
-                    : String(generationError);
-            if (generationError instanceof ConversationContextAssemblyError) {
-                sendJson(res, 400, {
-                    error: 'Invalid conversation context',
-                    details: generationError.reasonCode,
-                });
-                logRequest(
-                    req,
-                    res,
-                    `chat context-assembly-error ${generationError.reasonCode}`
-                );
-                return;
-            }
-
-            sendJson(res, 502, {
-                error: 'AI generation failed',
-            });
-            logRequest(req, res, `chat generation-error ${errorMessage}`);
+            handleGenerationError(generationError, req, res);
         }
     };
+
+    return Object.assign(handleChatRequest, {
+        runRealtimeConversation:
+            chatOrchestrator?.runRealtimeConversation ?? null,
+    }) as ChatRequestHandler;
 };
 
 export { createChatHandler };

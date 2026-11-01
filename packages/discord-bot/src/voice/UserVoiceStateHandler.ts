@@ -42,6 +42,18 @@ export class UserVoiceStateHandler {
             `- New channel: ${newState.channelId} (${newState.channel?.name})`
         );
 
+        if (
+            this.initiatingUsers.get(guildId) === member?.id &&
+            (newState.selfMute ||
+                newState.serverMute ||
+                newState.selfDeaf ||
+                newState.serverDeaf)
+        ) {
+            const connection = getVoiceConnection(guildId);
+            if (connection) await cleanupVoiceConnection(connection, client);
+            return;
+        }
+
         // Get the bot's voice channel
         const botVoiceChannel = newState.guild.members.me?.voice.channel;
         if (!botVoiceChannel) {
@@ -98,6 +110,23 @@ export class UserVoiceStateHandler {
             return;
         }
 
+        const initiatingUserId = this.initiatingUsers.get(guildId);
+        const humanCount = botVoiceChannel.members.filter(
+            (member) => !member.user.bot
+        ).size;
+        if (
+            !initiatingUserId ||
+            user.id !== initiatingUserId ||
+            humanCount !== 1
+        ) {
+            logger.warn(
+                'Voice call ended because the channel no longer has only its consenting caller.'
+            );
+            const connection = getVoiceConnection(guildId);
+            if (connection) await cleanupVoiceConnection(connection, client);
+            return;
+        }
+
         logger.info(
             `[handleUserVoiceChange] User ${user.tag} (${user.id}) joined voice channel ${botVoiceChannel.name}`
         );
@@ -118,9 +147,8 @@ export class UserVoiceStateHandler {
             return;
         }
 
-        // Start the conversation if this is the initiating user
-        const initiatingUserId = this.initiatingUsers.get(guildId);
-        if (user && initiatingUserId === user.id) {
+        // Start the conversation only after the consenting caller joins alone.
+        if (initiatingUserId === user?.id) {
             try {
                 await startConversationCallback(guildId);
                 logger.info(
@@ -150,6 +178,12 @@ export class UserVoiceStateHandler {
 
         if (user) {
             this.sessionManager.removeParticipant(guildId, user.id);
+        }
+
+        if (this.initiatingUsers.get(guildId) === user?.id) {
+            const connection = getVoiceConnection(guildId);
+            if (connection) await cleanupVoiceConnection(connection, client);
+            return;
         }
 
         // If the bot is alone in the voice channel, clean up

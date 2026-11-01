@@ -201,6 +201,9 @@ export const InternalVoiceRealtimeClientEventSchema = z.discriminatedUnion(
             .object({
                 type: z.literal('session.start'),
                 context: InternalVoiceSessionContextSchema,
+                mode: z.enum(['standard', 'live']).optional(),
+                initiatorId: z.string().min(1).max(128).optional(),
+                requestExtendedDuration: z.boolean().optional(),
                 options: InternalVoiceRealtimeOptionsSchema.optional(),
             })
             .strict(),
@@ -215,7 +218,13 @@ export const InternalVoiceRealtimeClientEventSchema = z.discriminatedUnion(
         z
             .object({
                 type: z.literal('input_audio.append'),
-                audioBase64: z.string().min(1),
+                audioBase64: z
+                    .string()
+                    .min(4)
+                    .max(256 * 1024)
+                    .regex(
+                        /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+                    ),
                 speakerLabel: z.string().min(1).max(128),
                 speakerId: z.string().min(1).optional(),
             })
@@ -223,6 +232,18 @@ export const InternalVoiceRealtimeClientEventSchema = z.discriminatedUnion(
         z.object({ type: z.literal('input_audio.commit') }).strict(),
         z.object({ type: z.literal('input_audio.clear') }).strict(),
         z.object({ type: z.literal('response.create') }).strict(),
+        z
+            .object({
+                type: z.literal('delivery.playback'),
+                deliveryId: z.string().min(1).max(128),
+                event: z.enum([
+                    'started',
+                    'completed',
+                    'interrupted',
+                    'failed',
+                ]),
+            })
+            .strict(),
         z.object({ type: z.literal('session.close') }).strict(),
     ]
 );
@@ -233,6 +254,7 @@ export const InternalVoiceRealtimeServerEventSchema = z.discriminatedUnion(
         z
             .object({
                 type: z.literal('session.ready'),
+                mode: z.enum(['standard', 'live']).optional(),
                 speechSelection: SpeechSelectionMetadataSchema.optional(),
             })
             .strict(),
@@ -253,6 +275,7 @@ export const InternalVoiceRealtimeServerEventSchema = z.discriminatedUnion(
             .object({
                 type: z.literal('output_audio.delta'),
                 audioBase64: z.string().min(1),
+                deliveryId: z.string().min(1).max(128).optional(),
             })
             .strict(),
         z

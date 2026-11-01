@@ -364,22 +364,30 @@ test('only the selected, assessed final answer is returned for voice staging', a
     runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
     let calls = 0;
     let stored: ResponseMetadata | undefined;
+    const generationInputs: string[] = [];
     try {
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'synthetic',
-                generate: async (request) => ({
-                    model: request.model,
-                    text:
-                        [
-                            JSON.stringify(answerPlan()),
-                            'The reviewed answer.',
-                            JSON.stringify({
-                                reviewDecision: 'finalize',
-                                reviewReason: 'Sufficient evidence.',
-                            }),
-                        ][calls++] ?? '',
-                }),
+                generate: async (request) => {
+                    generationInputs.push(
+                        request.messages
+                            .map((message) => message.content)
+                            .join('\n')
+                    );
+                    return {
+                        model: request.model,
+                        text:
+                            [
+                                JSON.stringify(answerPlan()),
+                                'The reviewed answer.',
+                                JSON.stringify({
+                                    reviewDecision: 'finalize',
+                                    reviewReason: 'Sufficient evidence.',
+                                }),
+                            ][calls++] ?? '',
+                    };
+                },
             },
             storeTrace: async (metadata, candidates, publication, debug) => {
                 stored = metadata;
@@ -398,6 +406,62 @@ test('only the selected, assessed final answer is returned for voice staging', a
         assert.ok(result.finalResponse?.disposition === 'approved');
         assert.equal(result.finalResponse?.text, 'The reviewed answer.');
         assert.equal(result.finalResponse?.responseId, stored?.responseId);
+        assert.doesNotMatch(JSON.stringify(stored), /The reviewed answer/);
+        assert.equal(calls, 3);
+        assert.match(
+            generationInputs.join('\n'),
+            /maximum of approximately 160 estimated tokens/
+        );
+        assert.match(
+            generationInputs.join('\n'),
+            /without automatically raising Tightness or forcing brevity/
+        );
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+    }
+});
+
+test('an over-limit answer remains unapproved after the normal Workflow assessment', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    let calls = 0;
+    let stored: ResponseMetadata | undefined;
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: {
+                kind: 'synthetic',
+                generate: async (request) => ({
+                    model: request.model,
+                    text:
+                        [
+                            JSON.stringify(answerPlan()),
+                            'The reviewed answer.',
+                            JSON.stringify({
+                                reviewDecision: 'finalize',
+                                reviewReason: 'Sufficient evidence.',
+                            }),
+                        ][calls++] ?? '',
+                }),
+            },
+            storeTrace: async (metadata) => {
+                stored = metadata;
+            },
+            buildResponseMetadata,
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+        });
+        const result = await orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: () => undefined,
+            voiceMode: 'live',
+            maxAnswerTokens: 1,
+        });
+        assert.equal(result.status, 'completed');
+        assert.equal(result.finalResponse?.disposition, 'answer_too_long');
+        assert.equal(calls, 3);
         assert.doesNotMatch(JSON.stringify(stored), /The reviewed answer/);
     } finally {
         runtimeConfig.chatWorkflow.modeId = previousMode;

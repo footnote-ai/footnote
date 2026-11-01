@@ -31,6 +31,7 @@ export class AudioPlaybackHandler {
     private pipelineDisposing: Set<string> = new Set();
     private pipelineErrorHandlers: Map<string, (error: Error) => void> =
         new Map();
+    private approvedPlaybackStops = new Map<string, () => void>();
 
     public async playAudioToChannel(
         connection: VoiceConnection,
@@ -54,6 +55,94 @@ export class AudioPlaybackHandler {
         }
 
         await this.processAudioQueue(connection);
+    }
+
+    public async playApprovedAudioToChannel(
+        connection: VoiceConnection,
+        audioData: Buffer,
+        report: (
+            event: 'started' | 'completed' | 'interrupted' | 'failed'
+        ) => void
+    ): Promise<void> {
+        const guildId = connection.joinConfig.guildId;
+        this.stopPlayback(guildId);
+        const pcm = upsampleToDiscord(audioData);
+        if (!pcm.length) {
+            report('failed');
+            return;
+        }
+
+        const pipeline = new GuildAudioPipeline();
+        const player = pipeline.getPlayer();
+        this.pipelines.set(guildId, pipeline);
+        const opusStream = pipeline
+            .getPCMStream()
+            .pipe(pipeline.getOpusEncoder());
+        const resource = createAudioResource(opusStream, {
+            inputType: StreamType.Opus,
+        });
+        let started = false;
+        let outputEnded = false;
+        let playerIdle = false;
+        let terminal = false;
+        const reportStatus = (
+            event: 'started' | 'completed' | 'interrupted' | 'failed'
+        ): void => {
+            try {
+                report(event);
+            } catch (error) {
+                logger.warn(
+                    '[AudioPlayback] Playback status report failed:',
+                    error
+                );
+            }
+        };
+        const finish = (
+            event: 'completed' | 'interrupted' | 'failed'
+        ): void => {
+            if (terminal) return;
+            terminal = true;
+            this.approvedPlaybackStops.delete(guildId);
+            reportStatus(event);
+            this.cleanupPipeline(guildId);
+        };
+        const onIdle = (): void => {
+            playerIdle = true;
+            if (outputEnded) finish(started ? 'completed' : 'failed');
+        };
+        const stop = (): void => finish('interrupted');
+        this.approvedPlaybackStops.set(guildId, stop);
+        player.on(AudioPlayerStatus.Playing, () => {
+            if (started || terminal) return;
+            started = true;
+            reportStatus('started');
+        });
+        player.on(AudioPlayerStatus.Idle, onIdle);
+        player.once('error', () => finish('failed'));
+        pipeline.getOpusEncoder().once('error', () => finish('failed'));
+        try {
+            if (connection.state.status === 'destroyed')
+                throw new Error('Voice connection is destroyed');
+            connection.subscribe(player);
+            player.play(resource);
+            pipeline.markResourceCreated();
+            await pipeline.writePCM(pcm);
+            await pipeline.finish();
+            outputEnded = true;
+            if (playerIdle) onIdle();
+            if (!terminal)
+                await new Promise<void>((resolve) => {
+                    player.once(AudioPlayerStatus.Idle, () => resolve());
+                    player.once('error', () => resolve());
+                    this.approvedPlaybackStops.set(guildId, () => {
+                        stop();
+                        resolve();
+                    });
+                });
+            if (!terminal) finish(started ? 'completed' : 'failed');
+        } catch {
+            finish('failed');
+        }
     }
 
     private ensurePipeline(connection: VoiceConnection): GuildAudioPipeline {
@@ -213,11 +302,13 @@ export class AudioPlaybackHandler {
 
     public stopPlayback(guildId?: string): void {
         if (guildId) {
+            this.approvedPlaybackStops.get(guildId)?.();
             this.cleanupPipeline(guildId);
             this.audioQueues.delete(guildId);
             this.isProcessingQueue.delete(guildId);
         } else {
             for (const gId of this.pipelines.keys()) {
+                this.approvedPlaybackStops.get(gId)?.();
                 this.cleanupPipeline(gId);
                 this.audioQueues.delete(gId);
                 this.isProcessingQueue.delete(gId);
@@ -309,6 +400,7 @@ export class AudioPlaybackHandler {
     }
 
     public cleanupGuild(guildId: string): void {
+        this.approvedPlaybackStops.get(guildId)?.();
         this.cleanupPipeline(guildId);
         this.audioQueues.delete(guildId);
         this.isProcessingQueue.delete(guildId);
@@ -316,6 +408,7 @@ export class AudioPlaybackHandler {
 
     public cleanupAll(): void {
         for (const guildId of this.pipelines.keys()) {
+            this.approvedPlaybackStops.get(guildId)?.();
             this.cleanupPipeline(guildId);
         }
         this.audioQueues.clear();
@@ -324,5 +417,6 @@ export class AudioPlaybackHandler {
         this.pipelineCleanupTimers.clear();
         this.pipelineErrorHandlers.clear();
         this.pipelineDisposing.clear();
+        this.approvedPlaybackStops.clear();
     }
 }

@@ -94,3 +94,26 @@ test('RealtimeSession emits connected when the backend reports session.ready', (
     assert.equal(connected, true);
     session.removeAllListeners();
 });
+
+test('RealtimeSession forwards provider closure so Discord can stop playback and leave voice', () => {
+    const session = new RealtimeSession() as unknown as RealtimeSessionProbe;
+    let closedReason = '';
+    let errorReason = '';
+    session.on('session.closed', (event: unknown) => {
+        closedReason = (event as { reason: string }).reason;
+    });
+    session.on('error', (error: unknown) => {
+        errorReason = error instanceof Error ? error.message : String(error);
+    });
+
+    session.handleBackendEvent(
+        JSON.stringify({
+            type: 'session.closed',
+            reason: 'call_limit_exceeded',
+        })
+    );
+
+    assert.equal(closedReason, 'call_limit_exceeded');
+    assert.equal(errorReason, 'call_limit_exceeded');
+    session.removeAllListeners();
+});

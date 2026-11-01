@@ -86,6 +86,28 @@ test('workflow allowance overrides use canonical YAML paths', () => {
     }
 });
 
+test('voice default mode is editable in setup YAML and defaults to Standard', () => {
+    assert.equal(envDefaultValues.VOICE_DEFAULT_MODE, 'standard');
+    assert.equal(envConfigSourceByKey.VOICE_DEFAULT_MODE, 'settings_yaml');
+    assert.deepEqual(
+        settingsSpecEntries.find(
+            (entry) => entry.envKey === 'VOICE_DEFAULT_MODE'
+        )?.path,
+        ['voice', 'default-mode']
+    );
+});
+
+test('Voice answer token ceiling is editable in setup YAML and defaults to 160', () => {
+    assert.equal(envDefaultValues.VOICE_MAX_ANSWER_TOKENS, 160);
+    assert.equal(envConfigSourceByKey.VOICE_MAX_ANSWER_TOKENS, 'settings_yaml');
+    assert.deepEqual(
+        settingsSpecEntries.find(
+            (entry) => entry.envKey === 'VOICE_MAX_ANSWER_TOKENS'
+        )?.path,
+        ['voice', 'max-answer-tokens']
+    );
+});
+
 test('retired presentation validator settings are absent from the config spec', () => {
     assert.equal(
         Object.prototype.hasOwnProperty.call(

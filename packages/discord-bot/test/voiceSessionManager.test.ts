@@ -1,5 +1,5 @@
 /**
- * @description: Validates that voice session orchestration does not manually commit turns when server VAD is enabled.
+ * @description: Validates that voice session orchestration commits one caller turn without clearing audio or forcing a response.
  * @footnote-scope: test
  * @footnote-module: VoiceSessionManagerTests
  * @footnote-risk: medium - Missing tests could hide regressions that prevent realtime responses.
@@ -31,7 +31,7 @@ class StubRealtimeSession {
     }
 }
 
-test('VoiceSessionManager does not manually clear or commit audio turns', async () => {
+test('VoiceSessionManager commits caller turns without clearing audio or forcing a response', async () => {
     const manager = new VoiceSessionManager();
     const audioCaptureHandler = new AudioCaptureHandler();
     const realtimeSession = new StubRealtimeSession();
@@ -65,6 +65,6 @@ test('VoiceSessionManager does not manually clear or commit audio turns', async 
     await session.audioPipeline;
 
     assert.equal(realtimeSession.clearCalls, 0);
-    assert.equal(realtimeSession.commitCalls, 0);
+    assert.equal(realtimeSession.commitCalls, 1);
     assert.equal(realtimeSession.responseCalls, 0);
 });

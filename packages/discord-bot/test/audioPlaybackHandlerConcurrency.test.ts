@@ -13,6 +13,23 @@ import { AudioPlayerStatus, VoiceConnection } from '@discordjs/voice';
 
 import { AudioPlaybackHandler } from '../src/voice/AudioPlaybackHandler.js';
 
+test('approved playback reports empty audio as failed without claiming it started', async () => {
+    const handler = new AudioPlaybackHandler();
+    const events: string[] = [];
+    const connection = {
+        joinConfig: { guildId: 'guild-id' },
+        state: { status: 'ready' },
+    } as unknown as VoiceConnection;
+
+    await handler.playApprovedAudioToChannel(
+        connection,
+        Buffer.alloc(0),
+        (event) => events.push(event)
+    );
+
+    assert.deepEqual(events, ['failed']);
+});
+
 class MockAudioPlayer extends EventEmitter {
     public state = { status: AudioPlayerStatus.Idle };
 

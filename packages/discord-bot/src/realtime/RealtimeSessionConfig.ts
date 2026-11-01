@@ -12,7 +12,13 @@ export class RealtimeSessionConfig {
     private options: InternalVoiceRealtimeOptions;
 
     constructor(options: RealtimeSessionOptions = {}) {
-        const { context: _context, ...runtimeOptions } = options;
+        const {
+            context: _context,
+            mode: _mode,
+            initiatorId: _initiatorId,
+            requestExtendedDuration: _requestExtendedDuration,
+            ...runtimeOptions
+        } = options;
         this.options = {
             ...runtimeOptions,
         };

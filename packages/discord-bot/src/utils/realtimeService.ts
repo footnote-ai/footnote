@@ -46,6 +46,9 @@ const estimateBase64Bytes = (value: string): number => {
  */
 export interface RealtimeSessionOptions {
     context?: InternalVoiceSessionContext;
+    mode?: 'standard' | 'live';
+    initiatorId?: string;
+    requestExtendedDuration?: boolean;
     model?: InternalVoiceRealtimeOptions['model'];
     voice?: InternalVoiceRealtimeOptions['voice'];
     temperature?: number;
@@ -88,6 +91,7 @@ export interface RealtimeResponseTextDeltaEvent {
 export interface RealtimeResponseAudioDeltaEvent {
     type: 'response.output_audio.delta';
     delta: string; // base64 encoded audio data
+    deliveryId?: string;
 }
 
 /**
@@ -121,6 +125,9 @@ export class RealtimeSession extends EventEmitter {
     private eventHandler: RealtimeEventHandler;
     private sessionConfig: RealtimeSessionConfig;
     private sessionContext: InternalVoiceSessionContext;
+    public mode: 'standard' | 'live' | undefined;
+    private readonly initiatorId?: string;
+    private readonly requestExtendedDuration: boolean;
     private sessionReady = false;
     private sessionReadyPromise: Promise<void> | null = null;
     private resolveSessionReady: (() => void) | null = null;
@@ -134,6 +141,9 @@ export class RealtimeSession extends EventEmitter {
         this.eventHandler = new RealtimeEventHandler();
         this.sessionConfig = new RealtimeSessionConfig(options);
         this.sessionContext = options.context ?? { participants: [] };
+        this.mode = options.mode;
+        this.initiatorId = options.initiatorId;
+        this.requestExtendedDuration = options.requestExtendedDuration ?? false;
 
         // The event handler translates backend-owned protocol events into the
         // local event names that the older Discord voice flow already expects.
@@ -143,9 +153,12 @@ export class RealtimeSession extends EventEmitter {
 
         // Audio and text also get their own convenience events so playback and
         // logging code can subscribe without parsing the raw event payload.
-        this.eventHandler.on('audio', (audioData: Buffer) => {
-            this.emit('audio', audioData);
-        });
+        this.eventHandler.on(
+            'audio',
+            (audioData: Buffer, deliveryId?: string) => {
+                this.emit('audio', audioData, deliveryId);
+            }
+        );
 
         this.eventHandler.on('text', (text: string) => {
             this.emit('text', text);
@@ -199,6 +212,11 @@ export class RealtimeSession extends EventEmitter {
         this.sendClientEvent({
             type: 'session.start',
             context: this.sessionContext,
+            mode: this.mode,
+            ...(this.initiatorId ? { initiatorId: this.initiatorId } : {}),
+            ...(this.requestExtendedDuration
+                ? { requestExtendedDuration: true }
+                : {}),
             options: this.sessionConfig.getOptions(),
         });
         await this.waitForSessionReady();
@@ -247,6 +265,14 @@ export class RealtimeSession extends EventEmitter {
     public async commitAudio(): Promise<void> {
         await this.waitForSessionReady();
         this.sendClientEvent({ type: 'input_audio.commit' });
+    }
+
+    public reportPlayback(
+        deliveryId: string,
+        event: 'started' | 'completed' | 'interrupted' | 'failed'
+    ): void {
+        if (!this.sessionReady) return;
+        this.sendClientEvent({ type: 'delivery.playback', deliveryId, event });
     }
 
     /**
@@ -443,6 +469,8 @@ export class RealtimeSession extends EventEmitter {
         }
 
         const event = validation.data;
+        if (event.type === 'session.ready' && event.mode)
+            this.mode = event.mode;
         if (event.type === 'session.ready') {
             this.markSessionReady();
             realtimeLogger.info('Backend realtime session ready.');
@@ -471,6 +499,7 @@ export class RealtimeSession extends EventEmitter {
                     new Error(event.reason ?? 'session closed')
                 );
             }
+            this.emit('session.closed', event);
             realtimeLogger.warn('Backend realtime session closed.', {
                 reason: event.reason ?? 'session closed',
                 code: event.code,
@@ -529,6 +558,7 @@ const mapInternalEventToRealtimeEvent = (
             return {
                 type: 'response.output_audio.delta',
                 delta: event.audioBase64,
+                ...(event.deliveryId ? { deliveryId: event.deliveryId } : {}),
             };
         case 'output_text.delta':
             return {
