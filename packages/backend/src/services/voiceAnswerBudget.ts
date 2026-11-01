@@ -53,4 +53,3 @@ export const fitsVoiceAnswerDelivery = (
     (mode !== 'standard' ||
         Array.from(text).length <= STANDARD_TTS_LIMIT_CHARACTERS);
 
-// shortcut: provider-neutral estimate, not exact provider tokenization; revisit if a provider tokenizer is available.
