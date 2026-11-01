@@ -893,6 +893,7 @@ const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
     createInternalVoiceRealtimeHandler({
         openAiLiveVoiceSessionFactory,
         defaultMode: runtimeConfig.voice.defaultMode,
+        maxAnswerTokens: runtimeConfig.voice.maxAnswerTokens,
         openRouterVoiceService,
         workflowRunner: handleChatRequest.runRealtimeConversation
             ? {

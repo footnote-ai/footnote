@@ -1,6 +1,6 @@
 # Realtime conversation with background reasoning
 
-Status: PR #965 implements Standard and Live adapters, Discord mode selection, a bounded call lifecycle and Workflow approval delivery with synthetic provider tests. No paid provider or live Discord call has been verified. Updated 2026-10-31.
+Status: PR #965 implements Standard and Live adapters, Discord mode selection, a bounded call lifecycle, Workflow approval delivery, and a shared answer-length ceiling with synthetic provider tests. No paid provider or live Discord call has been verified. Intelligent condensation is deliberately deferred to [#968](https://github.com/footnote-ai/footnote/issues/968) and is not a prerequisite for #965. Updated 2026-10-31.
 Primary owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
 Conversation continuity and retention remain governed by
 [#559](https://github.com/footnote-ai/footnote/issues/559).
@@ -23,7 +23,7 @@ Backend call state and background Workflow execution have synthetic tests; see
 the [alignment tracker](../status/realtime-voice-alignment.md#synthetic-call-state-foundation)
 and [execution details](#implemented-workflow-admission-and-capacity).
 Answer approval and delivery handoff are also implemented in tests, including
-[playback status tracking](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only).
+[playback status tracking](../architecture/realtime-voice.md#final-response-approval-and-staging).
 Standard sends Discord audio to OpenRouter transcription, runs the existing
 Workflow, and synthesizes only an approved answer. Live opens a backend-owned
 GPT-Live session, associates client delegations with transcript events and call
@@ -313,7 +313,7 @@ express the same permitted messages naturally.
 | Superseded                   | Increment intent revision; invalidate the old delivery and request cancellation. Start replacement only after capacity admission.   | Acknowledge the correction and eventually give only the new answer.                                                                 |
 | Late                         | Recheck revision, deadline, session, audience, and whether the question is still outstanding. Time alone does not decide relevance. | Deliver at the next safe boundary only if still eligible, naming the question. Otherwise discard from voice delivery with a reason. |
 
-The implemented [approval mapping](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only)
+The implemented [approval mapping](../architecture/realtime-voice.md#final-response-approval-and-staging)
 requires the selected final draft and its successful, linked `finalize` assessment,
 including produced draft/review Results and successful canonical completion.
 Missing assessment, failed review, unresolved revise/search requests, selection

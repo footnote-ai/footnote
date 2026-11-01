@@ -1892,6 +1892,19 @@ export const envEntries = [
         ],
     }),
     defineEnv({
+        key: 'VOICE_MAX_ANSWER_TOKENS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'voice',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum estimated tokens in a delivered Voice answer. This is a ceiling, not a target.',
+        defaultValue: literal(160),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
         key: 'REALTIME_TURN_DETECTION',
         owner: 'shared',
         stage: 'runtime',

@@ -169,6 +169,7 @@ const createRealtimeHandlerHarness = async (
         workflowRunner?: RealtimeWorkflowRunner | null;
         developerUserId?: string | null;
         defaultMode?: 'standard' | 'live';
+        maxAnswerTokens?: number;
         openAiLiveVoiceSessionFactory?: OpenAiLiveVoiceSessionFactory | null;
     } = {}
 ): Promise<RealtimeHandlerHarness> => {
@@ -215,6 +216,7 @@ const createRealtimeHandlerHarness = async (
         typeof createInternalVoiceRealtimeHandler
     >[0] = {
         defaultMode: overrides.defaultMode ?? 'live',
+        maxAnswerTokens: overrides.maxAnswerTokens ?? 160,
         openAiLiveVoiceSessionFactory: liveFactory
             ? async (request) => {
                   const created = await liveFactory(request);
@@ -553,6 +555,7 @@ const closeWebSocket = async (ws: WebSocket): Promise<void> =>
 
 test('internal realtime handler rejects websocket upgrades without trusted auth', () => {
     const { handleUpgrade } = createInternalVoiceRealtimeHandler({
+        maxAnswerTokens: 160,
         profile: testProfile,
         traceApiToken: 'trace-token',
         serviceToken: 'service-token',
@@ -573,6 +576,7 @@ test('internal realtime handler rejects websocket upgrades without trusted auth'
 
 test('internal realtime handler returns provider_unavailable when runtime is missing', () => {
     const { handleUpgrade } = createInternalVoiceRealtimeHandler({
+        maxAnswerTokens: 160,
         profile: testProfile,
         traceApiToken: 'trace-token',
         serviceToken: null,
@@ -725,6 +729,8 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
         },
         workflowRunner: {
             async runRealtimeConversation(snapshot, context) {
+                assert.equal(context.voiceMode, 'standard');
+                assert.equal(context.maxAnswerTokens, 160);
                 context.onRunStarted('workflow-run');
                 snapshots.push(JSON.stringify(snapshot));
                 return {
@@ -788,10 +794,122 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
     }
 });
 
+test('over-limit approved answers never reach Standard TTS or Live commentary', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const answer = '答'.repeat(100);
+    for (const mode of ['standard', 'live'] as const) {
+        const synthesized: string[] = [];
+        const liveSession = new StubOpenAiLiveVoiceSession();
+        let workflowCalls = 0;
+        const harness = await createRealtimeHandlerHarness({
+            defaultMode: mode,
+            maxAnswerTokens: 4,
+            openAiLiveVoiceSessionFactory: async () => liveSession,
+            openRouterVoiceService:
+                mode === 'standard'
+                    ? {
+                          async transcribe() {
+                              return { text: 'What is the answer?' };
+                          },
+                          async synthesize(text) {
+                              synthesized.push(text);
+                              return { audio: Buffer.from([0, 0]) };
+                          },
+                      }
+                    : undefined,
+            workflowRunner: {
+                async runRealtimeConversation(_snapshot, context) {
+                    workflowCalls += 1;
+                    context.onRunStarted('workflow-run');
+                    return {
+                        responseId: 'response',
+                        runId: 'workflow-run',
+                        status: 'completed',
+                        finalResponse: {
+                            disposition: 'approved',
+                            responseId: 'response',
+                            runId: 'workflow-run',
+                            candidateId: 'candidate',
+                            generationStepId: 'answer',
+                            assessmentStepId: 'review',
+                            text: answer,
+                        },
+                    };
+                },
+            },
+        });
+        let ws: WebSocket | undefined;
+        try {
+            ws = await harness.connect();
+            ws.send(
+                JSON.stringify({
+                    type: 'session.start',
+                    mode,
+                    initiatorId: 'user-1',
+                    context: {
+                        participants: [
+                            {
+                                id: 'user-1',
+                                displayName: 'Alice',
+                                isBot: false,
+                            },
+                        ],
+                    },
+                })
+            );
+            assert.equal((await waitForJsonMessage(ws)).type, 'session.ready');
+            const failurePromise = waitForJsonMessage(ws, 3_000);
+            ws.send(
+                JSON.stringify({
+                    type: 'input_audio.append',
+                    audioBase64: inputAudio.toString('base64'),
+                    speakerLabel: 'Alice',
+                    speakerId: 'user-1',
+                })
+            );
+            ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+
+            if (mode === 'live') {
+                const session = await waitForLiveSession(harness);
+                await new Promise((resolve) => setTimeout(resolve, 600));
+                session.emit({
+                    type: 'session.input_transcript.delta',
+                    event_id: 'transcript-1',
+                    delta: 'What is the answer?',
+                    start_ms: 0,
+                    end_ms: 500,
+                });
+                session.emit({
+                    type: 'session.delegation.created',
+                    event_id: 'delegation-1',
+                    offset_ms: 600,
+                    delegation: {
+                        id: 'delegation-1',
+                        target: 'client',
+                        type: 'delegation',
+                    },
+                });
+                await new Promise((resolve) => setTimeout(resolve, 600));
+                assert.deepEqual(session.commentary, []);
+            }
+
+            const failure = await failurePromise;
+            assert.equal(failure.type, 'error');
+            assert.equal(failure.code, 'answer_too_long');
+            assert.equal(workflowCalls, 1);
+            assert.deepEqual(synthesized, []);
+        } finally {
+            if (ws) await closeWebSocket(ws);
+            await harness.close();
+        }
+    }
+});
+
 test('Live streams only caller audio, delegates the caller transcript, and returns the approved Workflow answer as commentary', async () => {
     const inputAudio = Buffer.from([0, 0, 1, 0]);
     const snapshots: string[] = [];
-    const longReviewedAnswer = 'reviewed answer '.repeat(50);
+    const reviewedAnswer =
+        'The reviewed answer keeps its explanation and source.';
     const stubLiveSession = new StubOpenAiLiveVoiceSession();
     let startRequest: { instructions: string; voice: string } | undefined;
     const harness = await createRealtimeHandlerHarness({
@@ -801,6 +919,8 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
         },
         workflowRunner: {
             async runRealtimeConversation(snapshot, context) {
+                assert.equal(context.voiceMode, 'live');
+                assert.equal(context.maxAnswerTokens, 160);
                 context.onRunStarted('live-workflow-run');
                 snapshots.push(JSON.stringify(snapshot));
                 return {
@@ -814,7 +934,7 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
                         candidateId: 'candidate',
                         generationStepId: 'answer',
                         assessmentStepId: 'review',
-                        text: longReviewedAnswer,
+                        text: reviewedAnswer,
                     },
                 };
             },
@@ -878,7 +998,7 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
         assert.match(snapshots[0] ?? '', /What is the answer\?/);
         assert.deepEqual(stubLiveSession.commentary, [
             {
-                text: longReviewedAnswer,
+                text: reviewedAnswer,
                 delegationId: 'delegation-1',
             },
         ]);

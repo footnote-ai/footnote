@@ -15,6 +15,10 @@ import type {
     RealtimeConversationSnapshot,
     RealtimeWorkflowRunner,
 } from './realtimeConversationState.js';
+import {
+    resolveVoiceAnswerTokenLimit,
+    type VoiceAnswerDeliveryPolicy,
+} from './voiceAnswerBudget.js';
 import type {
     ChatAssistantIdentity,
     PostChatRequest,
@@ -879,6 +883,7 @@ export const createChatOrchestrator = ({
             advisoryUserMemories?: readonly string[];
             signal?: AbortSignal;
             realtimeContext?: RealtimeConversationSnapshot['context'];
+            voiceAnswerTokenLimit?: number;
         }
     ): Promise<PostChatResponse> => {
         context?.signal?.throwIfAborted();
@@ -1623,6 +1628,25 @@ export const createChatOrchestrator = ({
                 input.baseMessagesWithHints.length > 0
                     ? input.baseMessagesWithHints
                     : postPlanAssembly.conversationMessages;
+            const voiceAnswerGuidance =
+                context?.voiceAnswerTokenLimit === undefined
+                    ? []
+                    : [
+                          {
+                              role: 'system' as const,
+                              content: `FOOTNOTE VOICE ANSWER DELIVERY: maximum of approximately ${context.voiceAnswerTokenLimit} estimated tokens. This is a ceiling, not a target. Treat Tightness as efficient use of attention, not a word-count target. Follow the selected TRACE posture naturally without automatically raising Tightness or forcing brevity; keep rationale, attribution, caution, or extent when they matter.`,
+                          },
+                      ];
+            const messagesForGeneration = [
+                ...mergedMessagesWithHints.filter(
+                    (message) =>
+                        message.role !== 'system' ||
+                        !message.content.startsWith(
+                            'FOOTNOTE VOICE ANSWER DELIVERY:'
+                        )
+                ),
+                ...voiceAnswerGuidance,
+            ];
             const configuredTrustGraphTargetIds = new Set(
                 (executionContractTrustGraph?.targets ?? []).map(
                     (target) => target.id
@@ -1667,10 +1691,10 @@ export const createChatOrchestrator = ({
             ];
             return {
                 continuation: 'continue_message' as const,
-                messagesWithHints: mergedMessagesWithHints,
+                messagesWithHints: messagesForGeneration,
                 generationRequest: {
                     ...input.baseGenerationRequest,
-                    messages: mergedMessagesWithHints,
+                    messages: messagesForGeneration,
                     model: plannerApplication.selectedResponseProfile
                         .providerModel,
                     provider:
@@ -2147,6 +2171,12 @@ export const createChatOrchestrator = ({
                 sessionCorrelationId: snapshot.sessionCorrelationId,
                 turnId: snapshot.intent.turnId,
                 onRunStarted: context.onRunStarted,
+                deliveryPolicy: {
+                    mode: context.voiceMode ?? 'standard',
+                    maxAnswerTokens:
+                        context.maxAnswerTokens ??
+                        runtimeConfig.voice.maxAnswerTokens,
+                } satisfies VoiceAnswerDeliveryPolicy,
             };
             return withRealtimeWorkflowScope(voice, async () => {
                 const response = await runChat(
@@ -2166,6 +2196,10 @@ export const createChatOrchestrator = ({
                     {
                         signal: context.signal,
                         realtimeContext: snapshot.context,
+                        voiceAnswerTokenLimit: resolveVoiceAnswerTokenLimit(
+                            voice.deliveryPolicy.mode,
+                            voice.deliveryPolicy.maxAnswerTokens
+                        ),
                     }
                 );
                 if (voice.recorded === undefined)

@@ -77,7 +77,12 @@ export type RealtimeWorkflowResult = {
 export type RealtimeWorkflowRunner = {
     runRealtimeConversation: (
         snapshot: RealtimeConversationSnapshot,
-        context: { signal: AbortSignal; onRunStarted: (runId: string) => void }
+        context: {
+            signal: AbortSignal;
+            onRunStarted: (runId: string) => void;
+            voiceMode?: 'standard' | 'live';
+            maxAnswerTokens?: number;
+        }
     ) => Promise<RealtimeWorkflowResult>;
 };
 

@@ -21,6 +21,10 @@ import type { RealtimeWorkflowResult } from './realtimeConversationState.js';
 import type { ResponseCandidate } from '@footnote/contracts/web';
 import { runtimeConfig } from '../config.js';
 import { toFootnoteModel } from '@footnote/agent-runtime/voltagentRuntime';
+import {
+    fitsVoiceAnswerDelivery,
+    type VoiceAnswerDeliveryPolicy,
+} from './voiceAnswerBudget.js';
 
 export type RealtimeReviewDisposition =
     | 'approved'
@@ -30,7 +34,8 @@ export type RealtimeReviewDisposition =
     | 'search_requested'
     | 'selection_unverified'
     | 'workflow_not_completed'
-    | 'unsupported_response';
+    | 'unsupported_response'
+    | 'answer_too_long';
 
 /** Keep selected-answer evidence private to the backend; only approved answers carry text. */
 export type RealtimeFinalResponse =
@@ -50,6 +55,7 @@ export type RealtimeFinalResponse =
 /** Reuses candidate selection and Result references, without treating fail-open completion as approval. */
 export const assessRealtimeFinalResponse = (
     metadata: ResponseMetadata,
+    deliveryPolicy: VoiceAnswerDeliveryPolicy,
     selection?: {
         message: string;
         candidates?: ResponseCandidate[];
@@ -127,6 +133,14 @@ export const assessRealtimeFinalResponse = (
         workflow.terminationReason !== 'goal_satisfied'
     )
         return { disposition: 'workflow_not_completed' };
+    if (
+        !fitsVoiceAnswerDelivery(
+            selection.message,
+            deliveryPolicy.mode,
+            deliveryPolicy.maxAnswerTokens
+        )
+    )
+        return { disposition: 'answer_too_long' };
     return {
         disposition: 'approved',
         responseId: metadata.responseId,
@@ -142,6 +156,7 @@ export type RealtimeWorkflowScope = {
     sessionCorrelationId: string;
     turnId: string;
     onRunStarted: (runId: string) => void;
+    deliveryPolicy: VoiceAnswerDeliveryPolicy;
     actionRejected?: boolean;
     recorded?: Required<
         Pick<RealtimeWorkflowResult, 'responseId' | 'runId' | 'status'>
@@ -435,7 +450,7 @@ export const projectRealtimeWorkflowMetadata = (
 export const storeRealtimeWorkflowMetadata = async (
     metadata: ResponseMetadata,
     store: (metadata: ResponseMetadata) => Promise<void>,
-    selection?: Parameters<typeof assessRealtimeFinalResponse>[1]
+    selection?: Parameters<typeof assessRealtimeFinalResponse>[2]
 ): Promise<void> => {
     const voice = realtimeWorkflowScope();
     if (voice === undefined)
@@ -452,6 +467,10 @@ export const storeRealtimeWorkflowMetadata = async (
         responseId: projected.responseId,
         runId,
         status,
-        finalResponse: assessRealtimeFinalResponse(metadata, selection),
+        finalResponse: assessRealtimeFinalResponse(
+            metadata,
+            voice.deliveryPolicy,
+            selection
+        ),
     };
 };

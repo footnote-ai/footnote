@@ -9,7 +9,7 @@ At a high level, the Discord bot handles the Discord-specific work: joining the 
 Discord does not connect to OpenAI directly. It connects to Footnote's backend at `/api/internal/voice/realtime`, which opens and manages the provider session.
 
 **Scope:** PR #965 implements Standard and Live voice modes around the existing
-Workflow and synthetic approval state. Standard transcribes through OpenRouter,
+Workflow and backend approval gate. Standard transcribes through OpenRouter,
 then synthesizes only approved text. Live uses a backend-owned GPT-Live session
 and client delegation into the same Workflow; GPT-Live can speak independently
 or paraphrase. The [alignment tracker](../status/realtime-voice-alignment.md)
@@ -94,6 +94,35 @@ calling the same Workflow. Missing or ambiguous transcript evidence fails
 closed. Only a persisted, approved Workflow answer is appended as commentary.
 GPT-Live may also speak without delegation and may paraphrase that commentary;
 Live audio therefore carries no exact-text approval or playback receipt.
+
+### Answer length
+
+The administrator-facing `voice.max-answer-tokens` setting defaults to 160, a
+conservative per-answer ceiling that leaves room for turn-taking in a 60-second
+call. It limits each delivered answer independently of the Workflow's generation
+budget and is not a target. Generation guidance follows the
+selected TRACE posture; it does not raise Tightness or ask every answer to be
+maximally brief. Rationale, attribution, caution and extent remain when they
+matter to the answer.
+
+The backend estimates answer tokens because the available providers do not
+share a tokenizer. The estimate counts ASCII letters and spaces in groups of
+three, counts ASCII punctuation and digits once each, and counts each non-ASCII
+code point twice. It does not split on English spaces and is deliberately
+upper-biased, but it is not an exact provider token count. Live uses the lower of
+the configured ceiling and 400 estimated tokens, leaving 20% below the GPT-Live
+500-token commentary-event maximum. Standard uses the lower of the configured
+ceiling and 1,600 estimated tokens, plus a 3,686-code-point cap below the TTS
+provider's 2,000-token and 4,096-character input limits. These provider limits
+are internal safeguards, not additional settings. ([Live commentary limit](https://developers.openai.com/api/reference/resources/live/sideband-websocket),
+[speech input limits](https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create))
+
+The completed answer is checked before Voice marks it approved for delivery,
+and both provider adapters check again before handoff. Over-limit answers return
+`answer_too_long`; they are not truncated, condensed or sent for speech. The
+conditional Workflow condensation step belongs to
+[#968](https://github.com/footnote-ai/footnote/issues/968), is deliberately
+deferred, and is not a prerequisite for #965.
 
 Provider failures close the selected mode; they do not switch to another
 provider or mode. Realtime call state and transcript content are transient.
@@ -328,6 +357,7 @@ review accepted this answer, not that the answer is necessarily true or private.
 | Missing/ambiguous candidate selection, text or draft linkage   | `selection_unverified`   |
 | Finalized draft but Run/Workflow did not complete successfully | `workflow_not_completed` |
 | Non-answer, terminal action or unsupported candidate stage     | `unsupported_response`   |
+| Selected answer exceeds its Voice delivery limit               | `answer_too_long`        |
 
 Only `approved` carries text. These dispositions do not replace Run status or
 Workflow termination reasons. A revision needs its own final assessment; an

@@ -194,6 +194,10 @@ test('Voice bypasses an inherited debug session while ordinary text still captur
                     sessionCorrelationId: 'voice',
                     turnId: 'turn-1',
                     onRunStarted: () => undefined,
+                    deliveryPolicy: {
+                        mode: 'standard',
+                        maxAnswerTokens: 160,
+                    },
                 },
                 generate
             );

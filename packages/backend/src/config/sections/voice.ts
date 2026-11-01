@@ -6,7 +6,11 @@
  * @footnote-ethics: high - This configuration controls who can request extended voice processing.
  */
 import { envDefaultValues, envSpecByKey } from '@footnote/config-spec';
-import { parseOptionalTrimmedString, parseStringUnionEnv } from '../parsers.js';
+import {
+    parseOptionalTrimmedString,
+    parsePositiveIntEnv,
+    parseStringUnionEnv,
+} from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 const VOICE_MODES = new Set<'standard' | 'live'>(
@@ -24,6 +28,12 @@ export const buildVoiceSection = (
         envDefaultValues.VOICE_DEFAULT_MODE,
         'VOICE_DEFAULT_MODE',
         VOICE_MODES,
+        warn
+    ),
+    maxAnswerTokens: parsePositiveIntEnv(
+        env.VOICE_MAX_ANSWER_TOKENS,
+        envDefaultValues.VOICE_MAX_ANSWER_TOKENS,
+        'VOICE_MAX_ANSWER_TOKENS',
         warn
     ),
     developerUserId: parseOptionalTrimmedString(env.DISCORD_USER_ID),

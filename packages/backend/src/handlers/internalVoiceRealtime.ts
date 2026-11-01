@@ -29,6 +29,7 @@ import type {
     OpenAiLiveVoiceSessionFactory,
 } from '../services/openAiLiveVoice.js';
 import { resolveSpeechSelection } from '../services/speechPresentation.js';
+import { fitsVoiceAnswerDelivery } from '../services/voiceAnswerBudget.js';
 import { logger } from '../utils/logger.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { PROVIDER_UNAVAILABLE_DETAILS } from './chatResponses.js';
@@ -57,6 +58,7 @@ let activeVoiceCall: symbol | undefined;
 
 type CreateInternalVoiceRealtimeHandlerOptions = {
     defaultMode?: 'standard' | 'live';
+    maxAnswerTokens: number;
     openAiLiveVoiceSessionFactory?: OpenAiLiveVoiceSessionFactory | null;
     openRouterVoiceService?: OpenRouterVoiceService | null;
     workflowRunner?: RealtimeWorkflowRunner | null;
@@ -124,6 +126,7 @@ const sendServerEvent = (
  */
 export const createInternalVoiceRealtimeHandler = ({
     defaultMode = 'standard',
+    maxAnswerTokens,
     openAiLiveVoiceSessionFactory = null,
     openRouterVoiceService = null,
     workflowRunner = null,
@@ -185,6 +188,51 @@ export const createInternalVoiceRealtimeHandler = ({
         let liveDelegationTimer: ReturnType<typeof setTimeout> | undefined;
         let currentLiveDeliveryDelegationId: string | undefined;
 
+        const reportAnswerTooLong = (): void => {
+            if (!closed && !socketClosed && ws.readyState === WebSocket.OPEN)
+                sendServerEvent(ws, {
+                    type: 'error',
+                    message:
+                        'The answer is longer than the Voice delivery limit.',
+                    code: 'answer_too_long',
+                });
+        };
+        const boundedWorkflowRunner: RealtimeWorkflowRunner | null =
+            workflowRunner === null
+                ? null
+                : {
+                      runRealtimeConversation: async (snapshot, context) => {
+                          if (!mode)
+                              throw new Error('Voice mode is unavailable.');
+                          const result =
+                              await workflowRunner.runRealtimeConversation(
+                                  snapshot,
+                                  {
+                                      ...context,
+                                      voiceMode: mode,
+                                      maxAnswerTokens,
+                                  }
+                              );
+                          const answer = result.finalResponse;
+                          const tooLong =
+                              answer?.disposition === 'answer_too_long' ||
+                              (answer?.disposition === 'approved' &&
+                                  !fitsVoiceAnswerDelivery(
+                                      answer.text,
+                                      mode,
+                                      maxAnswerTokens
+                                  ));
+                          if (!tooLong) return result;
+                          if (!context.signal.aborted) reportAnswerTooLong();
+                          return {
+                              ...result,
+                              finalResponse: {
+                                  disposition: 'answer_too_long',
+                              },
+                          };
+                      },
+                  };
+
         const recordAudioUsage = (
             feature: 'voice_transcription',
             model: string,
@@ -222,6 +270,18 @@ export const createInternalVoiceRealtimeHandler = ({
             if (!request) return;
             const delivery = state.startDelivery(request.deliveryId);
             if (!delivery) return;
+
+            if (
+                !fitsVoiceAnswerDelivery(
+                    delivery.text,
+                    'standard',
+                    maxAnswerTokens
+                )
+            ) {
+                state.reportPlayback(delivery.deliveryId, 'failed');
+                reportAnswerTooLong();
+                return;
+            }
 
             synthesisController?.abort('superseded');
             const controller = new AbortController();
@@ -278,7 +338,7 @@ export const createInternalVoiceRealtimeHandler = ({
                 closed ||
                 mode !== 'standard' ||
                 !conversationState ||
-                !workflowRunner ||
+                !boundedWorkflowRunner ||
                 !openRouterVoiceService ||
                 !initiatorId
             )
@@ -317,8 +377,9 @@ export const createInternalVoiceRealtimeHandler = ({
                         });
                         return;
                     }
-                    const result =
-                        conversationState.startExecution(workflowRunner);
+                    const result = conversationState.startExecution(
+                        boundedWorkflowRunner
+                    );
                     if (!result.accepted) {
                         sendServerEvent(ws, {
                             type: 'error',
@@ -488,6 +549,14 @@ export const createInternalVoiceRealtimeHandler = ({
             if (!request) return;
             const delivery = state.startDelivery(request.deliveryId);
             if (!delivery) return;
+            if (
+                !fitsVoiceAnswerDelivery(delivery.text, 'live', maxAnswerTokens)
+            ) {
+                state.reportPlayback(delivery.deliveryId, 'failed');
+                reportAnswerTooLong();
+                currentLiveDeliveryDelegationId = undefined;
+                return;
+            }
             const delegationId = currentLiveDeliveryDelegationId;
             if (!delegationId) {
                 state.reportPlayback(delivery.deliveryId, 'failed');
@@ -619,7 +688,7 @@ export const createInternalVoiceRealtimeHandler = ({
                 currentLiveDeliveryDelegationId = undefined;
                 return;
             }
-            const execution = state.startExecution(workflowRunner!);
+            const execution = state.startExecution(boundedWorkflowRunner!);
             if (!execution?.accepted) {
                 appendLiveCommentary(
                     'I could not start that task yet. Please wait briefly and try again.',

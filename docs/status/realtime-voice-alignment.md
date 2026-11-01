@@ -157,9 +157,9 @@ a temporary SQLite database. Operator tests check authentication, privacy and
 degraded-state inspection. Completed-execution inspection exposes only IDs,
 status and review disposition. Approved text stays in the delivery slot.
 
-## Synthetic final-response approval and staging
+## Final-response approval and staging
 
-The [architecture mapping](../architecture/realtime-voice.md#final-response-approval-and-staging-synthetic-only)
+The [architecture mapping](../architecture/realtime-voice.md#final-response-approval-and-staging)
 describes the implemented dispositions. `realtimeWorkflowScope.ts` checks the
 selected candidate, final text, produced draft/review Results and the successful
 assessment of that exact draft. Only `finalize` with successful Run/Workflow
@@ -219,6 +219,16 @@ execution deadline. Only the initiating human's audio is forwarded; another
 human joining or the caller muting, deafening or leaving closes the session.
 The older OpenAI Realtime path remains as a compatibility/test fallback, not a
 silent provider or mode fallback.
+
+`voice.max-answer-tokens` defaults to 160 and sets a per-answer delivery ceiling
+separate from generation tokens. A provider-neutral estimate handles Unicode
+without English word splitting; provider headroom caps Live at 400 estimated
+tokens and Standard at 1,600 estimated tokens plus 3,686 code points. Generation
+keeps the selected TRACE posture, and over-limit answers receive
+`answer_too_long` without a delivery handoff. The estimate is not exact
+provider-token accounting. Intelligent answer condensation is deliberately
+deferred to [#968](https://github.com/footnote-ai/footnote/issues/968) and is not
+required to review or merge #965.
 
 Tests use synthetic providers. Live credentials, deployment configuration,
 provider retention, transcript timing, latency, voice quality, usage/cost
