@@ -12,6 +12,27 @@ import type {
     WorkflowAttemptRoutingRecord,
 } from '@footnote/contracts/policy';
 
+const promptCachePurpose = (
+    step: WorkflowRecord['steps'][number]
+): PromptCacheSummary['purpose'] => {
+    switch (step.stepKind) {
+        case 'plan':
+            return 'planner';
+        case 'assess':
+            return 'assessment';
+        case 'presentation':
+            return 'presentation';
+        case 'condense':
+            return 'condensation';
+        case 'generate':
+            return step.outcome.signals?.refinementSourceStepId === 'assess'
+                ? 'revision'
+                : 'generation';
+        default:
+            return 'unknown';
+    }
+};
+
 /** Counts nested executed routes instead of their aggregate parent; unknowns remain unavailable. */
 export const summarizePromptCaching = (
     workflow: WorkflowRecord
@@ -43,19 +64,7 @@ export const summarizePromptCaching = (
                 )
                     continue;
                 const purpose =
-                    attempt.promptCache?.purpose ??
-                    (step.stepKind === 'plan'
-                        ? 'planner'
-                        : step.stepKind === 'assess'
-                          ? 'assessment'
-                          : step.stepKind === 'presentation'
-                            ? 'presentation'
-                            : step.stepKind === 'condense'
-                              ? 'condensation'
-                              : step.outcome.signals?.refinementSourceStepId ===
-                                  'assess'
-                                ? 'revision'
-                                : 'generation');
+                    attempt.promptCache?.purpose ?? promptCachePurpose(step);
                 const provider =
                     attempt.actualProvider ??
                     attempt.requestedProvider ??

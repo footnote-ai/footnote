@@ -1740,6 +1740,7 @@ components:
                                 - tool
                                 - generate
                                 - assess
+                                - condense
                                 - revise
                                 - presentation
                                 - finalize

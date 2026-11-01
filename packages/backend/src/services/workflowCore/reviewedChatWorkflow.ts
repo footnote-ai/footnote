@@ -3186,15 +3186,18 @@ export const runBoundedReviewWorkflow = async (
             ? undefined
             : outputAdmission.reasonCode;
         if (!outputAdmission.admitted || generationResult.toolExecution) {
-            const condensationOutcome =
-                generationResult.toolExecution !== undefined
-                    ? 'tool_rejected'
-                    : outputAdmissionFailure === 'generation_empty_output'
-                      ? 'empty_output'
-                      : outputAdmissionFailure ===
-                          'generation_incomplete_before_output'
-                        ? 'incomplete_output'
-                        : 'output_rejected';
+            let condensationOutcome: string;
+            if (generationResult.toolExecution !== undefined) {
+                condensationOutcome = 'tool_rejected';
+            } else if (outputAdmissionFailure === 'generation_empty_output') {
+                condensationOutcome = 'empty_output';
+            } else if (
+                outputAdmissionFailure === 'generation_incomplete_before_output'
+            ) {
+                condensationOutcome = 'incomplete_output';
+            } else {
+                condensationOutcome = 'output_rejected';
+            }
             const reasonCode =
                 generationResult.toolExecution !== undefined
                     ? 'tool_not_requested'
@@ -3932,18 +3935,20 @@ export const runBoundedReviewWorkflow = async (
         const condensationAlreadyAttempted = handlerInput.run.steps.some(
             (step) => step.stepId === 'condense'
         );
-        const searchBlockedReason =
-            decision.reviewDecision !== 'search'
-                ? undefined
-                : condensationAlreadyAttempted
-                  ? 'transition_blocked_by_policy'
-                  : repeatedSearchQuery
-                    ? 'search_query_repeated'
-                    : !workflowPolicy.enableToolUse || !hasToolStep
-                      ? 'transition_blocked_by_policy'
-                      : searchRecoveryCyclesExhausted
-                        ? 'max_search_recovery_cycles_reached'
-                        : executionLimitReason;
+        let searchBlockedReason: WorkflowTerminationReason | undefined;
+        if (decision.reviewDecision === 'search') {
+            if (condensationAlreadyAttempted) {
+                searchBlockedReason = 'transition_blocked_by_policy';
+            } else if (repeatedSearchQuery) {
+                searchBlockedReason = 'search_query_repeated';
+            } else if (!workflowPolicy.enableToolUse || !hasToolStep) {
+                searchBlockedReason = 'transition_blocked_by_policy';
+            } else if (searchRecoveryCyclesExhausted) {
+                searchBlockedReason = 'max_search_recovery_cycles_reached';
+            } else {
+                searchBlockedReason = executionLimitReason;
+            }
+        }
         const voice = realtimeWorkflowScope();
         const currentDraft = readGenerationResult(handlerInput.results.draft);
         const deliveryMeasurement =
@@ -4037,34 +4042,52 @@ export const runBoundedReviewWorkflow = async (
                 : 'budget_blocked';
         }
         if (searchBlockedReason !== undefined) {
-            signals.searchRecoveryOutcome =
-                searchBlockedReason === 'search_query_repeated'
-                    ? 'repeated_query'
-                    : searchBlockedReason ===
-                        'max_search_recovery_cycles_reached'
-                      ? 'cycle_limit'
-                      : searchBlockedReason === 'transition_blocked_by_policy'
-                        ? 'policy_blocked'
-                        : 'execution_limit';
+            switch (searchBlockedReason) {
+                case 'search_query_repeated':
+                    signals.searchRecoveryOutcome = 'repeated_query';
+                    break;
+                case 'max_search_recovery_cycles_reached':
+                    signals.searchRecoveryOutcome = 'cycle_limit';
+                    break;
+                case 'transition_blocked_by_policy':
+                    signals.searchRecoveryOutcome = 'policy_blocked';
+                    break;
+                default:
+                    signals.searchRecoveryOutcome = 'execution_limit';
+            }
         } else if (decision.reviewDecision === 'search') {
             signals.searchRecoveryOutcome = 'requested';
         }
-        const outcome =
-            condensationBlockReason !== undefined
-                ? 'limit'
-                : decision.reviewDecision === 'finalize'
-                  ? condensationReady
-                      ? 'condense'
-                      : 'done'
-                  : condensationAlreadyAttempted
+        let outcome: 'limit' | 'done' | 'condense' | 'search' | 'revise';
+        if (condensationBlockReason !== undefined) {
+            outcome = 'limit';
+        } else if (decision.reviewDecision === 'finalize') {
+            outcome = condensationReady ? 'condense' : 'done';
+        } else if (condensationAlreadyAttempted) {
+            outcome = 'limit';
+        } else if (decision.reviewDecision === 'search') {
+            outcome = searchBlockedReason === undefined ? 'search' : 'limit';
+        } else {
+            outcome =
+                handlerInput.iteration >= regularMaxIterations
                     ? 'limit'
-                    : decision.reviewDecision === 'search'
-                      ? searchBlockedReason === undefined
-                          ? 'search'
-                          : 'limit'
-                      : handlerInput.iteration >= regularMaxIterations
-                        ? 'limit'
-                        : 'revise';
+                    : 'revise';
+        }
+        let terminationReason = condensationBlockReason ?? searchBlockedReason;
+        if (
+            terminationReason === undefined &&
+            decision.reviewDecision === 'revise' &&
+            !workflowPolicy.enableRevision
+        ) {
+            terminationReason = 'transition_blocked_by_policy';
+        }
+        if (
+            terminationReason === undefined &&
+            outcome === 'limit' &&
+            decision.reviewDecision !== 'search'
+        ) {
+            terminationReason = 'budget_exhausted_steps';
+        }
         return {
             status: 'succeeded',
             outcome,
@@ -4078,22 +4101,9 @@ export const runBoundedReviewWorkflow = async (
                     'Assessment evaluated draft quality and emitted a declared workflow outcome.',
                 ...assessmentAttemptMetadata,
                 signals,
-                ...(condensationBlockReason !== undefined
-                    ? { terminationReason: condensationBlockReason }
-                    : searchBlockedReason !== undefined
-                      ? { terminationReason: searchBlockedReason }
-                      : decision.reviewDecision === 'revise' &&
-                          !workflowPolicy.enableRevision
-                        ? {
-                              terminationReason:
-                                  'transition_blocked_by_policy' as const,
-                          }
-                        : {}),
-                ...(outcome === 'limit' &&
-                decision.reviewDecision !== 'search' &&
-                condensationBlockReason === undefined
-                    ? { terminationReason: 'budget_exhausted_steps' as const }
-                    : {}),
+                ...(terminationReason === undefined
+                    ? {}
+                    : { terminationReason }),
             }),
         };
     };

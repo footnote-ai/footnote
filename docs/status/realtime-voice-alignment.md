@@ -224,7 +224,8 @@ cap Live at 400 estimated tokens and Standard at 1,600 estimated tokens and
 3,686 code points. After normal assessment approves an over-budget draft, one
 dedicated `condense` Step can produce a new candidate for ordinary reassessment.
 Insufficient capacity, cancellation, failed/rejected assessment or remaining
-overlength withholds speech. TRACE still controls answer style. The six-case
+overlength blocks Workflow-answer handoff; Live may still speak independently.
+TRACE still controls answer style. The six-case
 synthetic evaluation fixture is checked in, but no paid/provider comparison has
 been run; quality, latency, tokens and cost are unverified.
 

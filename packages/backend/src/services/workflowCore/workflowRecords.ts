@@ -238,23 +238,18 @@ export const buildWorkflowLineage = (input: {
             [...records]
                 .reverse()
                 .find((record) => candidates.includes(record.stepKind));
-        const parent =
-            kind === 'assess'
-                ? latestOfKinds(['generate', 'condense'])
-                : kind === 'condense'
-                  ? priorOfKind('assess')
-                  : kind === 'plan' && step.stepId === 'replan'
-                    ? priorOfKind('assess')
-                    : kind === 'generate'
-                      ? latestOfKinds([
-                            'assess',
-                            'presentation',
-                            'plan',
-                            'tool',
-                        ])
-                      : kind === 'presentation' || kind === 'tool'
-                        ? latestOfKinds(['assess', 'plan', 'tool'])
-                        : undefined;
+        let parent: StepRecord | undefined;
+        if (kind === 'assess') {
+            parent = latestOfKinds(['generate', 'condense']);
+        } else if (kind === 'condense') {
+            parent = priorOfKind('assess');
+        } else if (kind === 'plan' && step.stepId === 'replan') {
+            parent = priorOfKind('assess');
+        } else if (kind === 'generate') {
+            parent = latestOfKinds(['assess', 'presentation', 'plan', 'tool']);
+        } else if (kind === 'presentation' || kind === 'tool') {
+            parent = latestOfKinds(['assess', 'plan', 'tool']);
+        }
         const successfulAttempt = [...step.attempts]
             .reverse()
             .find((attempt) => attempt.status === 'succeeded');

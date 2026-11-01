@@ -122,7 +122,8 @@ model call. Condensation receives the measured length, overage and effective
 limit along with approved context, evidence, assessment concerns and TRACE
 posture. It produces a separate Result and candidate, then goes through normal
 assessment. If the Step or reassessment fails, the output stays over budget, or
-assessment asks for more revision/search, Voice withholds speech. The Workflow
+assessment asks for more revision/search, the Workflow answer is withheld from
+handoff. Live may still speak independently. The Workflow
 does not start a second recovery pass or raise configured limits to make the
 candidate fit. The backend measures the new text; model claims about length are
 not used for eligibility.
@@ -358,8 +359,8 @@ response. Text chat is unaffected.
 
 Footnote issues a receipt only after storing the execution metadata. Before
 approving speech, it checks that exactly one candidate was selected from a
-Generate or revision Step, that the text matches, and that the candidate links
-to the produced `draft` Result. The final successful Assess Step must consume
+Generate, revision, or condensation Step, that the text matches, and that the
+candidate links to the produced `draft` Result. The final successful Assess Step must consume
 that draft, produce a `review` Result and return `finalize`. Both the Run and
 Workflow must finish successfully with `goal_satisfied`. Approval means the
 review accepted this answer, not that the answer is necessarily true or private.

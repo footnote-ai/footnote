@@ -306,7 +306,8 @@ not claim exact spoken equivalence.
 Condensation and revision have different purposes: `revise` answers identified
 quality concerns, while `condense` addresses measured delivery length. If
 condensation fails, remains over budget, or its assessment requests revision or
-search, Voice withholds speech. The current topology deliberately does not run
+search, the Workflow answer is withheld from handoff; Live may still speak
+independently. The current topology deliberately does not run
 another recovery after condensation. The assess step reserves Workflow,
 deliberation, token and elapsed-time capacity for one condensation and its
 required assessment before starting; the existing Execution Contract and
