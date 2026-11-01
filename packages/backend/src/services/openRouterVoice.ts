@@ -196,29 +196,22 @@ export const createOpenRouterVoiceService = ({
             await response.body?.cancel();
             throw new Error('OpenRouter speech response was not audio/pcm.');
         }
-        const reader = response.body?.getReader();
-        if (!reader)
+        const body = response.body;
+        if (!body)
             throw new Error(
                 'OpenRouter speech response is empty or out of bounds.'
             );
 
         const chunks: Buffer[] = [];
         let totalBytes = 0;
-        try {
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                totalBytes += value.byteLength;
-                if (totalBytes > MAX_SYNTHESIS_BYTES) {
-                    await reader.cancel();
-                    throw new Error(
-                        'OpenRouter speech response is empty or out of bounds.'
-                    );
-                }
-                chunks.push(Buffer.from(value));
+        for await (const value of body) {
+            totalBytes += value.byteLength;
+            if (totalBytes > MAX_SYNTHESIS_BYTES) {
+                throw new Error(
+                    'OpenRouter speech response is empty or out of bounds.'
+                );
             }
-        } finally {
-            reader.releaseLock();
+            chunks.push(Buffer.from(value));
         }
 
         if (totalBytes === 0) {

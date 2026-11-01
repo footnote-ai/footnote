@@ -188,8 +188,7 @@ export class VoiceSubsystem extends Event {
         const channel =
             this.client.guilds.cache.get(guildId)?.members.me?.voice.channel;
         if (
-            channel &&
-            channel.members.filter((member) => !member.user.bot).size === 1 &&
+            channel?.members.filter((member) => !member.user.bot).size === 1 &&
             channel.members.has(userId)
         ) {
             await this.startConversation(guildId);
@@ -419,6 +418,7 @@ export class VoiceSubsystem extends Event {
                 logger.error('[RealtimeSession] Error:', error)
             );
             realtimeSession.on('session.closed', () => {
+                this.sessionManager.removeSession(guildId);
                 this.audioPlaybackHandler.stopPlayback(guildId);
                 const connection = getVoiceConnection(guildId);
                 if (connection) {

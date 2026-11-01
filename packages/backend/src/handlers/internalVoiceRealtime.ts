@@ -19,8 +19,10 @@ import {
     InternalVoiceRealtimeServerEventSchema,
 } from '@footnote/contracts/voice';
 import type { BotProfileConfig } from '../config/profile.js';
-import type { RealtimeWorkflowRunner } from '../services/realtimeConversationState.js';
-import type { RealtimeFreshnessHandle } from '../services/realtimeConversationState.js';
+import type {
+    RealtimeFreshnessHandle,
+    RealtimeWorkflowRunner,
+} from '../services/realtimeConversationState.js';
 import { RealtimeConversationState } from '../services/realtimeConversationState.js';
 import type { OpenRouterVoiceService } from '../services/openRouterVoice.js';
 import type {
@@ -265,7 +267,7 @@ export const createInternalVoiceRealtimeHandler = ({
             )
                 return;
             const ready = state.deliveryStatus();
-            if (!ready || ready.status !== 'ready') return;
+            if (ready?.status !== 'ready') return;
             const request = state.requestDelivery(handle);
             if (!request) return;
             const delivery = state.startDelivery(request.deliveryId);
@@ -544,7 +546,7 @@ export const createInternalVoiceRealtimeHandler = ({
             )
                 return;
             const ready = state.deliveryStatus();
-            if (!ready || ready.status !== 'ready') return;
+            if (ready?.status !== 'ready') return;
             const request = state.requestDelivery(handle);
             if (!request) return;
             const delivery = state.startDelivery(request.deliveryId);
@@ -706,27 +708,116 @@ export const createInternalVoiceRealtimeHandler = ({
             liveDelegationTimer.unref?.();
         };
 
-        const handleLiveProviderEvent = (event: OpenAiLiveVoiceEvent): void => {
+        const logLiveProviderUsage = (event: OpenAiLiveVoiceEvent): void => {
             if (
-                event.type === 'session.usage.updated' ||
-                event.type === 'session.closed'
+                event.type !== 'session.usage.updated' &&
+                event.type !== 'session.closed'
             ) {
-                const usage = event.usage;
-                if (
-                    typeof usage === 'object' &&
-                    usage !== null &&
-                    'seconds' in usage &&
-                    typeof usage.seconds === 'number' &&
-                    Number.isFinite(usage.seconds)
-                ) {
-                    realtimeLogger.info(
-                        'OpenAI Live voice duration reported.',
-                        {
-                            seconds: usage.seconds,
-                        }
-                    );
-                }
+                return;
             }
+            const usage = event.usage;
+            if (
+                typeof usage === 'object' &&
+                usage !== null &&
+                'seconds' in usage &&
+                typeof usage.seconds === 'number' &&
+                Number.isFinite(usage.seconds)
+            ) {
+                realtimeLogger.info('OpenAI Live voice duration reported.', {
+                    seconds: usage.seconds,
+                });
+            }
+        };
+
+        const forwardLiveAudioDelta = (event: OpenAiLiveVoiceEvent): void => {
+            if (
+                event.type !== 'session.output_audio.delta' ||
+                typeof event.delta !== 'string' ||
+                event.delta.length === 0 ||
+                !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+                    event.delta
+                )
+            )
+                return;
+            sendServerEvent(ws, {
+                type: 'output_audio.delta',
+                audioBase64: event.delta,
+            });
+        };
+
+        const recordLiveTranscriptDelta = (
+            event: OpenAiLiveVoiceEvent
+        ): void => {
+            if (
+                event.type !== 'session.input_transcript.delta' ||
+                typeof event.event_id !== 'string' ||
+                typeof event.delta !== 'string' ||
+                !Number.isSafeInteger(event.start_ms) ||
+                !Number.isSafeInteger(event.end_ms) ||
+                (event.start_ms as number) > (event.end_ms as number)
+            )
+                return;
+            if (seenLiveTranscriptEvents.has(event.event_id)) return;
+            seenLiveTranscriptEvents.add(event.event_id);
+            if (seenLiveTranscriptEvents.size > 512)
+                seenLiveTranscriptEvents.clear();
+            const text = event.delta;
+            const bytes = Buffer.byteLength(text, 'utf8');
+            if (
+                liveTranscriptEvents.length >= 256 ||
+                liveTranscriptBytes + bytes > 16 * 1024
+            ) {
+                liveTranscriptOverflow = true;
+            } else {
+                liveTranscriptEvents.push({
+                    eventId: event.event_id,
+                    text,
+                    startMs: event.start_ms as number,
+                    endMs: event.end_ms as number,
+                });
+                liveTranscriptBytes += bytes;
+            }
+            if (liveBoundaryPending) scheduleLiveDelegationSettlement();
+        };
+
+        const recordLiveDelegation = (event: OpenAiLiveVoiceEvent): void => {
+            if (
+                event.type !== 'session.delegation.created' ||
+                typeof event.offset_ms !== 'number' ||
+                !Number.isSafeInteger(event.offset_ms) ||
+                typeof event.delegation !== 'object' ||
+                event.delegation === null
+            )
+                return;
+            const delegation = event.delegation as Record<string, unknown>;
+            if (
+                delegation.target !== 'client' ||
+                typeof delegation.id !== 'string' ||
+                delegation.type !== 'delegation' ||
+                event.offset_ms <= liveTranscriptCursorMs ||
+                seenLiveDelegations.has(delegation.id)
+            )
+                return;
+            seenLiveDelegations.add(delegation.id);
+            if (seenLiveDelegations.size > 512) seenLiveDelegations.clear();
+            if (!liveBoundaryPending) {
+                appendLiveCommentary(
+                    'I could not confidently match your request to the words I heard. Please repeat it.',
+                    delegation.id
+                );
+                discardLiveTranscriptThrough(event.offset_ms);
+                return;
+            }
+            liveDelegations.push({
+                id: delegation.id,
+                offsetMs: event.offset_ms,
+            });
+            if (liveDelegations.length > 8) liveTranscriptOverflow = true;
+            if (liveBoundaryPending) scheduleLiveDelegationSettlement();
+        };
+
+        const handleLiveProviderEvent = (event: OpenAiLiveVoiceEvent): void => {
+            logLiveProviderUsage(event);
             if (event.type === 'session.closed') {
                 if (closed) releaseCallReservation();
                 else finishCall('provider_closed', false, true);
@@ -749,84 +840,15 @@ export const createInternalVoiceRealtimeHandler = ({
                 finishCall('live_provider_error', true, true);
                 return;
             }
-            if (
-                event.type === 'session.output_audio.delta' &&
-                typeof event.delta === 'string' &&
-                event.delta.length > 0 &&
-                /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-                    event.delta
-                )
-            ) {
-                sendServerEvent(ws, {
-                    type: 'output_audio.delta',
-                    audioBase64: event.delta,
-                });
+            if (event.type === 'session.output_audio.delta') {
+                forwardLiveAudioDelta(event);
                 return;
             }
-            if (
-                event.type === 'session.input_transcript.delta' &&
-                typeof event.event_id === 'string' &&
-                typeof event.delta === 'string' &&
-                Number.isSafeInteger(event.start_ms) &&
-                Number.isSafeInteger(event.end_ms) &&
-                (event.start_ms as number) <= (event.end_ms as number)
-            ) {
-                if (seenLiveTranscriptEvents.has(event.event_id)) return;
-                seenLiveTranscriptEvents.add(event.event_id);
-                if (seenLiveTranscriptEvents.size > 512)
-                    seenLiveTranscriptEvents.clear();
-                const text = event.delta;
-                const bytes = Buffer.byteLength(text, 'utf8');
-                if (
-                    liveTranscriptEvents.length >= 256 ||
-                    liveTranscriptBytes + bytes > 16 * 1024
-                ) {
-                    liveTranscriptOverflow = true;
-                } else {
-                    liveTranscriptEvents.push({
-                        eventId: event.event_id,
-                        text,
-                        startMs: event.start_ms as number,
-                        endMs: event.end_ms as number,
-                    });
-                    liveTranscriptBytes += bytes;
-                }
-                if (liveBoundaryPending) scheduleLiveDelegationSettlement();
+            if (event.type === 'session.input_transcript.delta') {
+                recordLiveTranscriptDelta(event);
                 return;
             }
-            if (
-                event.type === 'session.delegation.created' &&
-                typeof event.offset_ms === 'number' &&
-                Number.isSafeInteger(event.offset_ms) &&
-                typeof event.delegation === 'object' &&
-                event.delegation !== null
-            ) {
-                const delegation = event.delegation as Record<string, unknown>;
-                if (
-                    delegation.target !== 'client' ||
-                    typeof delegation.id !== 'string' ||
-                    delegation.type !== 'delegation' ||
-                    event.offset_ms <= liveTranscriptCursorMs ||
-                    seenLiveDelegations.has(delegation.id)
-                )
-                    return;
-                seenLiveDelegations.add(delegation.id);
-                if (seenLiveDelegations.size > 512) seenLiveDelegations.clear();
-                if (!liveBoundaryPending) {
-                    appendLiveCommentary(
-                        'I could not confidently match your request to the words I heard. Please repeat it.',
-                        delegation.id
-                    );
-                    discardLiveTranscriptThrough(event.offset_ms);
-                    return;
-                }
-                liveDelegations.push({
-                    id: delegation.id,
-                    offsetMs: event.offset_ms,
-                });
-                if (liveDelegations.length > 8) liveTranscriptOverflow = true;
-                if (liveBoundaryPending) scheduleLiveDelegationSettlement();
-            }
+            recordLiveDelegation(event);
         };
 
         const forwardRuntimeEvent = (

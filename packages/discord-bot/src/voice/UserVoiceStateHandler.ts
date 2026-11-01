@@ -148,7 +148,7 @@ export class UserVoiceStateHandler {
         }
 
         // Start the conversation only after the consenting caller joins alone.
-        if (user && initiatingUserId === user.id) {
+        if (initiatingUserId === user?.id) {
             try {
                 await startConversationCallback(guildId);
                 logger.info(

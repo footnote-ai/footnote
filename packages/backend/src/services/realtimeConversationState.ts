@@ -208,6 +208,16 @@ const requireBoundedText = (value: string, field: string): string => {
     return normalized;
 };
 
+const hasApprovedAnswerEvidence = (
+    answer: RealtimeFinalResponse | undefined,
+    result: RealtimeWorkflowResult,
+    reservationRunId: string | undefined
+): answer is Extract<RealtimeFinalResponse, { disposition: 'approved' }> =>
+    answer?.disposition === 'approved' &&
+    answer.responseId === result.responseId &&
+    answer.runId === result.runId &&
+    reservationRunId === result.runId;
+
 /** One call's ephemeral context, intent revision, and delivery freshness boundary. */
 export class RealtimeConversationState {
     private readonly instanceId = randomUUID();
@@ -434,10 +444,11 @@ export class RealtimeConversationState {
                         const answer = result.finalResponse;
                         if (
                             status === 'completed' &&
-                            answer?.disposition === 'approved' &&
-                            answer.responseId === result.responseId &&
-                            answer.runId === result.runId &&
-                            reservation.runId === result.runId &&
+                            hasApprovedAnswerEvidence(
+                                answer,
+                                result,
+                                reservation.runId
+                            ) &&
                             this.intent?.status === 'pending' &&
                             this.intent.turnId === reservation.turnId &&
                             this.hasConsentingAudience() &&
