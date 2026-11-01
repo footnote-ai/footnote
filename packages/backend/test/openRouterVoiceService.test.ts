@@ -126,6 +126,39 @@ test('speech request asks OpenRouter for PCM and rejects non-audio responses', a
     );
 });
 
+test('speech response cancels its stream as soon as the byte limit is exceeded', async () => {
+    let cancelled = false;
+    let chunkIndex = 0;
+    const body = new globalThis.ReadableStream<Uint8Array>({
+        pull(controller) {
+            controller.enqueue(
+                new Uint8Array(chunkIndex++ === 0 ? 10 * 1024 * 1024 : 1)
+            );
+        },
+        cancel() {
+            cancelled = true;
+        },
+    });
+    const service = createOpenRouterVoiceService({
+        apiKey: 'test-key',
+        baseUrl: 'https://openrouter.test/api/v1',
+        fetchFn: async () =>
+            new Response(body, {
+                status: 200,
+                headers: { 'Content-Type': 'audio/pcm' },
+            }),
+    });
+
+    await assert.rejects(
+        service.synthesize('approved answer', {
+            model: 'x-ai/grok-voice-tts-1.0',
+            voice: 'eve',
+        }),
+        /out of bounds/
+    );
+    assert.equal(cancelled, true);
+});
+
 test('transcription rejects empty, malformed, and overlong transcripts', async () => {
     for (const body of [
         'not json',

@@ -16,7 +16,6 @@ import {
 } from '../utils/realtimeService.js';
 
 export class RealtimeEventHandler extends EventEmitter {
-    private audioBuffer: Buffer[] = [];
     private isCollectingAudio = false;
     private audioChunkCount = 0;
     private totalAudioBytes = 0;
@@ -67,12 +66,9 @@ export class RealtimeEventHandler extends EventEmitter {
                             : {}),
                     });
 
-                    // We keep a temporary per-response buffer only so the
-                    // handler knows whether it needs to clear streaming state
-                    // when the response finishes.
+                    // Track stream totals without retaining already-forwarded audio.
                     if (!this.isCollectingAudio) {
                         this.isCollectingAudio = true;
-                        this.audioBuffer = [];
                         this.audioChunkCount = 0;
                         this.totalAudioBytes = 0;
                         logger.debug(
@@ -81,7 +77,6 @@ export class RealtimeEventHandler extends EventEmitter {
                     }
                     this.audioChunkCount += 1;
                     this.totalAudioBytes += audioData.length;
-                    this.audioBuffer.push(audioData);
                 } catch (error) {
                     logger.error(
                         '[RealtimeEventHandler] Error processing audio delta:',
@@ -100,7 +95,6 @@ export class RealtimeEventHandler extends EventEmitter {
                 totalBytes: this.totalAudioBytes,
             });
             this.isCollectingAudio = false;
-            this.audioBuffer = [];
             this.audioChunkCount = 0;
             this.totalAudioBytes = 0;
         });

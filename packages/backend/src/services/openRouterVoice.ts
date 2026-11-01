@@ -196,12 +196,37 @@ export const createOpenRouterVoiceService = ({
             await response.body?.cancel();
             throw new Error('OpenRouter speech response was not audio/pcm.');
         }
-        const audio = Buffer.from(await response.arrayBuffer());
-        if (!audio.length || audio.length > MAX_SYNTHESIS_BYTES) {
+        const reader = response.body?.getReader();
+        if (!reader)
+            throw new Error(
+                'OpenRouter speech response is empty or out of bounds.'
+            );
+
+        const chunks: Buffer[] = [];
+        let totalBytes = 0;
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                totalBytes += value.byteLength;
+                if (totalBytes > MAX_SYNTHESIS_BYTES) {
+                    await reader.cancel();
+                    throw new Error(
+                        'OpenRouter speech response is empty or out of bounds.'
+                    );
+                }
+                chunks.push(Buffer.from(value));
+            }
+        } finally {
+            reader.releaseLock();
+        }
+
+        if (totalBytes === 0) {
             throw new Error(
                 'OpenRouter speech response is empty or out of bounds.'
             );
         }
+        const audio = Buffer.concat(chunks, totalBytes);
         const generationId = response.headers.get('x-generation-id')?.trim();
         return {
             audio,
