@@ -14,7 +14,7 @@ test('transcription sends mono 24 kHz PCM as WAV and returns only bounded text a
         { url: string; authorization: string | null; body: string } | undefined;
     const service = createOpenRouterVoiceService({
         apiKey: 'test-key',
-        baseUrl: 'https://openrouter.test/api/v1',
+        baseUrl: 'https://openrouter.test/api/v1////',
         fetchFn: async (url, init) => {
             request = {
                 url: String(url),

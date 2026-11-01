@@ -98,7 +98,12 @@ export const createOpenRouterVoiceService = ({
     baseUrl: string;
     fetchFn?: typeof fetch;
 }): OpenRouterVoiceService => {
-    const endpoint = baseUrl.trim().replace(/\/+$/, '');
+    const trimmedBaseUrl = baseUrl.trim();
+    let endpointLength = trimmedBaseUrl.length;
+    while (endpointLength > 0 && trimmedBaseUrl[endpointLength - 1] === '/') {
+        endpointLength -= 1;
+    }
+    const endpoint = trimmedBaseUrl.slice(0, endpointLength);
     if (!apiKey.trim() || !endpoint)
         throw new TypeError(
             'OpenRouter voice requires an API key and base URL.'

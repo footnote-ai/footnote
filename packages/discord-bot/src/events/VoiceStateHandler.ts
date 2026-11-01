@@ -51,7 +51,8 @@ export class VoiceStateHandler extends Event {
         mode: 'standard' | 'live' | undefined,
         requestExtendedDuration: boolean
     ): Promise<void> {
-        (await this.loadSubsystem()).registerInitiatingCall(
+        const subsystem = await this.loadSubsystem();
+        await subsystem.registerInitiatingCall(
             guildId,
             userId,
             mode,
