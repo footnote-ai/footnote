@@ -861,6 +861,10 @@ test('Voice condensation is withheld when the existing Workflow step limit canno
         );
         assert.notEqual(result.finalResponse?.disposition, 'approved');
         assert.equal('text' in (result.finalResponse ?? {}), false);
+        assert.deepEqual(result.finalResponse, {
+            disposition: 'workflow_limit_reached',
+            limitReason: 'budget_exhausted_steps',
+        });
         const assessment = stored?.workflow?.steps.findLast(
             (step) => step.stepKind === 'assess'
         );
@@ -877,6 +881,78 @@ test('Voice condensation is withheld when the existing Workflow step limit canno
         runtimeConfig.chatWorkflow.modeId = previousMode;
         runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
         runtimeConfig.chatWorkflow.maxWorkflowStepsOverride = previousStepLimit;
+    }
+});
+
+test('Voice condensation reports a deadline hit before its required reassessment', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    const previousDurationLimit =
+        runtimeConfig.chatWorkflow.maxDurationMsOverride;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    runtimeConfig.chatWorkflow.maxDurationMsOverride = 800;
+    let calls = 0;
+    let stored: ResponseMetadata | undefined;
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: {
+                kind: 'synthetic',
+                generate: async (request) => {
+                    const call = calls++;
+                    if (call === 3)
+                        await new Promise((resolve) =>
+                            setTimeout(resolve, 1_000)
+                        );
+                    return {
+                        model: request.model,
+                        text:
+                            [
+                                JSON.stringify(answerPlan()),
+                                'This approved original is too long for the configured Voice delivery budget.',
+                                JSON.stringify({
+                                    reviewDecision: 'finalize',
+                                    reviewReason: 'The answer is complete.',
+                                }),
+                                'A short, accurate condensation.',
+                            ][call] ?? '',
+                    };
+                },
+            },
+            storeTrace: async (metadata) => {
+                stored = metadata;
+            },
+            buildResponseMetadata,
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+        });
+        const result = await orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: () => undefined,
+            voiceMode: 'live',
+            maxAnswerTokens: 12,
+        });
+        assert.equal(calls, 4);
+        assert.ok(
+            stored?.workflow?.steps.some(
+                (step) =>
+                    step.stepKind === 'condense' &&
+                    step.outcome.signals?.condensationOutcome === 'completed'
+            )
+        );
+        assert.equal(
+            stored?.workflow?.terminationReason,
+            'budget_exhausted_time'
+        );
+        assert.deepEqual(result.finalResponse, {
+            disposition: 'workflow_limit_reached',
+            limitReason: 'budget_exhausted_time',
+        });
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+        runtimeConfig.chatWorkflow.maxDurationMsOverride =
+            previousDurationLimit;
     }
 });
 

@@ -23,6 +23,7 @@ import type {
     RealtimeFreshnessHandle,
     RealtimeWorkflowRunner,
 } from '../services/realtimeConversationState.js';
+import type { RealtimeWorkflowLimitReason } from '../services/realtimeWorkflowScope.js';
 import { RealtimeConversationState } from '../services/realtimeConversationState.js';
 import type { OpenRouterVoiceService } from '../services/openRouterVoice.js';
 import type {
@@ -199,6 +200,26 @@ export const createInternalVoiceRealtimeHandler = ({
                     code: 'answer_too_long',
                 });
         };
+        const reportWorkflowLimitReached = (
+            limitReason: RealtimeWorkflowLimitReason
+        ): void => {
+            const messages: Record<RealtimeWorkflowLimitReason, string> = {
+                budget_exhausted_steps:
+                    'The Voice answer could not be safely prepared within the Workflow step limit.',
+                budget_exhausted_tokens:
+                    'The Voice answer could not be safely prepared within the Workflow token limit.',
+                budget_exhausted_time:
+                    'The Voice answer could not be safely prepared within the Workflow time limit.',
+                max_deliberation_calls_reached:
+                    'The Voice answer could not be safely prepared within the Workflow review limit.',
+            };
+            if (!closed && !socketClosed && ws.readyState === WebSocket.OPEN)
+                sendServerEvent(ws, {
+                    type: 'error',
+                    message: messages[limitReason],
+                    code: 'workflow_limit_reached',
+                });
+        };
         const boundedWorkflowRunner: RealtimeWorkflowRunner | null =
             workflowRunner === null
                 ? null
@@ -216,6 +237,15 @@ export const createInternalVoiceRealtimeHandler = ({
                                   }
                               );
                           const answer = result.finalResponse;
+                          if (
+                              answer?.disposition === 'workflow_limit_reached'
+                          ) {
+                              if (!context.signal.aborted)
+                                  reportWorkflowLimitReached(
+                                      answer.limitReason
+                                  );
+                              return result;
+                          }
                           const tooLong =
                               answer?.disposition === 'answer_too_long' ||
                               (answer?.disposition === 'approved' &&

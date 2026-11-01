@@ -905,6 +905,110 @@ test('over-limit approved answers never reach Standard TTS or Live commentary', 
     }
 });
 
+test('Workflow limit failures are reported without Standard TTS or Live commentary', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    for (const mode of ['standard', 'live'] as const) {
+        const synthesized: string[] = [];
+        const liveSession = new StubOpenAiLiveVoiceSession();
+        const harness = await createRealtimeHandlerHarness({
+            defaultMode: mode,
+            maxAnswerTokens: 4,
+            openAiLiveVoiceSessionFactory: async () => liveSession,
+            openRouterVoiceService:
+                mode === 'standard'
+                    ? {
+                          async transcribe() {
+                              return { text: 'What is the answer?' };
+                          },
+                          async synthesize(text) {
+                              synthesized.push(text);
+                              return { audio: Buffer.from([0, 0]) };
+                          },
+                      }
+                    : undefined,
+            workflowRunner: {
+                async runRealtimeConversation(_snapshot, context) {
+                    context.onRunStarted('workflow-run');
+                    return {
+                        responseId: 'response',
+                        runId: 'workflow-run',
+                        status: 'degraded',
+                        finalResponse: {
+                            disposition: 'workflow_limit_reached',
+                            limitReason: 'budget_exhausted_time',
+                        },
+                    };
+                },
+            },
+        });
+        let ws: WebSocket | undefined;
+        try {
+            ws = await harness.connect();
+            ws.send(
+                JSON.stringify({
+                    type: 'session.start',
+                    mode,
+                    initiatorId: 'user-1',
+                    context: {
+                        participants: [
+                            {
+                                id: 'user-1',
+                                displayName: 'Alice',
+                                isBot: false,
+                            },
+                        ],
+                    },
+                })
+            );
+            assert.equal((await waitForJsonMessage(ws)).type, 'session.ready');
+            const failurePromise = waitForJsonMessage(ws, 3_000);
+            ws.send(
+                JSON.stringify({
+                    type: 'input_audio.append',
+                    audioBase64: inputAudio.toString('base64'),
+                    speakerLabel: 'Alice',
+                    speakerId: 'user-1',
+                })
+            );
+            ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+            if (mode === 'live') {
+                const session = await waitForLiveSession(harness);
+                await new Promise((resolve) => setTimeout(resolve, 600));
+                session.emit({
+                    type: 'session.input_transcript.delta',
+                    event_id: 'transcript-1',
+                    delta: 'What is the answer?',
+                    start_ms: 0,
+                    end_ms: 500,
+                });
+                session.emit({
+                    type: 'session.delegation.created',
+                    event_id: 'delegation-1',
+                    offset_ms: 600,
+                    delegation: {
+                        id: 'delegation-1',
+                        target: 'client',
+                        type: 'delegation',
+                    },
+                });
+                await new Promise((resolve) => setTimeout(resolve, 600));
+                assert.deepEqual(session.commentary, []);
+            }
+            const failure = await failurePromise;
+            assert.equal(failure.type, 'error');
+            assert.equal(failure.code, 'workflow_limit_reached');
+            assert.equal(
+                failure.message,
+                'The Voice answer could not be safely prepared within the Workflow time limit.'
+            );
+            assert.deepEqual(synthesized, []);
+        } finally {
+            if (ws) await closeWebSocket(ws);
+            await harness.close();
+        }
+    }
+});
+
 test('Live streams only caller audio, delegates the caller transcript, and returns the approved Workflow answer as commentary', async () => {
     const inputAudio = Buffer.from([0, 0, 1, 0]);
     const snapshots: string[] = [];

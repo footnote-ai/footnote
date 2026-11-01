@@ -35,12 +35,26 @@ export type RealtimeReviewDisposition =
     | 'selection_unverified'
     | 'workflow_not_completed'
     | 'unsupported_response'
-    | 'answer_too_long';
+    | 'answer_too_long'
+    | 'workflow_limit_reached';
+
+export type RealtimeWorkflowLimitReason =
+    | 'budget_exhausted_steps'
+    | 'budget_exhausted_tokens'
+    | 'budget_exhausted_time'
+    | 'max_deliberation_calls_reached';
 
 /** Keep selected-answer evidence private to the backend; only approved answers carry text. */
 export type RealtimeFinalResponse =
     | {
-          disposition: Exclude<RealtimeReviewDisposition, 'approved'>;
+          disposition: Exclude<
+              RealtimeReviewDisposition,
+              'approved' | 'workflow_limit_reached'
+          >;
+      }
+    | {
+          disposition: 'workflow_limit_reached';
+          limitReason: RealtimeWorkflowLimitReason;
       }
     | {
           disposition: 'approved';
@@ -51,6 +65,59 @@ export type RealtimeFinalResponse =
           assessmentStepId: string;
           text: string;
       };
+
+const hasUnassessedCondensationResult = (
+    workflow: WorkflowRecord | undefined
+): boolean =>
+    workflow?.steps.some((step, index) => {
+        if (
+            step.stepKind !== 'condense' ||
+            step.outcome.status !== 'executed' ||
+            !step.attempts?.some((attempt) => attempt.status === 'succeeded')
+        )
+            return false;
+        const draft = workflow.results?.find(
+            (result) =>
+                result.name === 'draft' &&
+                result.status === 'produced' &&
+                result.producedByStepId === step.stepId
+        );
+        if (
+            draft === undefined ||
+            !step.resultRefs?.some(
+                (ref) => ref.name === 'draft' && ref.resultId === draft.resultId
+            )
+        )
+            return false;
+        return !workflow.steps.slice(index + 1).some((assessment) => {
+            if (
+                assessment.stepKind !== 'assess' ||
+                assessment.outcome.status !== 'executed' ||
+                !assessment.attempts?.some(
+                    (attempt) => attempt.status === 'succeeded'
+                ) ||
+                !assessment.inputRefs?.some(
+                    (ref) =>
+                        ref.name === 'draft' && ref.resultId === draft.resultId
+                )
+            )
+                return false;
+            const review = workflow.results?.find(
+                (result) =>
+                    result.name === 'review' &&
+                    result.status === 'produced' &&
+                    result.producedByStepId === assessment.stepId
+            );
+            return (
+                review !== undefined &&
+                assessment.resultRefs?.some(
+                    (ref) =>
+                        ref.name === 'review' &&
+                        ref.resultId === review.resultId
+                ) === true
+            );
+        });
+    }) ?? false;
 
 /** Reuses candidate selection and Result references, without treating fail-open completion as approval. */
 export const assessRealtimeFinalResponse = (
@@ -95,6 +162,22 @@ export const assessRealtimeFinalResponse = (
         )
     )
         return { disposition: 'assessment_failed' };
+    const limitReason = workflow?.terminationReason;
+    if (
+        (workflow?.steps.some(
+            (step) =>
+                step.outcome.signals?.condensationOutcome === 'budget_blocked'
+        ) ||
+            hasUnassessedCondensationResult(workflow)) &&
+        (limitReason === 'budget_exhausted_steps' ||
+            limitReason === 'budget_exhausted_tokens' ||
+            limitReason === 'budget_exhausted_time' ||
+            limitReason === 'max_deliberation_calls_reached')
+    )
+        return {
+            disposition: 'workflow_limit_reached',
+            limitReason,
+        };
     if (
         candidate?.text !== selection.message ||
         !candidate.text.trim() ||
