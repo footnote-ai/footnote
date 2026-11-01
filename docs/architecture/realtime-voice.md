@@ -376,6 +376,7 @@ review accepted this answer, not that the answer is necessarily true or private.
 | Finalized draft but Run/Workflow did not complete successfully | `workflow_not_completed` |
 | Non-answer, terminal action or unsupported candidate stage     | `unsupported_response`   |
 | Selected answer exceeds its Voice delivery limit               | `answer_too_long`        |
+| Workflow cannot reserve a required step, token, time or review allowance | `workflow_limit_reached` (`limitReason`: `budget_exhausted_steps`, `budget_exhausted_tokens`, `budget_exhausted_time` or `max_deliberation_calls_reached`) |
 
 Only `approved` carries text. These dispositions do not replace Run status or
 Workflow termination reasons. A revision needs its own final assessment; an
