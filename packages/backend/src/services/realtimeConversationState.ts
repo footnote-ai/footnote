@@ -419,86 +419,9 @@ export class RealtimeConversationState {
                 });
             })
             .then(
-                (result) => {
-                    if (
-                        !this.closed &&
-                        this.revision === reservation.revision &&
-                        !reservation.controller.signal.aborted &&
-                        Date.now() <
-                            reservation.startedAt + EXECUTION_DEADLINE_MS
-                    ) {
-                        let status = result.status ?? 'failed';
-                        if (!result.responseId || !result.runId)
-                            status = 'failed';
-                        this.completed = {
-                            responseId: result.responseId,
-                            runId: result.runId,
-                            status,
-                            ...(result.finalResponse === undefined
-                                ? {}
-                                : {
-                                      reviewDisposition:
-                                          result.finalResponse.disposition,
-                                  }),
-                        };
-                        const answer = result.finalResponse;
-                        if (
-                            status === 'completed' &&
-                            hasApprovedAnswerEvidence(
-                                answer,
-                                result,
-                                reservation.runId
-                            ) &&
-                            this.intent?.status === 'pending' &&
-                            this.intent.turnId === reservation.turnId &&
-                            this.hasConsentingAudience() &&
-                            deliveryEpoch === this.deliveryEpoch &&
-                            answer.text.trim().length > 0 &&
-                            utf8Bytes(answer.text) <= MAX_CONTEXT_BYTES
-                        ) {
-                            const { text, ...evidence } = answer;
-                            this.delivery = {
-                                text,
-                                inspection: {
-                                    ...evidence,
-                                    deliveryId: randomUUID(),
-                                    handle: this.freshnessHandle(),
-                                    turnId: reservation.turnId,
-                                    audienceIds: this.audience.map(
-                                        (person) => person.id
-                                    ),
-                                    expiresAt: Date.now() + DELIVERY_TTL_MS,
-                                    status: 'ready',
-                                    playback: 'not_reported',
-                                },
-                            };
-                            this.deliveryExpiry = setTimeout(
-                                () => this.revokeDelivery('expired'),
-                                DELIVERY_TTL_MS
-                            );
-                            this.deliveryExpiry.unref?.();
-                            for (const listener of this
-                                .deliveryReadyListeners) {
-                                try {
-                                    listener(this.freshnessHandle());
-                                } catch {
-                                    // Adapter notification failures do not alter the recorded Workflow result.
-                                }
-                            }
-                        }
-                    }
-                },
-                () => {
-                    if (
-                        !this.closed &&
-                        this.revision === reservation.revision &&
-                        !reservation.controller.signal.aborted
-                    )
-                        this.completed = {
-                            status: 'failed',
-                            runId: reservation.runId,
-                        };
-                }
+                (result) =>
+                    this.completeExecution(result, reservation, deliveryEpoch),
+                () => this.failExecution(reservation)
             )
             .finally(() => {
                 clearTimeout(reservation.cancellationWatchdog);
@@ -507,6 +430,99 @@ export class RealtimeConversationState {
                     executionReservation = undefined;
             });
         return { accepted: true };
+    }
+
+    private completeExecution(
+        result: RealtimeWorkflowResult,
+        reservation: ExecutionReservation,
+        deliveryEpoch: number
+    ): void {
+        if (
+            this.closed ||
+            this.revision !== reservation.revision ||
+            reservation.controller.signal.aborted ||
+            Date.now() >= reservation.startedAt + EXECUTION_DEADLINE_MS
+        )
+            return;
+        let status = result.status ?? 'failed';
+        if (!result.responseId || !result.runId) status = 'failed';
+        this.completed = {
+            responseId: result.responseId,
+            runId: result.runId,
+            status,
+            ...(result.finalResponse === undefined
+                ? {}
+                : { reviewDisposition: result.finalResponse.disposition }),
+        };
+        const answer = result.finalResponse;
+        if (
+            this.shouldStageApprovedDelivery(
+                status,
+                answer,
+                result,
+                reservation,
+                deliveryEpoch
+            )
+        ) {
+            const { text, ...evidence } = answer;
+            this.delivery = {
+                text,
+                inspection: {
+                    ...evidence,
+                    deliveryId: randomUUID(),
+                    handle: this.freshnessHandle(),
+                    turnId: reservation.turnId,
+                    audienceIds: this.audience.map((person) => person.id),
+                    expiresAt: Date.now() + DELIVERY_TTL_MS,
+                    status: 'ready',
+                    playback: 'not_reported',
+                },
+            };
+            this.deliveryExpiry = setTimeout(
+                () => this.revokeDelivery('expired'),
+                DELIVERY_TTL_MS
+            );
+            this.deliveryExpiry.unref?.();
+            for (const listener of this.deliveryReadyListeners) {
+                try {
+                    listener(this.freshnessHandle());
+                } catch {
+                    // Adapter notification failures do not alter the recorded Workflow result.
+                }
+            }
+        }
+    }
+
+    private failExecution(reservation: ExecutionReservation): void {
+        if (
+            this.closed ||
+            this.revision !== reservation.revision ||
+            reservation.controller.signal.aborted
+        )
+            return;
+        this.completed = {
+            status: 'failed',
+            runId: reservation.runId,
+        };
+    }
+
+    private shouldStageApprovedDelivery(
+        status: RealtimeCompletion['status'],
+        answer: RealtimeFinalResponse | undefined,
+        result: RealtimeWorkflowResult,
+        reservation: ExecutionReservation,
+        deliveryEpoch: number
+    ): answer is Extract<RealtimeFinalResponse, { disposition: 'approved' }> {
+        return (
+            status === 'completed' &&
+            hasApprovedAnswerEvidence(answer, result, reservation.runId) &&
+            this.intent?.status === 'pending' &&
+            this.intent.turnId === reservation.turnId &&
+            this.hasConsentingAudience() &&
+            deliveryEpoch === this.deliveryEpoch &&
+            answer.text.trim().length > 0 &&
+            utf8Bytes(answer.text) <= MAX_CONTEXT_BYTES
+        );
     }
 
     executionStatus(): ReturnType<typeof inspectRealtimeExecution> {
