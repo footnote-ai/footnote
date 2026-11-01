@@ -3387,6 +3387,36 @@ export const runBoundedReviewWorkflow = async (
             }),
         });
     };
+    const reviewOutputOptions = (
+        outputPath: TypedModelOutputPath
+    ): Pick<GenerationRequest, 'structuredOutput' | 'jsonMode'> => {
+        switch (outputPath) {
+            case 'native_schema':
+                return { structuredOutput: REVIEW_DECISION_STRUCTURED_OUTPUT };
+            case 'json_compatibility':
+                return { jsonMode: true };
+            default:
+                return {};
+        }
+    };
+    const recordAssessmentReviewResult = (
+        result: GenerationResult,
+        generationInput: AssessmentReviewGenerationInput
+    ): void => {
+        const provider =
+            generationInput.request.provider ??
+            generationInput.profile?.provider;
+        if (provider !== undefined) {
+            generationInput.reviewProviders.set(result, provider);
+        }
+        generationInput.reviewAttempts.push(result);
+        if (generationInput.attemptIndex !== undefined) {
+            generationInput.reviewAttemptsByIndex.set(
+                generationInput.attemptIndex,
+                result
+            );
+        }
+    };
     const runAssessmentReviewGeneration = async (
         generationInput: AssessmentReviewGenerationInput
     ): Promise<GenerationResult> => {
@@ -3395,11 +3425,7 @@ export const runBoundedReviewWorkflow = async (
         while (true) {
             const requestForOutput: GenerationRequest = {
                 ...generationInput.request,
-                ...(outputPath === 'native_schema'
-                    ? { structuredOutput: REVIEW_DECISION_STRUCTURED_OUTPUT }
-                    : outputPath === 'json_compatibility'
-                      ? { jsonMode: true }
-                      : {}),
+                ...reviewOutputOptions(outputPath),
             };
             const startedAtMs = Date.now();
             try {
@@ -3414,19 +3440,7 @@ export const runBoundedReviewWorkflow = async (
                         )
                     )
                 );
-                const provider =
-                    generationInput.request.provider ??
-                    generationInput.profile?.provider;
-                if (provider !== undefined) {
-                    generationInput.reviewProviders.set(result, provider);
-                }
-                generationInput.reviewAttempts.push(result);
-                if (generationInput.attemptIndex !== undefined) {
-                    generationInput.reviewAttemptsByIndex.set(
-                        generationInput.attemptIndex,
-                        result
-                    );
-                }
+                recordAssessmentReviewResult(result, generationInput);
                 generationInput.request.signal?.throwIfAborted();
                 return result;
             } catch (error) {
@@ -3540,7 +3554,7 @@ export const runBoundedReviewWorkflow = async (
             ReturnType<typeof resolveModelSettings> | undefined;
         let selectedCapabilityFacts:
             ReturnType<typeof resolveAttemptCapabilityFacts> | undefined;
-        try {
+        const runAssessmentReviewAttempts = async () => {
             const chain = stepRoutingChainSet?.assessCandidates.length
                 ? await executeStepRoutingChain({
                       step: 'assess',
@@ -3581,7 +3595,7 @@ export const runBoundedReviewWorkflow = async (
                               providerRouting: profile.providerRouting,
                               providerOptions: profile.providerOptions,
                           };
-                          const result = await runAssessmentReviewGeneration({
+                          return runAssessmentReviewGeneration({
                               request: requestForProfile,
                               profile,
                               initialOutputPath: outputPath,
@@ -3593,7 +3607,6 @@ export const runBoundedReviewWorkflow = async (
                               reviewAttemptsByIndex,
                               attemptIndex,
                           });
-                          return result;
                       },
                       retryReasonCode: (result) => {
                           const validation = validateTypedModelOutput({
@@ -3615,69 +3628,74 @@ export const runBoundedReviewWorkflow = async (
                 routingAttempts = attachGenerationAttemptEvidence(
                     routed.error.attempts,
                     reviewAttemptsByIndex,
-                    {
-                        captureCost: estimateAttemptCost,
-                    }
+                    { captureCost: estimateAttemptCost }
                 );
                 const usage = reviewUsage();
                 return {
-                    status: 'failed',
-                    errorCode: routed.error.reasonCode,
-                    retryable: false,
-                    ...(usage.totalTokens === undefined
-                        ? {}
-                        : { usage: { totalTokens: usage.totalTokens } }),
-                    metadata: encodeMetadata({
-                        status: 'failed',
-                        summary:
-                            'Assessment routing failed; the latest valid draft was preserved.',
-                        reasonCode: routed.error.reasonCode,
-                        terminationReason: 'executor_error_fail_open',
-                        model: usage.model,
-                        usage: combineGenerationResultUsage(
-                            reviewAttempts,
-                            routingAttempts
-                        ),
-                        estimatedCost: usage.estimatedCost,
-                        ...withWorkflowRoutingAttempts(routingAttempts),
-                    }),
+                    failure: {
+                        status: 'failed' as const,
+                        errorCode: routed.error.reasonCode,
+                        retryable: false,
+                        ...(usage.totalTokens === undefined
+                            ? {}
+                            : {
+                                  usage: { totalTokens: usage.totalTokens },
+                              }),
+                        metadata: encodeMetadata({
+                            status: 'failed',
+                            summary:
+                                'Assessment routing failed; the latest valid draft was preserved.',
+                            reasonCode: routed.error.reasonCode,
+                            terminationReason: 'executor_error_fail_open',
+                            model: usage.model,
+                            usage: combineGenerationResultUsage(
+                                reviewAttempts,
+                                routingAttempts
+                            ),
+                            estimatedCost: usage.estimatedCost,
+                            ...withWorkflowRoutingAttempts(routingAttempts),
+                        }),
+                    },
                 };
             }
             if (routed?.isOk()) {
-                reviewResult = routed.value.value;
-                routingAttempts = attachGenerationAttemptEvidence(
-                    routed.value.attempts,
-                    reviewAttemptsByIndex,
-                    {
-                        captureCost: estimateAttemptCost,
-                    }
-                );
-                selectedProfile = routed.value.selected.profile;
-            } else {
-                const capabilityFacts = resolveAttemptCapabilityFacts(
-                    bounded.provider,
-                    bounded.capabilities
-                );
-                const outputPath = resolveTypedModelOutputPath({
-                    provider: bounded.provider,
-                    capabilities: bounded.capabilities,
-                    capabilityFacts,
-                });
-                reviewResult = await runAssessmentReviewGeneration({
+                return {
+                    reviewResult: routed.value.value,
+                    routingAttempts: attachGenerationAttemptEvidence(
+                        routed.value.attempts,
+                        reviewAttemptsByIndex,
+                        { captureCost: estimateAttemptCost }
+                    ),
+                    selectedProfile: routed.value.selected.profile,
+                    selectedSettings,
+                    selectedCapabilityFacts,
+                };
+            }
+            const capabilityFacts = resolveAttemptCapabilityFacts(
+                bounded.provider,
+                bounded.capabilities
+            );
+            return {
+                reviewResult: await runAssessmentReviewGeneration({
                     request: bounded,
-                    initialOutputPath: outputPath,
+                    initialOutputPath: resolveTypedModelOutputPath({
+                        provider: bounded.provider,
+                        capabilities: bounded.capabilities,
+                        capabilityFacts,
+                    }),
                     capabilityFacts,
                     providerModel: bounded.model ?? 'unknown',
                     reviewAttempts,
                     reviewProviders,
                     reviewAttemptsByIndex,
-                });
-                selectedCapabilityFacts = resolveAttemptCapabilityFacts(
-                    bounded.provider,
-                    bounded.capabilities
-                );
-            }
-        } catch (error) {
+                }),
+                routingAttempts,
+                selectedProfile,
+                selectedSettings,
+                selectedCapabilityFacts: capabilityFacts,
+            };
+        };
+        const assessmentRuntimeFailure = (error: unknown): AttemptResult => {
             const usage = reviewUsage();
             const cancelled = bounded.signal?.aborted === true;
             return {
@@ -3710,6 +3728,19 @@ export const runBoundedReviewWorkflow = async (
                     ...withWorkflowRoutingAttempts(routingAttempts),
                 }),
             };
+        };
+        try {
+            const attempt = await runAssessmentReviewAttempts();
+            if ('failure' in attempt && attempt.failure !== undefined) {
+                return attempt.failure;
+            }
+            reviewResult = attempt.reviewResult;
+            routingAttempts = attempt.routingAttempts;
+            selectedProfile = attempt.selectedProfile;
+            selectedSettings = attempt.selectedSettings;
+            selectedCapabilityFacts = attempt.selectedCapabilityFacts;
+        } catch (error) {
+            return assessmentRuntimeFailure(error);
         }
         const usage = reviewUsage();
         const combinedResultUsage = combineGenerationResultUsage(
@@ -4090,29 +4121,25 @@ export const runBoundedReviewWorkflow = async (
         outcome: 'limit' | 'done' | 'condense' | 'search' | 'revise';
         terminationReason: WorkflowTerminationReason | undefined;
     } => {
-        let outcome: 'limit' | 'done' | 'condense' | 'search' | 'revise';
-        if (input.condensationBlockReason !== undefined) {
-            outcome = 'limit';
-        } else {
+        const outcomeForDecision = ():
+            'limit' | 'done' | 'condense' | 'search' | 'revise' => {
+            if (input.condensationBlockReason !== undefined) return 'limit';
             switch (input.decision.reviewDecision) {
                 case 'finalize':
-                    outcome = input.condensationReady ? 'condense' : 'done';
-                    break;
+                    return input.condensationReady ? 'condense' : 'done';
                 case 'search':
-                    outcome =
-                        !input.condensationAlreadyAttempted &&
+                    return !input.condensationAlreadyAttempted &&
                         input.searchBlockedReason === undefined
-                            ? 'search'
-                            : 'limit';
-                    break;
+                        ? 'search'
+                        : 'limit';
                 default:
-                    outcome =
-                        input.condensationAlreadyAttempted ||
+                    return input.condensationAlreadyAttempted ||
                         input.iteration >= regularMaxIterations
-                            ? 'limit'
-                            : 'revise';
+                        ? 'limit'
+                        : 'revise';
             }
-        }
+        };
+        const outcome = outcomeForDecision();
         let terminationReason =
             input.condensationBlockReason ?? input.searchBlockedReason;
         if (
@@ -4746,23 +4773,29 @@ export const runBoundedReviewWorkflow = async (
         blockedStepId === undefined
             ? undefined
             : workflowStepKind(blockedStepId);
-    const stoppedBeforeStepKind =
-        lastMetadata?.terminationReason === 'budget_exhausted_steps'
-            ? lastMetadata.signals?.condensationOutcome === 'budget_blocked' &&
-              lastMetadata.signals.condensationAttempted === false
-                ? 'condense'
-                : 'generate'
-            : genericLimit === undefined || providerExceededTokenLimit
-              ? undefined
-              : genericLimit === 'maxTokensTotal' &&
-                  lastExecutedStepId === 'generate'
-                ? hasAssessmentStep
-                    ? 'assess'
-                    : 'finalize'
-                : (blockedStepKind ??
-                  (lastExecutedStepId === undefined
-                      ? undefined
-                      : workflowStepKind(lastExecutedStepId)));
+    let stoppedBeforeStepKind: ReturnType<typeof workflowStepKind> | undefined =
+        undefined;
+    if (lastMetadata?.terminationReason === 'budget_exhausted_steps') {
+        const condensationWasBlocked =
+            lastMetadata.signals?.condensationOutcome === 'budget_blocked' &&
+            lastMetadata.signals.condensationAttempted === false;
+        stoppedBeforeStepKind = condensationWasBlocked
+            ? 'condense'
+            : 'generate';
+    } else if (genericLimit !== undefined && !providerExceededTokenLimit) {
+        if (
+            genericLimit === 'maxTokensTotal' &&
+            lastExecutedStepId === 'generate'
+        ) {
+            stoppedBeforeStepKind = hasAssessmentStep ? 'assess' : 'finalize';
+        } else {
+            stoppedBeforeStepKind =
+                blockedStepKind ??
+                (lastExecutedStepId === undefined
+                    ? undefined
+                    : workflowStepKind(lastExecutedStepId));
+        }
+    }
     const workflowLineage = buildWorkflowLineage({
         execution,
         workflow,
