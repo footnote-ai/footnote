@@ -1,15 +1,14 @@
 # Realtime Voice alignment
 
-Updated: 2026-10-31. PR #965 adds synthetic Standard and Live voice paths to the
-earlier call-state, Workflow and controlled-delivery slices. Owner:
-[#558](https://github.com/footnote-ai/footnote/issues/558), still open.
+Updated: 2026-11-01. Owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
 
-This page tracks what the code does and which tests cover it. PR #965 connects
-Discord Standard and Live modes to the bounded Workflow and approval state.
-Synthetic tests cover the adapters and call path; live provider use and real
-Discord playback remain unverified. The [architecture guide](../architecture/realtime-voice.md)
-describes the current modes, while the [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
-tracks remaining evaluation and consent work.
+PR #965 connects Discord's Standard and Live modes to the existing Workflow
+and answer-approval path. The adapters and call lifecycle have synthetic tests.
+Paid-provider behavior and real Discord playback are still unverified.
+
+The [architecture guide](../architecture/realtime-voice.md) describes the
+implementation. The [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
+covers the remaining work and consent decisions.
 
 ## Alignment matrix
 
@@ -206,35 +205,30 @@ remain ineligible for Standard speech.
 
 ## Voice modes and remaining gates
 
-PR #965 implements both speech paths around one shared Workflow. Standard is
-the default: OpenRouter transcribes, Workflow reviews, then OpenRouter TTS
-synthesizes only the approved exact text. Live is opt-in: OpenAI GPT-Live handles
-conversation and client delegation, while Footnote invokes the same Workflow
-and appends only an approved result as commentary. GPT-Live may speak on its own
-or paraphrase a reviewed answer; that is not exact approved playback.
+Both modes use the same Workflow. **Standard** transcribes speech through
+OpenRouter, reviews the answer and sends the approved text to OpenRouter TTS.
+**Live** uses GPT-Live for conversation and delegates substantive requests to
+Workflow. The backend appends approved answers as commentary, but GPT-Live may
+speak independently or paraphrase them. That is not exact-text playback.
 
-The `/call` mode option and `VOICE_DEFAULT_MODE` select standard/live before
-connection. Calls have a 60-second default cap and configured developer-only
-five-minute override. The call cap is distinct from the 60-second Workflow
-execution deadline. Only the initiating human's audio is forwarded; another
-human joining or the caller muting, deafening or leaving closes the session.
-The older OpenAI Realtime path remains as a compatibility/test fallback, not a
-silent provider or mode fallback.
+`/call mode` or `VOICE_DEFAULT_MODE` selects the mode. Calls last up to 60
+seconds, with a five-minute override for the configured developer. Only the
+initiating human's audio is forwarded; the call ends if another human joins
+or the caller mutes, deafens or leaves. The legacy Realtime adapter remains
+available for package tests but is not a fallback for either mode.
 
-`voice.max-answer-tokens` defaults to 160 and sets a per-answer delivery ceiling
-separate from generation tokens. A provider-neutral estimate handles Unicode
-without English word splitting; provider headroom caps Live at 400 estimated
-tokens and Standard at 1,600 estimated tokens plus 3,686 code points. Generation
-keeps the selected TRACE posture, and over-limit answers receive
-`answer_too_long` without a delivery handoff. The estimate is not exact
-provider-token accounting. Intelligent answer condensation is deliberately
-deferred to [#968](https://github.com/footnote-ai/footnote/issues/968) and is not
-required to review or merge #965.
+`voice.max-answer-tokens` defaults to 160 and limits delivered text separately
+from generation tokens. The Unicode-aware estimate does not use English word
+splitting and is not an exact provider count. Internal safeguards cap Live at
+400 estimated tokens and Standard at 1,600 estimated tokens and 3,686 code
+points. TRACE still controls answer style. Oversized answers return
+`answer_too_long` without speech; contextual condensation is tracked in
+[#968](https://github.com/footnote-ai/footnote/issues/968).
 
-Tests use synthetic providers. Live credentials, deployment configuration,
-provider retention, transcript timing, latency, voice quality, usage/cost
-completeness and real Discord playback have not been verified. Multi-person
-consent and history transfer belong to #559.
+All results so far are synthetic. We have not verified provider retention,
+transcript timing, latency, voice quality, complete usage/cost or playback
+in a real Discord call. Multi-person consent and history transfer remain
+with #559.
 
 ## Remaining decisions and gates
 
@@ -259,16 +253,9 @@ content. Reconnect must not bypass the held reservation; confirmed stop or
 settlement restores admission, otherwise operator recovery is required. This is
 implemented for the synthetic process-local boundary above, not a live-provider stop guarantee.
 
-Before paid/live rollout, verify provider behavior and retention, deployment
-capacity/recovery ownership and local playback on real Discord. The bounded
-Workflow admission/persistence, 30-second result TTL, audio path and call
-lifetime limits are implemented with synthetic evidence.
-The [ordered slices](../proposals/realtime-talker-reasoner.md#remaining-558-follow-up-sequence)
-assign identity, asynchronous delivery, gating and adapter work to #558.
-[#559](https://github.com/footnote-ai/footnote/issues/559) must separately approve
-cross-surface consent, retention/deletion and historical playback policy.
-
-Provider behavior is unverified in Footnote. OpenRouter STT/TTS and OpenAI
-GPT-Live client delegation have synthetic adapter tests, but no live audio,
-latency, voice quality, retention or complete cost measurement has been checked.
-Paid experiments need separate approval.
+Before rollout, test provider behavior, retention, recovery after failure,
+and playback on a real Discord call. The 30-second result TTL, call limits
+and Workflow admission are tested only with synthetic providers. The
+[ordered slices](../proposals/realtime-talker-reasoner.md#remaining-558-follow-up-sequence)
+track work in #558; paid tests need separate approval. #559 must settle
+cross-surface consent, retention, deletion and historical playback policy.
