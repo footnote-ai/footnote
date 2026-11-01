@@ -1,44 +1,31 @@
 # Realtime conversation with background reasoning
 
-Status: PR #965 implements Standard and Live adapters, Discord mode selection, a bounded call lifecycle, Workflow approval delivery, and a shared answer-length ceiling with synthetic provider tests. No paid provider or live Discord call has been verified. Intelligent condensation is deliberately deferred to [#968](https://github.com/footnote-ai/footnote/issues/968) and is not a prerequisite for #965. Updated 2026-10-31.
+Status: PR #965 connects Standard and Live to Discord and the reviewed Workflow. The call and answer limits have synthetic tests, but neither mode has been tested with paid providers or real Discord audio. Answer condensation is tracked in [#968](https://github.com/footnote-ai/footnote/issues/968) and does not block #965. Updated 2026-11-01.
 Primary owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
 Conversation continuity and retention remain governed by
 [#559](https://github.com/footnote-ai/footnote/issues/559).
 
 ## Recommendation
 
-Let the Talker handle the conversation while Footnote's existing Workflow
-works on the answer. The Talker listens, acknowledges people, manages turn-taking
-and speaks approved material. Workflow handles planning, retrieval, generation,
-review and policy decisions in the background. An answer may arrive after the
-conversation has moved on.
+Let the Talker manage speech and turn-taking while Footnote's existing Workflow
+handles planning, retrieval, generation and review. Acknowledgements and ordinary
+conversation can continue while Workflow runs, but an approved answer may arrive
+after the caller has moved on.
 
-Start with one active call, one pending question, and one deliverable result.
-Keep their state beside the backend Realtime session. Reuse the workflow core,
-conversation projection, speech resolver, and execution records. Do not add a
-conversation database, event bus, agent framework, or general-purpose coordinator.
-The [alignment tracker](../status/realtime-voice-alignment.md) records what exists
-and which parts have only synthetic evidence.
-Backend call state and background Workflow execution have synthetic tests; see
-the [alignment tracker](../status/realtime-voice-alignment.md#synthetic-call-state-foundation)
-and [execution details](#implemented-workflow-admission-and-capacity).
-Answer approval and delivery handoff are also implemented in tests, including
-[playback status tracking](../architecture/realtime-voice.md#final-response-approval-and-staging).
-Standard sends Discord audio to OpenRouter transcription, runs the existing
-Workflow, and synthesizes only an approved answer. Live opens a backend-owned
-GPT-Live session, associates client delegations with transcript events and call
-state, and appends only an approved Workflow answer as commentary. Synthetic
-provider requests and audio events are tested; neither paid provider path has
-been exercised end to end.
+Keep the first version small: one call, one pending question and one approved
+delivery slot. Store temporary state with the backend session. Reuse conversation
+projection, the existing Workflow, speech selection and canonical Run records
+rather than adding a new database, queue or coordinator.
 
-Live aims for natural conversation while Workflow reasons in the background;
-Standard uses transcription and controlled speech to deliver the reviewed text.
-Neither option can authorize tools or change the Workflow's approval rules.
-
-Fixed acknowledgements and exact-text synthesis are useful first tests. Live
-speech needs separate evaluation: GPT-Live may speak without calling Workflow
-and may paraphrase its results. A paraphrase is not the exact approved answer,
-even when it is based on one. The mode choice must make that difference clear.
+PR #965 connects both modes to those boundaries. Standard transcribes through
+OpenRouter and synthesizes the reviewed text. Live matches GPT-Live client
+delegations to transcript events, runs the same Workflow and appends approved
+text as commentary. GPT-Live can still speak independently or paraphrase, so a
+commentary handoff does not prove exactly what was spoken. Both paths have
+synthetic tests, not paid-provider or real Discord evidence. The
+[alignment tracker](../status/realtime-voice-alignment.md) records what has
+been tested; the [architecture guide](../architecture/realtime-voice.md#final-response-approval-and-staging)
+describes approval and delivery.
 
 ## Voice modes and next work
 
@@ -505,14 +492,12 @@ persistent bidirectional Realtime WebSocket session with VAD, cancellation,
 dynamic result updates, and playback control. Treat that capability as
 unverified, not supported merely because a model accepts audio.
 
-PR #965 implements Standard with OpenRouter speech-to-text and text-to-speech,
-with the existing Workflow between them. The TTS adapter receives a complete
-PCM artifact; Discord streams that audio locally. This path does not claim
-full-duplex provider Realtime support.
-
-PR #965 implements Live with OpenAI GPT-Live client delegation. No live access,
-latency or cost has been verified. Its delegated reasoning can still use
-OpenRouter through Footnote's configured generation runtime.
+PR #965 uses OpenRouter STT and TTS for Standard, with the existing
+Workflow between them. The TTS adapter returns complete PCM audio, which
+Discord then streams. This is not a full-duplex Realtime connection. Live uses
+OpenAI GPT-Live client delegation, and its delegated Workflow can use any
+configured reasoning provider, including OpenRouter. Neither path has been
+tested for live latency or cost.
 
 Evaluate the intersection of provider/model features and the concrete adapter:
 finalized input and speaker association, controlled speech, cancellation,
@@ -524,10 +509,9 @@ only capabilities actually required by the selected experiment.
 
 ## Remaining #558 follow-up sequence
 
-PR #965 supplies synthetic coverage for both speech modes and Discord mode
-selection. The remaining work in #558 is real-provider evaluation and any
-corrections it identifies; multi-person consent and retention remain with
-#559. This table tracks those limits rather than repeating landed implementation.
+PR #965 has synthetic tests for both modes and Discord selection.
+#558 still needs real-provider tests and any resulting fixes. #559 owns
+multi-person consent and retention.
 
 | Order / owner                                                                                              | Scope                                                                                                                                                                                                         | Acceptance evidence                                                                                                                                                                                                             |
 | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -548,17 +532,13 @@ not assume it is sufficient. A full Talker–Reasoner agent framework, durable
 queue, conversation store, or streaming knowledge-chunk protocol adds lifecycle
 and privacy obligations without solving the first missing boundary. Defer them.
 
-#558 should evaluate both paths with separate approval for paid/live checks.
-Standard must deliver reviewed text and stop stale playback after interruption
-or revocation. Live must handle conversation during a pending Run, recover from
-interruptions and distinguish paraphrased speech from the reviewed answer.
-Measure their latency and cost separately; passing synthetic tests doesn't
-prove Live responsiveness.
+#558 needs separately approved paid/live tests. For Standard, check that
+speech matches reviewed text and stops after interruption or revocation. For
+Live, check conversation during pending Workflow runs, interruption recovery
+and how paraphrases differ from reviewed text. Measure latency and cost in
+each mode.
 
-The conservative eligibility mapping, slot bounds, single-call lifecycle,
-defaults and both provider adapters are implemented in PR #965 with synthetic
-evidence. Real provider behavior, deployment configuration, multi-speaker
-support and broader consent/retention remain unresolved. #559 must separately
-settle continuity policy; this proposal does not approve that ADR. Staging an
-approved answer does not prove the Live model's spoken paraphrase or complete
-the conversational Talker experience.
+PR #965 implements the call limits, approval checks and provider adapters with
+synthetic evidence. Deployment behavior, real-provider output and broader
+consent or retention policy remain unverified. #559 owns the continuity
+decision; staging an answer is not proof of what GPT-Live spoke.

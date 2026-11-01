@@ -2,19 +2,18 @@
 
 ## Summary
 
-The realtime voice system is the part of Footnote that lets the Discord bot have a live spoken conversation in a voice channel.
+Footnote's Discord bot receives speech and plays replies in a voice channel. The
+bot handles Discord audio; the backend handles providers, Workflow and usage
+records. Discord connects to `/api/internal/voice/realtime`, not directly to
+OpenAI.
 
-At a high level, the Discord bot handles the Discord-specific work: joining the channel, listening for speech, and playing audio back into the room. The backend handles the AI-specific work: building instructions, opening the provider session, translating provider events, and recording usage.
-
-Discord does not connect to OpenAI directly. It connects to Footnote's backend at `/api/internal/voice/realtime`, which opens and manages the provider session.
-
-**Scope:** PR #965 implements Standard and Live voice modes around the existing
-Workflow and backend approval gate. Standard transcribes through OpenRouter,
-then synthesizes only approved text. Live uses a backend-owned GPT-Live session
-and client delegation into the same Workflow; GPT-Live can speak independently
-or paraphrase. The [alignment tracker](../status/realtime-voice-alignment.md)
-records test evidence and remaining limits. No paid provider session or live
-Discord call has been tested.
+PR #965 adds two modes. **Standard** uses OpenRouter to transcribe speech and
+synthesize the Workflow-approved answer. **Live** uses GPT-Live for conversation
+and delegates substantive requests to the same Workflow. GPT-Live can also speak
+on its own or paraphrase approved commentary. The
+[alignment tracker](../status/realtime-voice-alignment.md) lists the tests and
+remaining gaps. Neither mode has been tested with paid providers or a real
+Discord call.
 
 ## High-Level Flow
 
@@ -69,15 +68,15 @@ sequenceDiagram
 
 ## Current mode implementation
 
-The `/call` command offers `standard` and `live` modes and an optional
-developer-only `extended` flag. `VOICE_DEFAULT_MODE` supplies the default.
-Calls are limited to 60 seconds, or five minutes for the configured developer.
-The backend verifies the caller identity across the trusted service boundary;
-Discord forwards audio from that caller only. A second human joining or the
-caller muting, deafening or leaving closes the session.
-`DISCORD_USER_ID` is the authorized human's Discord user ID, not the bot client
-ID. Set the same value in the backend environment and each bot process to enable
-the five-minute override; without it, the backend rejects extended calls.
+`/call` lets the caller choose `standard` or `live`; `VOICE_DEFAULT_MODE`
+sets the default. Calls last up to 60 seconds. The configured developer can
+request five minutes with `extended`. Set `DISCORD_USER_ID` to that person's
+Discord user ID in both the backend and bot process, not to the bot's ID.
+Without it, the backend rejects extended calls.
+
+Only the initiating caller's audio is forwarded. The backend checks caller
+identity, and the call ends if another person joins or the caller mutes, deafens
+or leaves.
 
 ### Standard
 
@@ -100,13 +99,10 @@ Live audio therefore carries no exact-text approval or playback receipt.
 
 ### Answer length
 
-The administrator-facing `voice.max-answer-tokens` setting defaults to 160, a
-conservative per-answer ceiling that leaves room for turn-taking in a 60-second
-call. It limits each delivered answer independently of the Workflow's generation
-budget and is not a target. Generation guidance follows the
-selected TRACE posture; it does not raise Tightness or ask every answer to be
-maximally brief. Rationale, attribution, caution and extent remain when they
-matter to the answer.
+`voice.max-answer-tokens` defaults to 160. It caps the text delivered to
+speech, not the model's generation budget, and it is not a target length.
+Generation still follows TRACE. The limit does not raise Tightness or remove
+needed reasoning, attribution or qualifications.
 
 The backend estimates answer tokens because the available providers do not
 share a tokenizer. The estimate counts ASCII letters and spaces in groups of
@@ -276,15 +272,15 @@ Realtime is a separate streaming session, not another route through
 records implemented behavior, intentional differences, gaps, evidence, and issue
 ownership relative to ordinary chat.
 
-Voice Workflow uses the same orchestrator, model profiles, routing, planning,
-caching, accounting and fallback settings as text chat. Standard and Live call
-the backend Workflow after their respective turn/delegation checks. The backend
-restricts Voice to answering and approved read-only tools, checks answers before
-speech and tracks one pending delivery. Synthetic provider and Discord tests
-cover the integrated paths; no paid provider or live Discord call has been run.
-One process-wide reservation remains occupied until work settles, even after a
-call ends. A 60-second execution deadline and 5-second cancellation watchdog
-flag work that has not stopped.
+Voice uses text chat's Workflow, model profiles, routing, planning, caching,
+cost accounting and fallback settings. Both modes apply their own input checks
+before starting Workflow. Voice can answer and use approved read-only tools;
+it checks answers before speech and holds at most one pending delivery.
+
+The process-wide Workflow reservation stays occupied until work settles, even
+if the call ends. A 60-second execution deadline and a 5-second cancellation
+watchdog flag work that has not stopped. These paths have synthetic tests, but
+no paid provider or real Discord call has been tested.
 
 Canonical Voice storage is metadata-only; operator-controlled diagnostics have a
 separate boundary described below. The [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
