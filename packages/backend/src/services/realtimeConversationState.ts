@@ -369,26 +369,15 @@ export class RealtimeConversationState {
               reason:
                   'duplicate' | 'occupied' | 'degraded' | 'intent_unavailable';
           } {
-        if (executionReservation?.degradedReason !== undefined)
-            return { accepted: false, reason: 'degraded' };
-        if (this.lastStartedRevision === this.revision)
-            return { accepted: false, reason: 'duplicate' };
-        if (executionReservation !== undefined)
-            return { accepted: false, reason: 'occupied' };
-        if (
-            this.closed ||
-            !this.hasConsentingAudience() ||
-            this.intent?.status !== 'pending' ||
-            !this.turns.some((turn) => turn.turnId === this.intent?.turnId)
-        )
-            return { accepted: false, reason: 'intent_unavailable' };
+        const rejection = this.executionStartRejection();
+        if (rejection) return { accepted: false, reason: rejection };
         let snapshot: RealtimeConversationSnapshot | undefined =
             this.snapshot();
         const reservation: ExecutionReservation = {
             owner: this.instanceId,
             revision: this.revision,
             sessionCorrelationId: this.sessionCorrelationId,
-            turnId: this.intent.turnId,
+            turnId: this.intent!.turnId,
             controller: new AbortController(),
             startedAt: Date.now(),
         };
@@ -430,6 +419,26 @@ export class RealtimeConversationState {
                     executionReservation = undefined;
             });
         return { accepted: true };
+    }
+
+    private executionStartRejection():
+        | 'duplicate'
+        | 'occupied'
+        | 'degraded'
+        | 'intent_unavailable'
+        | undefined {
+        if (executionReservation?.degradedReason !== undefined)
+            return 'degraded';
+        if (this.lastStartedRevision === this.revision) return 'duplicate';
+        if (executionReservation !== undefined) return 'occupied';
+        if (
+            this.closed ||
+            !this.hasConsentingAudience() ||
+            this.intent?.status !== 'pending' ||
+            !this.turns.some((turn) => turn.turnId === this.intent?.turnId)
+        )
+            return 'intent_unavailable';
+        return undefined;
     }
 
     private completeExecution(
