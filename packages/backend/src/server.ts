@@ -10,16 +10,13 @@ import './bootstrapEnv.js';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
     createOpenAiImageRuntime,
-    createOpenAiRealtimeVoiceRuntime,
     createOpenAiTtsRuntime,
     createVoltAgentRuntime,
     type GenerationRuntime,
     type ImageGenerationRuntime,
-    type RealtimeVoiceRuntime,
 } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { ResponseCandidate } from '@footnote/contracts/web';
@@ -81,7 +78,6 @@ import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
 import { createOpenAiLiveVoiceSession } from './services/openAiLiveVoice.js';
 import { createOpenRouterVoiceService } from './services/openRouterVoice.js';
-import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
 import { createChatProfilesHandler } from './handlers/chatProfiles.js';
 import { createBoundedOllamaGenerationRuntime } from './services/boundedOllamaRuntime.js';
 import { createOpenMeteoForecastTool } from './services/contextIntegrations/weather/index.js';
@@ -93,17 +89,6 @@ import { createOidcAccountClient } from './services/oidcClient.js';
 import { settingsSpecEntries } from './config/settings-spec.js';
 import { SqliteAccountStore } from './storage/accounts/sqliteAccountStore.js';
 import { isOllamaBaseUrlAvailable } from './config/sections/modelProfiles.js';
-
-/**
- * @footnote-logger: openAiRealtimeVoiceRuntime
- * @logs: Provider websocket lifecycle and session update metadata for realtime voice.
- * @footnote-risk: high - Missing logs hide provider-level realtime failures.
- * @footnote-ethics: high - Realtime audio is sensitive; log metadata only.
- */
-const openAiRealtimeLogger =
-    typeof logger.child === 'function'
-        ? logger.child({ module: 'openAiRealtimeVoiceRuntime' })
-        : logger;
 
 // --- Path configuration ---
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -140,7 +125,6 @@ let internalImageTaskService: ReturnType<
 let internalVoiceTtsService: ReturnType<
     typeof createInternalVoiceTtsService
 > | null = null;
-let realtimeVoiceRuntime: RealtimeVoiceRuntime | null = null;
 let openRouterVoiceService: ReturnType<
     typeof createOpenRouterVoiceService
 > | null = null;
@@ -409,21 +393,13 @@ const initializeServices = () => {
                 requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
             }),
         });
-        realtimeVoiceRuntime = createOpenAiRealtimeVoiceRuntime({
-            apiKey: runtimeConfig.openai.apiKey,
-            requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
-            defaultModel: runtimeConfig.openai.defaultRealtimeModel,
-            defaultVoice: runtimeConfig.openai.defaultRealtimeVoice,
-            logger: openAiRealtimeLogger,
-        });
     } else {
         openAiLiveVoiceSessionFactory = null;
         imageGenerationRuntime = null;
         internalImageTaskService = null;
         internalVoiceTtsService = null;
-        realtimeVoiceRuntime = null;
         logger.warn(
-            'OPENAI_API_KEY is missing; OpenAI-only image and voice routes will return 503 until configured.'
+            'OPENAI_API_KEY is missing; OpenAI-only image and Live voice routes will be unavailable until configured.'
         );
     }
 
@@ -915,7 +891,6 @@ const handleChatRequest = createChatHandler({
 });
 const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
     createInternalVoiceRealtimeHandler({
-        realtimeVoiceRuntime,
         openAiLiveVoiceSessionFactory,
         defaultMode: runtimeConfig.voice.defaultMode,
         openRouterVoiceService,
@@ -927,10 +902,6 @@ const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
             : null,
         developerUserId: runtimeConfig.voice.developerUserId,
         profile: runtimeConfig.profile,
-        fallbackOptions: {
-            model: runtimeConfig.openai.defaultRealtimeModel,
-            voice: runtimeConfig.openai.defaultRealtimeVoice,
-        },
         traceApiToken: runtimeConfig.trace.apiToken,
         serviceToken: runtimeConfig.reflect.serviceToken,
         serviceRateLimiter:
@@ -939,31 +910,6 @@ const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
                 limit: runtimeConfig.rateLimits.chatService.limit,
                 window: runtimeConfig.rateLimits.chatService.windowMs,
             }),
-        buildInstructions: buildRealtimeInstructions,
-        recordExecution: async (responseId, workflow) => {
-            const now = Date.now();
-            const metadata: ResponseMetadata = {
-                responseId,
-                provenance: 'Inferred',
-                safetyTier: 'Low',
-                tradeoffCount: 0,
-                chainHash: createHash('sha256')
-                    .update(responseId)
-                    .digest('hex')
-                    .slice(0, 16),
-                licenseContext: 'MIT + HL3',
-                modelVersion:
-                    workflow.steps[0]?.attempts?.[0]?.actualModel ?? 'unknown',
-                staleAfter: new Date(
-                    now + 90 * 24 * 60 * 60 * 1000
-                ).toISOString(),
-                citations: [],
-                workflow,
-                trace_target: {},
-                trace_final: {},
-            };
-            await storeTraceWithStore(metadata);
-        },
     });
 const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
     handlers: {

@@ -8,8 +8,6 @@
 
 import { envDefaultValues, envSpecByKey } from '@footnote/config-spec';
 import type {
-    SupportedOpenAIRealtimeModel,
-    SupportedOpenAITtsVoice,
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
@@ -28,14 +26,6 @@ const VALID_REASONING_EFFORTS = new Set<SupportedReasoningEffort>(
 const VALID_VERBOSITY_LEVELS = new Set<SupportedVerbosity>(
     (envSpecByKey.DEFAULT_VERBOSITY.allowedValues ??
         []) as readonly SupportedVerbosity[]
-);
-const VALID_REALTIME_MODELS = new Set<SupportedOpenAIRealtimeModel>(
-    (envSpecByKey.REALTIME_DEFAULT_MODEL.allowedValues ??
-        []) as readonly SupportedOpenAIRealtimeModel[]
-);
-const VALID_REALTIME_VOICES = new Set<SupportedOpenAITtsVoice>(
-    (envSpecByKey.REALTIME_DEFAULT_VOICE.allowedValues ??
-        []) as readonly SupportedOpenAITtsVoice[]
 );
 
 /**
@@ -63,20 +53,6 @@ export const buildOpenAISection = (
         env.PLANNER_ALLOW_TEXT_JSON_COMPATIBILITY_FALLBACK,
         envDefaultValues.PLANNER_ALLOW_TEXT_JSON_COMPATIBILITY_FALLBACK,
         'PLANNER_ALLOW_TEXT_JSON_COMPATIBILITY_FALLBACK',
-        warn
-    ),
-    defaultRealtimeModel: parseStringUnionEnv(
-        env.REALTIME_DEFAULT_MODEL,
-        envDefaultValues.REALTIME_DEFAULT_MODEL,
-        'REALTIME_DEFAULT_MODEL',
-        VALID_REALTIME_MODELS,
-        warn
-    ),
-    defaultRealtimeVoice: parseStringUnionEnv(
-        env.REALTIME_DEFAULT_VOICE,
-        envDefaultValues.REALTIME_DEFAULT_VOICE,
-        'REALTIME_DEFAULT_VOICE',
-        VALID_REALTIME_VOICES,
         warn
     ),
     defaultReasoningEffort: parseStringUnionEnv(

@@ -11,18 +11,12 @@ import http from 'node:http';
 import { Duplex } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import WebSocket from 'ws';
-import type {
-    InternalVoiceRealtimeServerEvent,
-    InternalVoiceSessionContext,
-} from '@footnote/contracts/voice';
-import type { WorkflowRecord } from '@footnote/contracts/policy';
-import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
+import type { InternalVoiceRealtimeServerEvent } from '@footnote/contracts/voice';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import type {
     RealtimeVoiceRuntime,
     RealtimeVoiceSession,
 } from '@footnote/agent-runtime';
-import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 import type { OpenRouterVoiceService } from '../src/services/openRouterVoice.js';
 import type {
     OpenAiLiveVoiceEvent,
@@ -162,31 +156,13 @@ class StubOpenAiLiveVoiceSession implements OpenAiLiveVoiceSession {
 type RealtimeHandlerHarness = {
     close: () => Promise<void>;
     connect: (headers?: Record<string, string>) => Promise<WebSocket>;
-    lastSession: () => StubRealtimeSession | null;
     lastLiveSession: () => StubOpenAiLiveVoiceSession | null;
-    recordedUsage: BackendLLMCostRecord[];
-    recordedExecutions: Array<{ responseId: string; workflow: WorkflowRecord }>;
-    requests: Array<{
-        instructions: string;
-        context: InternalVoiceSessionContext;
-        options?: {
-            model?: string;
-            voice?: string;
-            temperature?: number;
-            maxResponseOutputTokens?: number;
-        };
-    }>;
+    legacySessionCreations: () => number;
 };
 
 const createRealtimeHandlerHarness = async (
     overrides: {
         profile?: typeof testProfile;
-        supportsModel?: (model: string) => boolean;
-        supportsVoice?: (voice: string) => boolean;
-        recordExecution?: (
-            responseId: string,
-            workflow: WorkflowRecord
-        ) => void;
         setTimer?: typeof setTimeout;
         clearTimer?: typeof clearTimeout;
         openRouterVoiceService?: OpenRouterVoiceService | null;
@@ -196,67 +172,74 @@ const createRealtimeHandlerHarness = async (
         openAiLiveVoiceSessionFactory?: OpenAiLiveVoiceSessionFactory | null;
     } = {}
 ): Promise<RealtimeHandlerHarness> => {
-    const requests: RealtimeHandlerHarness['requests'] = [];
-    const recordedUsage: BackendLLMCostRecord[] = [];
-    const recordedExecutions: RealtimeHandlerHarness['recordedExecutions'] = [];
-    let currentSession: StubRealtimeSession | null = null;
     let currentLiveSession: StubOpenAiLiveVoiceSession | null = null;
-    let lastContext: InternalVoiceSessionContext = {
-        participants: [],
-    };
+    let legacySessionCreations = 0;
+    const liveFactory =
+        overrides.openAiLiveVoiceSessionFactory === undefined
+            ? async () => new StubOpenAiLiveVoiceSession()
+            : overrides.openAiLiveVoiceSessionFactory;
+    const workflowRunner: RealtimeWorkflowRunner | null =
+        overrides.workflowRunner === undefined
+            ? {
+                  async runRealtimeConversation(_snapshot, context) {
+                      context.onRunStarted('test-run');
+                      return {
+                          responseId: 'test-response',
+                          runId: 'test-run',
+                          status: 'completed',
+                          finalResponse: {
+                              disposition: 'approved' as const,
+                              responseId: 'test-response',
+                              runId: 'test-run',
+                              candidateId: 'candidate',
+                              generationStepId: 'answer',
+                              assessmentStepId: 'review',
+                              text: 'Test answer.',
+                          },
+                      };
+                  },
+              }
+            : overrides.workflowRunner;
     const runtime: RealtimeVoiceRuntime = {
         kind: 'stub-realtime-runtime',
         provider: 'openai',
-        supportsModel: overrides.supportsModel ?? (() => true),
-        supportsVoice: overrides.supportsVoice ?? (() => true),
-        async createSession(request) {
-            currentSession = new StubRealtimeSession();
-            requests.push({
-                instructions: request.instructions,
-                context: lastContext,
-                options: request.options,
-            });
-            return currentSession;
+        supportsModel: () => true,
+        supportsVoice: () => true,
+        async createSession() {
+            legacySessionCreations += 1;
+            return new StubRealtimeSession();
         },
     };
 
-    const { handleUpgrade } = createInternalVoiceRealtimeHandler({
-        realtimeVoiceRuntime: runtime,
+    const handlerOptions: Parameters<
+        typeof createInternalVoiceRealtimeHandler
+    >[0] = {
         defaultMode: overrides.defaultMode ?? 'live',
-        openAiLiveVoiceSessionFactory: overrides.openAiLiveVoiceSessionFactory
+        openAiLiveVoiceSessionFactory: liveFactory
             ? async (request) => {
-                  const created =
-                      await overrides.openAiLiveVoiceSessionFactory!(request);
+                  const created = await liveFactory(request);
                   currentLiveSession = created as StubOpenAiLiveVoiceSession;
                   return created;
               }
             : null,
         openRouterVoiceService: overrides.openRouterVoiceService,
-        workflowRunner: overrides.workflowRunner,
+        workflowRunner,
         developerUserId: overrides.developerUserId,
         profile: overrides.profile ?? testProfile,
-        fallbackOptions: { model: 'gpt-realtime-mini', voice: 'echo' },
         traceApiToken: 'trace-token',
         serviceToken: 'service-token',
         serviceRateLimiter: new SimpleRateLimiter({
             limit: 10,
             window: 60000,
         }),
-        buildInstructions: (context) => {
-            lastContext = context;
-            return `participants=${context.participants.length}`;
-        },
-        recordUsage: (record) => {
-            recordedUsage.push(record);
-        },
-        recordExecution:
-            overrides.recordExecution ??
-            ((responseId, workflow) => {
-                recordedExecutions.push({ responseId, workflow });
-            }),
         setTimer: overrides.setTimer,
         clearTimer: overrides.clearTimer,
-    });
+    };
+    const { handleUpgrade } = createInternalVoiceRealtimeHandler(
+        Object.assign(handlerOptions, {
+            realtimeVoiceRuntime: runtime,
+        }) as Parameters<typeof createInternalVoiceRealtimeHandler>[0]
+    );
 
     const server = http.createServer((_req, res) => {
         res.statusCode = 404;
@@ -298,22 +281,19 @@ const createRealtimeHandlerHarness = async (
                 ws.once('open', () => resolve(ws));
                 ws.once('error', reject);
             }),
-        lastSession: () => currentSession,
         lastLiveSession: () => currentLiveSession,
-        recordedUsage,
-        recordedExecutions,
-        requests,
+        legacySessionCreations: () => legacySessionCreations,
     };
 };
 
-const waitForRealtimeSession = (
+const waitForLiveSession = (
     harness: RealtimeHandlerHarness,
-    previous?: StubRealtimeSession
-): Promise<StubRealtimeSession> =>
+    previous?: StubOpenAiLiveVoiceSession
+): Promise<StubOpenAiLiveVoiceSession> =>
     new Promise((resolve, reject) => {
         const startedAt = Date.now();
         const poll = () => {
-            const current = harness.lastSession();
+            const current = harness.lastLiveSession();
             if (current && current !== previous) {
                 resolve(current);
                 return;
@@ -322,8 +302,8 @@ const waitForRealtimeSession = (
                 reject(
                     new Error(
                         previous
-                            ? 'Second Realtime session was not created.'
-                            : 'Realtime session was not created.'
+                            ? 'Second Live session was not created.'
+                            : 'Live session was not created.'
                     )
                 );
                 return;
@@ -366,7 +346,7 @@ const createFakeClock = () => {
     };
 };
 
-test('Realtime call limit starts after provider readiness and closes at 60 seconds', async () => {
+test('backend closes a Live call after its 60-second limit', async () => {
     const clock = createFakeClock();
     const harness = await createRealtimeHandlerHarness({
         setTimer: clock.setTimer,
@@ -379,23 +359,27 @@ test('Realtime call limit starts after provider readiness and closes at 60 secon
         ws.send(
             JSON.stringify({
                 type: 'session.start',
-                context: { participants: [] },
+                mode: 'live',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
             })
         );
-        const session = await waitForRealtimeSession(harness);
-        clock.tick(10_000);
-        session.emitServerEvent({ type: 'session.ready' });
+        const session = await waitForLiveSession(harness);
         await waitForJsonMessage(ws);
         const closedMessage = waitForJsonMessage(ws);
         clock.tick(59_999);
-        assert.deepEqual(session.closedReasons, []);
+        assert.equal(session.closed, false);
 
         clock.tick(1);
-        assert.deepEqual(session.closedReasons, ['call_limit_exceeded']);
         assert.deepEqual(await closedMessage, {
             type: 'session.closed',
             reason: 'call_limit_exceeded',
         });
+        assert.equal(session.closed, true);
         await closeWebSocket(ws);
     } finally {
         if (ws) await closeWebSocket(ws);
@@ -403,11 +387,12 @@ test('Realtime call limit starts after provider readiness and closes at 60 secon
     }
 });
 
-test('Realtime provider setup times out if the session never becomes ready', async () => {
+test('backend closes a Live call when provider setup exceeds its timeout', async () => {
     const clock = createFakeClock();
     const harness = await createRealtimeHandlerHarness({
         setTimer: clock.setTimer,
         clearTimer: clock.clearTimer,
+        openAiLiveVoiceSessionFactory: () => new Promise(() => undefined),
     });
     let ws: WebSocket | undefined;
 
@@ -416,10 +401,15 @@ test('Realtime provider setup times out if the session never becomes ready', asy
         ws.send(
             JSON.stringify({
                 type: 'session.start',
-                context: { participants: [] },
+                mode: 'live',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
             })
         );
-        const session = await waitForRealtimeSession(harness);
         const notReadyMessage = waitForJsonMessage(ws);
         ws.send(JSON.stringify({ type: 'input_audio.commit' }));
         assert.deepEqual(await notReadyMessage, {
@@ -431,7 +421,6 @@ test('Realtime provider setup times out if the session never becomes ready', asy
 
         clock.tick(15_000);
 
-        assert.deepEqual(session.closedReasons, ['setup_timeout']);
         assert.deepEqual(await closedMessage, {
             type: 'session.closed',
             reason: 'setup_timeout',
@@ -443,7 +432,7 @@ test('Realtime provider setup times out if the session never becomes ready', asy
     }
 });
 
-test('only one authenticated Realtime call can hold backend session capacity', async () => {
+test('only one authenticated Live call can hold backend session capacity', async () => {
     const harness = await createRealtimeHandlerHarness();
     let firstSocket: WebSocket | undefined;
     let secondSocket: WebSocket | undefined;
@@ -453,18 +442,29 @@ test('only one authenticated Realtime call can hold backend session capacity', a
         firstSocket.send(
             JSON.stringify({
                 type: 'session.start',
-                context: { participants: [] },
+                mode: 'live',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
             })
         );
-        const firstSession = await waitForRealtimeSession(harness);
-        firstSession.emitServerEvent({ type: 'session.ready' });
+        const firstSession = await waitForLiveSession(harness);
         await waitForJsonMessage(firstSocket);
 
         secondSocket = await harness.connect();
         secondSocket.send(
             JSON.stringify({
                 type: 'session.start',
-                context: { participants: [] },
+                mode: 'live',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
             })
         );
         assert.deepEqual(await waitForJsonMessage(secondSocket, 100), {
@@ -472,7 +472,7 @@ test('only one authenticated Realtime call can hold backend session capacity', a
             message: 'A voice call is already active.',
             code: 'voice_session_occupied',
         });
-        assert.equal(harness.requests.length, 1);
+        assert.equal(harness.legacySessionCreations(), 0);
 
         const firstClosedMessage = waitForJsonMessage(firstSocket);
         firstSocket.send(JSON.stringify({ type: 'session.close' }));
@@ -483,15 +483,18 @@ test('only one authenticated Realtime call can hold backend session capacity', a
         secondSocket.send(
             JSON.stringify({
                 type: 'session.start',
-                context: { participants: [] },
+                mode: 'live',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
             })
         );
-        const secondSession = await waitForRealtimeSession(
-            harness,
-            firstSession
-        );
-        assert.equal(harness.requests.length, 2);
-        secondSession.emitServerEvent({ type: 'session.ready' });
+        const secondSession = await waitForLiveSession(harness, firstSession);
+        assert.equal(firstSession.closed, true);
+        assert.equal(secondSession.closed, false);
         await waitForJsonMessage(secondSocket);
         await closeWebSocket(secondSocket);
     } finally {
@@ -550,13 +553,10 @@ const closeWebSocket = async (ws: WebSocket): Promise<void> =>
 
 test('internal realtime handler rejects websocket upgrades without trusted auth', () => {
     const { handleUpgrade } = createInternalVoiceRealtimeHandler({
-        realtimeVoiceRuntime: null,
         profile: testProfile,
-        fallbackOptions: { model: 'gpt-realtime-mini', voice: 'echo' },
         traceApiToken: 'trace-token',
         serviceToken: 'service-token',
         serviceRateLimiter: new SimpleRateLimiter({ limit: 10, window: 60000 }),
-        buildInstructions: () => 'test instructions',
     });
     const socket = new FakeUpgradeSocket();
     const request = {
@@ -571,258 +571,12 @@ test('internal realtime handler rejects websocket upgrades without trusted auth'
     assert.equal(socket.endedByHandler, true);
 });
 
-test('Realtime records one private canonical Run per response with shared session correlation', async () => {
-    const harness = await createRealtimeHandlerHarness();
-
-    let ws: WebSocket | undefined;
-    try {
-        ws = await harness.connect();
-        ws.send(
-            JSON.stringify({
-                type: 'session.start',
-                context: { participants: [] },
-            })
-        );
-        const session = await waitForRealtimeSession(harness);
-
-        session.emitServerEvent({
-            type: 'response.started',
-            responseId: 'provider-a',
-        });
-        session.emitServerEvent({
-            type: 'response.done',
-            responseId: 'provider-a',
-            status: 'completed',
-            usage: {
-                tokensPrompt: 20,
-                tokensCompletion: 10,
-                model: 'gpt-realtime',
-            },
-        });
-        session.emitServerEvent({
-            type: 'response.started',
-            responseId: 'provider-b',
-        });
-        session.emitServerEvent({
-            type: 'response.done',
-            responseId: 'provider-b',
-            status: 'completed',
-        });
-
-        assert.equal(harness.recordedExecutions.length, 2);
-        const [first, second] = harness.recordedExecutions;
-        assert.ok(first && second);
-        assert.notEqual(first.workflow.runId, second.workflow.runId);
-        assert.equal(first.responseId, first.workflow.runId);
-        assert.equal(
-            first.workflow.sessionCorrelationId,
-            second.workflow.sessionCorrelationId
-        );
-        assert.equal(first.workflow.steps[0]?.stepKind, 'generate');
-        assert.equal(
-            first.workflow.steps[0]?.attempts?.[0]?.profileId,
-            'winter'
-        );
-        assert.equal(
-            first.workflow.steps[0]?.attempts?.[0]?.actualProvider,
-            'openai'
-        );
-        assert.equal(
-            first.workflow.steps[0]?.attempts?.[0]?.actualModel,
-            'gpt-realtime'
-        );
-        assert.equal(
-            first.workflow.steps[0]?.attempts?.[0]?.settings?.applied
-                ?.effectiveVoice,
-            'echo'
-        );
-        assert.equal(
-            first.workflow.steps[0]?.attempts?.[0]?.usage?.promptTokens,
-            20
-        );
-        assert.equal(second.workflow.steps[0]?.attempts?.[0]?.usage, undefined);
-        assert.equal(
-            second.workflow.steps[0]?.cost?.costCompleteness,
-            'unknown'
-        );
-        assert.equal(second.workflow.steps[0]?.cost?.totalCostUsd, 0);
-        assert.equal(
-            JSON.stringify(harness.recordedExecutions).includes('output_text'),
-            false
-        );
-        const firstRun = first.workflow;
-        const storedMetadata = ResponseMetadataSchema.safeParse({
-            responseId: first.responseId,
-            provenance: 'Inferred',
-            safetyTier: 'Low',
-            tradeoffCount: 0,
-            chainHash: first.responseId,
-            licenseContext: 'MIT + HL3',
-            modelVersion: 'gpt-realtime',
-            staleAfter: new Date(
-                Date.now() + 90 * 24 * 60 * 60 * 1000
-            ).toISOString(),
-            citations: [],
-            workflow: firstRun,
-            trace_target: {},
-            trace_final: {},
-        });
-        assert.equal(storedMetadata.success, true);
-
-        session.emitServerEvent({
-            type: 'response.started',
-            responseId: 'provider-c',
-        });
-        session.emitServerEvent({
-            type: 'response.done',
-            responseId: 'provider-c',
-            status: 'completed',
-            usage: {
-                tokensPrompt: 0,
-                tokensCompletion: 0,
-                model: 'gpt-realtime',
-            },
-        });
-        assert.equal(
-            harness.recordedExecutions[2]?.workflow.steps[0]?.cost
-                ?.totalCostUsd,
-            0
-        );
-        assert.equal(
-            harness.recordedExecutions[2]?.workflow.steps[0]?.cost
-                ?.costCompleteness,
-            'complete'
-        );
-
-        session.emitServerEvent({
-            type: 'response.started',
-            responseId: 'provider-d',
-        });
-        session.emitServerEvent({
-            type: 'response.done',
-            responseId: 'provider-d',
-            status: 'cancelled',
-            terminationReason: 'client_cancelled',
-        });
-        const failed = harness.recordedExecutions[3];
-        assert.equal(failed?.workflow.runStatus, 'failed');
-        assert.equal(failed?.workflow.terminationReason, 'provider_cancelled');
-
-        await closeWebSocket(ws);
-
-        const secondWs = await harness.connect();
-        secondWs.send(
-            JSON.stringify({
-                type: 'session.start',
-                context: { participants: [] },
-            })
-        );
-        const secondSession = await waitForRealtimeSession(harness, session);
-        secondSession.emitServerEvent({
-            type: 'response.started',
-            responseId: 'other-session-response',
-        });
-        secondSession.emitServerEvent({
-            type: 'response.done',
-            responseId: 'other-session-response',
-            status: 'completed',
-        });
-        assert.notEqual(
-            harness.recordedExecutions[0]?.workflow.sessionCorrelationId,
-            harness.recordedExecutions[4]?.workflow.sessionCorrelationId
-        );
-        await closeWebSocket(secondWs);
-    } finally {
-        await harness.close();
-    }
-});
-
-test('Realtime records unfinished responses once when the client socket closes', async () => {
-    const harness = await createRealtimeHandlerHarness();
-
-    try {
-        const ws = await harness.connect();
-        ws.send(
-            JSON.stringify({
-                type: 'session.start',
-                context: { participants: [] },
-            })
-        );
-        const session = await waitForRealtimeSession(harness);
-        session.emitServerEvent({
-            type: 'response.started',
-            responseId: 'unfinished-response',
-        });
-
-        await closeWebSocket(ws);
-        await new Promise((resolve) => setTimeout(resolve, 20));
-
-        assert.equal(harness.recordedExecutions.length, 1);
-        assert.equal(
-            harness.recordedExecutions[0]?.workflow.runStatus,
-            'failed'
-        );
-        assert.equal(
-            harness.recordedExecutions[0]?.workflow.steps[0]?.attempts?.[0]
-                ?.terminationReason,
-            'client_close'
-        );
-        session.emitServerEvent({
-            type: 'session.closed',
-            reason: 'client_close',
-        });
-        assert.equal(harness.recordedExecutions.length, 1);
-    } finally {
-        await harness.close();
-    }
-});
-
-test('Realtime execution-record persistence failure does not block the response', async () => {
-    const harness = await createRealtimeHandlerHarness({
-        recordExecution: () => {
-            throw new Error('test persistence failure');
-        },
-    });
-
-    try {
-        const ws = await harness.connect();
-        ws.send(
-            JSON.stringify({
-                type: 'session.start',
-                context: { participants: [] },
-            })
-        );
-        const session = await waitForRealtimeSession(harness);
-        const response = waitForJsonMessage(ws);
-        session.emitServerEvent({
-            type: 'response.started',
-            responseId: 'provider-response',
-        });
-        session.emitServerEvent({
-            type: 'response.done',
-            responseId: 'provider-response',
-            status: 'completed',
-        });
-        assert.deepEqual(await response, {
-            type: 'response.done',
-            responseId: 'provider-response',
-            status: 'completed',
-        });
-        await closeWebSocket(ws);
-    } finally {
-        await harness.close();
-    }
-});
-
 test('internal realtime handler returns provider_unavailable when runtime is missing', () => {
     const { handleUpgrade } = createInternalVoiceRealtimeHandler({
-        realtimeVoiceRuntime: null,
         profile: testProfile,
-        fallbackOptions: { model: 'gpt-realtime-mini', voice: 'echo' },
         traceApiToken: 'trace-token',
         serviceToken: null,
         serviceRateLimiter: new SimpleRateLimiter({ limit: 10, window: 60000 }),
-        buildInstructions: () => 'test instructions',
     });
     const socket = new FakeUpgradeSocket();
     const request = {
@@ -843,6 +597,88 @@ test('internal realtime handler returns provider_unavailable when runtime is mis
     assert.equal(socket.endedByHandler, true);
 });
 
+test('Live fails closed when GPT-Live is missing even if the legacy runtime exists', async () => {
+    const harness = await createRealtimeHandlerHarness({
+        openAiLiveVoiceSessionFactory: null,
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'question' };
+            },
+            async synthesize() {
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+    });
+    let ws: WebSocket | undefined;
+
+    try {
+        ws = await harness.connect();
+        ws.send(
+            JSON.stringify({
+                type: 'session.start',
+                mode: 'live',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
+            })
+        );
+
+        assert.deepEqual(await waitForJsonMessage(ws), {
+            type: 'error',
+            message: 'Live voice provider is unavailable.',
+            code: 'live_voice_unavailable',
+        });
+        assert.equal(harness.legacySessionCreations(), 0);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard can start when GPT-Live is not configured', async () => {
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'standard',
+        openAiLiveVoiceSessionFactory: null,
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'question' };
+            },
+            async synthesize() {
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+    });
+    let ws: WebSocket | undefined;
+
+    try {
+        ws = await harness.connect();
+        ws.send(
+            JSON.stringify({
+                type: 'session.start',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
+            })
+        );
+
+        const ready = await waitForJsonMessage(ws);
+        assert.equal(ready.type, 'session.ready');
+        assert.equal(ready.mode, 'standard');
+        assert.equal(harness.legacySessionCreations(), 0);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
 test('internal realtime handler rejects invalid realtime payloads after websocket upgrade', async () => {
     const harness = await createRealtimeHandlerHarness();
 
@@ -860,199 +696,6 @@ test('internal realtime handler rejects invalid realtime payloads after websocke
         const message = await waitForJsonMessage(ws);
         assert.equal(message.type, 'error');
         assert.match(String(message.message), /Invalid realtime event/);
-        await closeWebSocket(ws);
-    } finally {
-        await harness.close();
-    }
-});
-
-test('internal realtime handler starts a session and forwards session.ready to the client', async () => {
-    const harness = await createRealtimeHandlerHarness();
-
-    try {
-        const ws = await harness.connect();
-        ws.send(
-            JSON.stringify({
-                type: 'session.start',
-                context: {
-                    participants: [
-                        {
-                            id: 'user-1',
-                            displayName: 'Alice',
-                        },
-                    ],
-                },
-                options: {
-                    model: 'gpt-realtime',
-                    voice: 'alloy',
-                },
-            })
-        );
-
-        const session = await waitForRealtimeSession(harness);
-
-        assert.equal(harness.requests.length, 1);
-        assert.equal(harness.requests[0].options?.model, 'gpt-realtime');
-        assert.equal(harness.requests[0].options?.voice, 'alloy');
-        assert.equal(
-            harness.requests[0].instructions,
-            'participants=1\n\nSpeech delivery guidance: dry and direct'
-        );
-        assert.deepEqual(harness.requests[0].context.participants, [
-            {
-                id: 'user-1',
-                displayName: 'Alice',
-            },
-        ]);
-
-        session.emitServerEvent({ type: 'session.ready' });
-        const readyMessage = await waitForJsonMessage(ws);
-        assert.deepEqual(readyMessage, {
-            type: 'session.ready',
-            mode: 'live',
-            speechSelection: {
-                profileId: 'winter',
-                modality: 'realtime',
-                provider: 'openai',
-                model: 'gpt-realtime',
-                voice: 'alloy',
-                delivery: 'dry and direct',
-                requestedVoice: 'alloy',
-                selectionSource: {
-                    model: 'request_or_session',
-                    voice: 'request_or_session',
-                    delivery: 'operator_profile',
-                },
-                fallbackReason: null,
-            },
-        });
-
-        const completeUsageResponse = waitForJsonMessage(ws);
-        session.emitServerEvent({
-            type: 'response.done',
-            responseId: 'resp_123',
-            usage: {
-                tokensPrompt: 50,
-                tokensCompletion: 25,
-                model: 'gpt-realtime',
-            },
-        });
-        assert.deepEqual(await completeUsageResponse, {
-            type: 'response.done',
-            responseId: 'resp_123',
-            usage: {
-                tokensPrompt: 50,
-                tokensCompletion: 25,
-                model: 'gpt-realtime',
-            },
-        });
-
-        assert.equal(harness.recordedUsage.length, 1);
-        assert.equal(harness.recordedUsage[0].feature, 'voice_realtime');
-        assert.equal(harness.recordedUsage[0].model, 'gpt-realtime');
-        assert.equal(harness.recordedUsage[0].promptTokens, 50);
-        assert.equal(harness.recordedUsage[0].completionTokens, 25);
-
-        const incompleteUsageResponse = waitForJsonMessage(ws);
-        session.emitServerEvent({
-            type: 'response.done',
-            responseId: 'resp_missing_output_usage',
-            usage: {
-                tokensPrompt: 0,
-                model: 'gpt-realtime',
-            },
-        });
-
-        assert.deepEqual(await incompleteUsageResponse, {
-            type: 'response.done',
-            responseId: 'resp_missing_output_usage',
-            usage: {
-                tokensPrompt: 0,
-                model: 'gpt-realtime',
-            },
-        });
-        assert.equal(harness.recordedUsage.length, 1);
-
-        const unavailableUsageResponse = waitForJsonMessage(ws);
-        session.emitServerEvent({
-            type: 'response.done',
-            responseId: 'resp_usage_unavailable',
-        });
-
-        assert.deepEqual(await unavailableUsageResponse, {
-            type: 'response.done',
-            responseId: 'resp_usage_unavailable',
-        });
-        assert.equal(harness.recordedUsage.length, 1);
-
-        const zeroUsageResponse = waitForJsonMessage(ws);
-        session.emitServerEvent({
-            type: 'response.done',
-            responseId: 'resp_reported_zero_usage',
-            usage: {
-                tokensPrompt: 0,
-                tokensCompletion: 0,
-                model: 'gpt-realtime',
-            },
-        });
-
-        assert.deepEqual(await zeroUsageResponse, {
-            type: 'response.done',
-            responseId: 'resp_reported_zero_usage',
-            usage: {
-                tokensPrompt: 0,
-                tokensCompletion: 0,
-                model: 'gpt-realtime',
-            },
-        });
-        assert.equal(harness.recordedUsage.length, 2);
-        assert.equal(harness.recordedUsage[1].promptTokens, 0);
-        assert.equal(harness.recordedUsage[1].completionTokens, 0);
-
-        await closeWebSocket(ws);
-    } finally {
-        await harness.close();
-    }
-});
-
-test('Realtime falls back only the unsupported profile model and keeps an explicit voice', async () => {
-    const harness = await createRealtimeHandlerHarness({
-        profile: {
-            ...testProfile,
-            speechPresentation: {
-                ...testProfile.speechPresentation,
-                realtimeModel: 'unsupported-model',
-            },
-        },
-        supportsModel: (model) => model === 'gpt-realtime-mini',
-    });
-
-    try {
-        const ws = await harness.connect();
-        ws.send(
-            JSON.stringify({
-                type: 'session.start',
-                context: { participants: [] },
-                options: { voice: 'alloy' },
-            })
-        );
-
-        const session = await waitForRealtimeSession(harness);
-
-        assert.equal(harness.requests[0].options?.model, 'gpt-realtime-mini');
-        assert.equal(harness.requests[0].options?.voice, 'alloy');
-        session.emitServerEvent({ type: 'session.ready' });
-        const readyMessage = await waitForJsonMessage(ws);
-        const metadata = readyMessage.speechSelection as Record<
-            string,
-            unknown
-        >;
-        assert.equal(metadata.model, 'gpt-realtime-mini');
-        assert.equal(metadata.voice, 'alloy');
-        assert.equal(
-            metadata.fallbackReason,
-            'Configured profile model is unsupported; using deployment fallback for that setting.'
-        );
         await closeWebSocket(ws);
     } finally {
         await harness.close();
@@ -1137,10 +780,6 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
         assert.equal(synthesized[0], 'The reviewed answer.');
         assert.equal(snapshots.length, 1);
         assert.match(snapshots[0], /What is the answer\?/);
-        assert.doesNotMatch(
-            JSON.stringify(harness.recordedExecutions),
-            /What is the answer\?/
-        );
         ws.send(JSON.stringify({ type: 'session.close' }));
         await closeWebSocket(ws);
     } finally {
@@ -1152,6 +791,7 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
 test('Live streams only caller audio, delegates the caller transcript, and returns the approved Workflow answer as commentary', async () => {
     const inputAudio = Buffer.from([0, 0, 1, 0]);
     const snapshots: string[] = [];
+    const longReviewedAnswer = 'reviewed answer '.repeat(50);
     const stubLiveSession = new StubOpenAiLiveVoiceSession();
     let startRequest: { instructions: string; voice: string } | undefined;
     const harness = await createRealtimeHandlerHarness({
@@ -1174,7 +814,7 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
                         candidateId: 'candidate',
                         generationStepId: 'answer',
                         assessmentStepId: 'review',
-                        text: 'The reviewed Live answer.',
+                        text: longReviewedAnswer,
                     },
                 };
             },
@@ -1238,7 +878,7 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
         assert.match(snapshots[0] ?? '', /What is the answer\?/);
         assert.deepEqual(stubLiveSession.commentary, [
             {
-                text: 'The reviewed Live answer.',
+                text: longReviewedAnswer,
                 delegationId: 'delegation-1',
             },
         ]);
@@ -1338,7 +978,7 @@ test('an unconfigured caller cannot request the extended voice duration', async 
                 'Only the configured developer can request the extended call limit.',
             code: 'duration_override_unauthorized',
         });
-        assert.equal(harness.requests.length, 0);
+        assert.equal(harness.legacySessionCreations(), 0);
     } finally {
         if (ws) await closeWebSocket(ws);
         await harness.close();
@@ -1368,20 +1008,19 @@ test('the configured developer can use a five-minute Live call limit', async () 
                 },
             })
         );
-        const session = await waitForRealtimeSession(harness);
-        session.emitServerEvent({ type: 'session.ready' });
+        const session = await waitForLiveSession(harness);
         await waitForJsonMessage(ws, 1000);
         clock.tick(60_000);
-        assert.deepEqual(session.closedReasons, []);
+        assert.equal(session.closed, false);
         const closed = waitForJsonMessage(ws, 1000);
         clock.tick(239_999);
-        assert.deepEqual(session.closedReasons, []);
+        assert.equal(session.closed, false);
         clock.tick(1);
-        assert.deepEqual(session.closedReasons, ['call_limit_exceeded']);
         assert.deepEqual(await closed, {
             type: 'session.closed',
             reason: 'call_limit_exceeded',
         });
+        assert.equal(session.closed, true);
     } finally {
         if (ws) await closeWebSocket(ws);
         await harness.close();

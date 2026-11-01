@@ -14,10 +14,8 @@ import type {
     SupportedEngagementIgnoreMode,
     SupportedLogLevel,
     SupportedNodeEnv,
-    SupportedOpenAIRealtimeModel,
     SupportedOpenAIRealtimeTurnDetection,
     SupportedOpenAIRealtimeVadEagerness,
-    SupportedOpenAITtsVoice,
 } from '@footnote/contracts/providers';
 import { supportedLogLevels } from '@footnote/contracts/providers';
 import { bootstrapLogger } from '../utils/logger.js';
@@ -45,14 +43,6 @@ const SUPPORTED_NODE_ENVS = new Set<SupportedNodeEnv>(
     (envSpecByKey.NODE_ENV.allowedValues ?? []) as readonly SupportedNodeEnv[]
 );
 const VALID_LOG_LEVELS = new Set<SupportedLogLevel>(supportedLogLevels);
-const VALID_REALTIME_MODELS = new Set<SupportedOpenAIRealtimeModel>(
-    (envSpecByKey.REALTIME_DEFAULT_MODEL.allowedValues ??
-        []) as readonly SupportedOpenAIRealtimeModel[]
-);
-const VALID_REALTIME_VOICES = new Set<SupportedOpenAITtsVoice>(
-    (envSpecByKey.REALTIME_DEFAULT_VOICE.allowedValues ??
-        []) as readonly SupportedOpenAITtsVoice[]
-);
 const VALID_REALTIME_TURN_DETECTIONS =
     new Set<SupportedOpenAIRealtimeTurnDetection>(
         (envSpecByKey.REALTIME_TURN_DETECTION.allowedValues ??
@@ -371,44 +361,6 @@ const getLogLevelEnv = (
         `Ignoring invalid LOG_LEVEL "${value}". Using default (${defaultValue}).`
     );
     return defaultValue;
-};
-
-const getRealtimeModelEnv = (
-    key: string
-): SupportedOpenAIRealtimeModel | undefined => {
-    const value = process.env[key];
-    if (!value) {
-        return undefined;
-    }
-
-    const normalizedValue = value.trim() as SupportedOpenAIRealtimeModel;
-    if (VALID_REALTIME_MODELS.has(normalizedValue)) {
-        return normalizedValue;
-    }
-
-    bootstrapLogger.warn(
-        `Ignoring invalid realtime model for ${key}: "${value}".`
-    );
-    return undefined;
-};
-
-const getRealtimeVoiceEnv = (
-    key: string
-): SupportedOpenAITtsVoice | undefined => {
-    const value = process.env[key];
-    if (!value) {
-        return undefined;
-    }
-
-    const normalizedValue = value.trim() as SupportedOpenAITtsVoice;
-    if (VALID_REALTIME_VOICES.has(normalizedValue)) {
-        return normalizedValue;
-    }
-
-    bootstrapLogger.warn(
-        `Ignoring invalid realtime voice for ${key}: "${value}".`
-    );
-    return undefined;
 };
 
 const resolveCommandDeploymentGuildIds = (): string[] => {
@@ -865,8 +817,6 @@ export const runtimeConfig = {
         ),
     },
     realtime: {
-        defaultModel: getRealtimeModelEnv('REALTIME_DEFAULT_MODEL'),
-        defaultVoice: getRealtimeVoiceEnv('REALTIME_DEFAULT_VOICE'),
         turnDetection: getRealtimeTurnDetectionEnv(
             'REALTIME_TURN_DETECTION',
             envDefaultValues.REALTIME_TURN_DETECTION

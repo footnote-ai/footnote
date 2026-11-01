@@ -12,21 +12,12 @@ import WebSocket, { WebSocketServer } from 'ws';
 import type {
     InternalVoiceRealtimeClientEvent,
     InternalVoiceRealtimeServerEvent,
-    InternalVoiceSessionContext,
     SpeechSelectionMetadata,
-    InternalVoiceRealtimeUsage,
 } from '@footnote/contracts/voice';
-import type { WorkflowRecord } from '@footnote/contracts/policy';
-import { resolveOpenAIRealtimePricingModel } from '@footnote/contracts/pricing';
 import {
     InternalVoiceRealtimeClientEventSchema,
     InternalVoiceRealtimeServerEventSchema,
 } from '@footnote/contracts/voice';
-import type {
-    RealtimeVoiceRuntime,
-    RealtimeVoiceSession,
-} from '@footnote/agent-runtime';
-import type { BackendLLMCostRecord } from '../services/llmCostRecorder.js';
 import type { BotProfileConfig } from '../config/profile.js';
 import type { RealtimeWorkflowRunner } from '../services/realtimeConversationState.js';
 import type { RealtimeFreshnessHandle } from '../services/realtimeConversationState.js';
@@ -38,10 +29,6 @@ import type {
     OpenAiLiveVoiceSessionFactory,
 } from '../services/openAiLiveVoice.js';
 import { resolveSpeechSelection } from '../services/speechPresentation.js';
-import {
-    estimateBackendVoiceRealtimeCost,
-    recordBackendLLMUsage,
-} from '../services/llmCostRecorder.js';
 import { logger } from '../utils/logger.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { PROVIDER_UNAVAILABLE_DETAILS } from './chatResponses.js';
@@ -66,11 +53,9 @@ const LIVE_CLOSE_GRACE_MS = 2_500;
 const STANDARD_TTS_MODEL = 'openai/gpt-4o-mini-tts-2025-12-15';
 const STANDARD_TTS_VOICE = 'alloy';
 const MAX_STANDARD_UTTERANCE_BYTES = 2_880_000;
-const MAX_LIVE_COMMENTARY_BYTES = 500;
 let activeVoiceCall: symbol | undefined;
 
 type CreateInternalVoiceRealtimeHandlerOptions = {
-    realtimeVoiceRuntime: RealtimeVoiceRuntime | null;
     defaultMode?: 'standard' | 'live';
     openAiLiveVoiceSessionFactory?: OpenAiLiveVoiceSessionFactory | null;
     openRouterVoiceService?: OpenRouterVoiceService | null;
@@ -79,20 +64,10 @@ type CreateInternalVoiceRealtimeHandlerOptions = {
     traceApiToken: string | null;
     serviceToken: string | null;
     serviceRateLimiter: SimpleRateLimiter;
-    buildInstructions: (context: InternalVoiceSessionContext) => string;
     profile: BotProfileConfig;
-    fallbackOptions: { model: string; voice: string };
-    recordUsage?: (record: BackendLLMCostRecord) => void;
-    recordExecution?: (
-        responseId: string,
-        workflow: WorkflowRecord
-    ) => Promise<void> | void;
     setTimer?: typeof setTimeout;
     clearTimer?: typeof clearTimeout;
 };
-
-type RealtimeResponseStatus =
-    'completed' | 'cancelled' | 'failed' | 'incomplete';
 
 const STATUS_MESSAGES: Record<number, string> = {
     400: 'Bad Request',
@@ -148,7 +123,6 @@ const sendServerEvent = (
  * @api.path: GET /api/internal/voice/realtime
  */
 export const createInternalVoiceRealtimeHandler = ({
-    realtimeVoiceRuntime,
     defaultMode = 'standard',
     openAiLiveVoiceSessionFactory = null,
     openRouterVoiceService = null,
@@ -157,11 +131,7 @@ export const createInternalVoiceRealtimeHandler = ({
     traceApiToken,
     serviceToken,
     serviceRateLimiter,
-    buildInstructions,
     profile,
-    fallbackOptions,
-    recordUsage = recordBackendLLMUsage,
-    recordExecution,
     setTimer = setTimeout,
     clearTimer = clearTimeout,
 }: CreateInternalVoiceRealtimeHandlerOptions) => {
@@ -170,7 +140,6 @@ export const createInternalVoiceRealtimeHandler = ({
     wss.on('connection', (ws) => {
         realtimeLogger.info('Internal voice realtime websocket connected.');
 
-        let session: RealtimeVoiceSession | null = null;
         let liveSession: OpenAiLiveVoiceSession | null = null;
         let liveUnsubscribe: (() => void) | undefined;
         let mode: 'standard' | 'live' | undefined;
@@ -196,10 +165,6 @@ export const createInternalVoiceRealtimeHandler = ({
         let providerSetupController: AbortController | undefined;
         let speechSelection: SpeechSelectionMetadata | undefined;
         const sessionCorrelationId = randomUUID();
-        const activeResponses = new Map<
-            string,
-            { startedAt: string; runId: string }
-        >();
         const liveTranscriptEvents: Array<{
             eventId: string;
             text: string;
@@ -387,201 +352,6 @@ export const createInternalVoiceRealtimeHandler = ({
                 });
         };
 
-        const recordResponseRun = (
-            response: { startedAt: string; runId: string },
-            status: RealtimeResponseStatus,
-            usage: InternalVoiceRealtimeUsage | undefined,
-            terminationReason?: string
-        ): void => {
-            if (!recordExecution || !speechSelection) return;
-            const finishedAt = new Date().toISOString();
-            const durationMs = Math.max(
-                0,
-                Date.parse(finishedAt) - Date.parse(response.startedAt)
-            );
-            const successful = status === 'completed';
-            const model = usage?.model ?? speechSelection.model;
-            const hasCompleteUsage =
-                usage?.tokensPrompt !== undefined &&
-                usage.tokensCompletion !== undefined;
-            const pricingKnown =
-                resolveOpenAIRealtimePricingModel(model).matchedModel !== null;
-            const estimatedCost = hasCompleteUsage
-                ? estimateBackendVoiceRealtimeCost(
-                      model,
-                      usage?.tokensPrompt ?? 0,
-                      usage?.tokensCompletion ?? 0
-                  )
-                : {
-                      inputCostUsd: 0,
-                      outputCostUsd: 0,
-                      totalCostUsd: 0,
-                      costCompleteness: 'unknown' as const,
-                      costIncompleteReasons: [
-                          'provider_usage_unavailable' as const,
-                      ],
-                  };
-            const costEvidence = {
-                ...estimatedCost,
-                ...(hasCompleteUsage && pricingKnown
-                    ? { costCompleteness: 'complete' as const }
-                    : hasCompleteUsage
-                      ? {
-                            costCompleteness: 'unknown' as const,
-                            costIncompleteReasons: ['unpriced_model' as const],
-                        }
-                      : {}),
-            };
-            const attemptUsage = {
-                ...(usage?.tokensPrompt !== undefined && {
-                    promptTokens: usage.tokensPrompt,
-                }),
-                ...(usage?.tokensCompletion !== undefined && {
-                    completionTokens: usage.tokensCompletion,
-                }),
-                ...(usage?.tokensPrompt !== undefined &&
-                    usage.tokensCompletion !== undefined && {
-                        totalTokens:
-                            usage.tokensPrompt + usage.tokensCompletion,
-                    }),
-            };
-            const appliedSettings = {
-                effectiveVoice: speechSelection.voice,
-                modality: 'realtime',
-                modelSelectionSource: speechSelection.selectionSource.model,
-                voiceSelectionSource: speechSelection.selectionSource.voice,
-                deliverySelectionSource:
-                    speechSelection.selectionSource.delivery,
-                ...(speechSelection.fallbackReason && {
-                    fallbackReason: speechSelection.fallbackReason,
-                }),
-            };
-            const stepId = `${response.runId}:realtime`;
-            const workflow: WorkflowRecord = {
-                runId: response.runId,
-                sessionCorrelationId,
-                runStatus: successful ? 'completed' : 'failed',
-                startedAt: response.startedAt,
-                finishedAt,
-                durationMs,
-                workflowId: 'realtime_response',
-                workflowName: 'Realtime response',
-                status: successful ? 'completed' : 'degraded',
-                terminationReason: successful
-                    ? 'goal_satisfied'
-                    : terminationReason === 'session_closed'
-                      ? 'session_closed'
-                      : status === 'cancelled'
-                        ? 'provider_cancelled'
-                        : status === 'incomplete'
-                          ? 'provider_incomplete'
-                          : 'provider_failed',
-                stepCount: 1,
-                maxSteps: 1,
-                results: [
-                    {
-                        resultId: `${response.runId}:result`,
-                        name: 'Realtime response',
-                        status: successful ? 'produced' : 'unavailable',
-                        producedByStepId: stepId,
-                        producedByAttempt: 1,
-                    },
-                ],
-                steps: [
-                    {
-                        stepId,
-                        attempt: 1,
-                        stepKind: 'generate',
-                        startedAt: response.startedAt,
-                        finishedAt,
-                        durationMs,
-                        model,
-                        usage:
-                            Object.keys(attemptUsage).length > 0
-                                ? attemptUsage
-                                : undefined,
-                        cost: costEvidence,
-                        resultRefs: [
-                            {
-                                resultId: `${response.runId}:result`,
-                                name: 'Realtime response',
-                            },
-                        ],
-                        attempts: [
-                            {
-                                attempt: 1,
-                                status: successful ? 'succeeded' : 'failed',
-                                startedAt: response.startedAt,
-                                finishedAt,
-                                durationMs,
-                                profileId: speechSelection.profileId,
-                                actualProvider: speechSelection.provider,
-                                actualModel: model,
-                                settings: { applied: appliedSettings },
-                                ...(Object.keys(attemptUsage).length > 0 && {
-                                    usage: attemptUsage,
-                                }),
-                                cost: costEvidence,
-                                ...(terminationReason && {
-                                    reasonCode: terminationReason,
-                                    terminationReason,
-                                }),
-                            },
-                        ],
-                        outcome: {
-                            status: successful ? 'executed' : 'failed',
-                            summary: successful
-                                ? 'Realtime response completed.'
-                                : 'Realtime response did not complete.',
-                            ...(terminationReason && {
-                                signals: { terminationReason },
-                            }),
-                        },
-                    },
-                ],
-            };
-            try {
-                void Promise.resolve(
-                    recordExecution(response.runId, workflow)
-                ).catch((error: unknown) => {
-                    realtimeLogger.warn(
-                        'Internal voice realtime execution recording failed.',
-                        {
-                            responseId: response.runId,
-                            error:
-                                error instanceof Error
-                                    ? error.message
-                                    : String(error),
-                        }
-                    );
-                });
-            } catch (error) {
-                realtimeLogger.warn(
-                    'Internal voice realtime execution recording failed.',
-                    {
-                        responseId: response.runId,
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                    }
-                );
-            }
-        };
-
-        const flushActiveResponses = (terminationReason: string): void => {
-            const responses = [...activeResponses.values()];
-            activeResponses.clear();
-            for (const response of responses) {
-                recordResponseRun(
-                    response,
-                    'failed',
-                    undefined,
-                    terminationReason
-                );
-            }
-        };
-
         const isSocketOpen = () =>
             !socketClosed && ws.readyState === WebSocket.OPEN;
 
@@ -634,7 +404,6 @@ export const createInternalVoiceRealtimeHandler = ({
             audioBytes = 0;
             conversationState?.close();
             conversationState = undefined;
-            flushActiveResponses(reason);
             if (waitForLiveFinalization) {
                 providerFinalizationTimeout = setTimer(() => {
                     realtimeLogger.warn(
@@ -646,7 +415,6 @@ export const createInternalVoiceRealtimeHandler = ({
             }
             if (closeProvider) {
                 try {
-                    session?.close(reason);
                     liveSession?.close();
                 } catch (error) {
                     realtimeLogger.warn(
@@ -723,18 +491,6 @@ export const createInternalVoiceRealtimeHandler = ({
             const delegationId = currentLiveDeliveryDelegationId;
             if (!delegationId) {
                 state.reportPlayback(delivery.deliveryId, 'failed');
-                currentLiveDeliveryDelegationId = undefined;
-                return;
-            }
-            if (
-                Buffer.byteLength(delivery.text, 'utf8') >
-                MAX_LIVE_COMMENTARY_BYTES
-            ) {
-                state.reportPlayback(delivery.deliveryId, 'failed');
-                appendLiveCommentary(
-                    'The reviewed answer is too long to deliver safely in one turn. Please ask for a shorter summary.',
-                    delegationId
-                );
                 currentLiveDeliveryDelegationId = undefined;
                 return;
             }
@@ -1005,7 +761,10 @@ export const createInternalVoiceRealtimeHandler = ({
         };
 
         const forwardRuntimeEvent = (
-            event: InternalVoiceRealtimeServerEvent
+            event: Extract<
+                InternalVoiceRealtimeServerEvent,
+                { type: 'session.ready' }
+            >
         ) => {
             if (closed) return;
             if (event.type === 'session.ready') {
@@ -1019,94 +778,17 @@ export const createInternalVoiceRealtimeHandler = ({
                 );
                 callTimeout.unref?.();
             }
-            if (event.type === 'response.started') {
-                activeResponses.set(event.responseId, {
-                    startedAt: new Date().toISOString(),
-                    runId: randomUUID(),
-                });
-            }
-            if (event.type === 'response.done') {
-                const usage = event.usage;
-                if (
-                    usage?.tokensPrompt !== undefined &&
-                    usage.tokensCompletion !== undefined
-                ) {
-                    const model = usage.model ?? 'unknown';
-                    const promptTokens = usage.tokensPrompt;
-                    const completionTokens = usage.tokensCompletion;
-                    const estimatedCost = estimateBackendVoiceRealtimeCost(
-                        model,
-                        promptTokens,
-                        completionTokens
-                    );
-
-                    try {
-                        recordUsage({
-                            feature: 'voice_realtime',
-                            model,
-                            promptTokens,
-                            completionTokens,
-                            totalTokens: promptTokens + completionTokens,
-                            ...estimatedCost,
-                            timestamp: Date.now(),
-                        });
-                    } catch (error) {
-                        realtimeLogger.warn(
-                            `Internal voice realtime usage recording failed: ${
-                                error instanceof Error
-                                    ? error.message
-                                    : String(error)
-                            }`
-                        );
-                    }
-                }
-                const providerResponseId = event.responseId;
-                const activeResponse = providerResponseId
-                    ? activeResponses.get(providerResponseId)
-                    : undefined;
-                if (providerResponseId && activeResponse) {
-                    activeResponses.delete(providerResponseId);
-                    recordResponseRun(
-                        activeResponse,
-                        event.status ?? 'completed',
-                        usage,
-                        event.terminationReason
-                    );
-                }
-            }
             try {
-                if (event.type !== 'response.started') {
-                    sendServerEvent(
-                        ws,
-                        event.type === 'session.ready'
-                            ? {
-                                  ...event,
-                                  mode: event.mode ?? mode ?? defaultMode,
-                                  ...(speechSelection
-                                      ? { speechSelection }
-                                      : {}),
-                              }
-                            : event
-                    );
-                }
+                sendServerEvent(ws, {
+                    ...event,
+                    mode: event.mode ?? mode ?? defaultMode,
+                    ...(speechSelection ? { speechSelection } : {}),
+                });
             } catch (error) {
                 realtimeLogger.warn(
                     `Failed to send internal voice realtime event: ${
                         error instanceof Error ? error.message : String(error)
                     }`
-                );
-            }
-
-            if (event.type === 'session.closed') {
-                realtimeLogger.info('Internal voice realtime session closed.', {
-                    reason: event.reason ?? 'session_closed',
-                    code: event.code,
-                });
-                finishCall(
-                    event.reason ?? 'session_closed',
-                    false,
-                    false,
-                    event.code
                 );
             }
         };
@@ -1422,9 +1104,16 @@ export const createInternalVoiceRealtimeHandler = ({
                 }
                 if (
                     requestedMode === 'live' &&
-                    openAiLiveVoiceSessionFactory &&
-                    !workflowRunner
+                    !openAiLiveVoiceSessionFactory
                 ) {
+                    sendServerEvent(ws, {
+                        type: 'error',
+                        message: 'Live voice provider is unavailable.',
+                        code: 'live_voice_unavailable',
+                    });
+                    return;
+                }
+                if (requestedMode === 'live' && !workflowRunner) {
                     sendServerEvent(ws, {
                         type: 'error',
                         message:
@@ -1617,136 +1306,8 @@ export const createInternalVoiceRealtimeHandler = ({
                     }
                     return;
                 }
-                if (!realtimeVoiceRuntime) {
-                    sendServerEvent(ws, {
-                        type: 'error',
-                        message: 'Live voice provider is unavailable.',
-                        code: 'live_voice_unavailable',
-                    });
-                    finishCall('setup_failed', false, true);
-                    return;
-                }
-                speechSelection = resolveSpeechSelection({
-                    profile,
-                    provider: realtimeVoiceRuntime.provider,
-                    modality: 'realtime',
-                    request: {
-                        model: event.options?.model,
-                        voice: event.options?.voice,
-                        delivery: event.options?.delivery,
-                    },
-                    fallback: fallbackOptions,
-                });
-                const unsupportedModel = !realtimeVoiceRuntime.supportsModel(
-                    speechSelection.model
-                );
-                const unsupportedVoice = !realtimeVoiceRuntime.supportsVoice(
-                    speechSelection.voice
-                );
-                if (unsupportedModel || unsupportedVoice) {
-                    if (
-                        (unsupportedModel &&
-                            speechSelection.selectionSource.model ===
-                                'request_or_session') ||
-                        (unsupportedVoice &&
-                            speechSelection.selectionSource.voice ===
-                                'request_or_session')
-                    ) {
-                        sendServerEvent(ws, {
-                            type: 'error',
-                            message:
-                                'Requested Realtime model or voice is not supported by the configured provider.',
-                            code: 'unsupported_speech_selection',
-                        });
-                        finishCall('setup_failed', false, true);
-                        return;
-                    }
-                    const ignoreOperatorModel =
-                        unsupportedModel &&
-                        speechSelection.selectionSource.model ===
-                            'operator_profile';
-                    const ignoreOperatorVoice =
-                        unsupportedVoice &&
-                        speechSelection.selectionSource.voice ===
-                            'operator_profile';
-                    const unsupportedSettings = [
-                        ...(ignoreOperatorModel ? ['model'] : []),
-                        ...(ignoreOperatorVoice ? ['voice'] : []),
-                    ];
-                    speechSelection = resolveSpeechSelection({
-                        profile,
-                        provider: realtimeVoiceRuntime.provider,
-                        modality: 'realtime',
-                        request: {
-                            model: event.options?.model,
-                            voice: event.options?.voice,
-                            delivery: event.options?.delivery,
-                        },
-                        ignoreOperatorModel,
-                        ignoreOperatorVoice,
-                        fallbackReason: `Configured profile ${unsupportedSettings.join(' and ')} is unsupported; using deployment fallback for that setting.`,
-                        fallback: fallbackOptions,
-                    });
-                }
-                let createdSession: RealtimeVoiceSession | null = null;
-                try {
-                    createdSession = await realtimeVoiceRuntime.createSession({
-                        instructions: [
-                            buildInstructions(event.context),
-                            ...(speechSelection.delivery
-                                ? [
-                                      `Speech delivery guidance: ${speechSelection.delivery}`,
-                                  ]
-                                : []),
-                        ].join('\n\n'),
-                        options: {
-                            ...event.options,
-                            model: speechSelection.model,
-                            voice: speechSelection.voice,
-                        },
-                    });
-                    if (!isSocketOpen()) {
-                        createdSession.close('client_close');
-                        releaseCallReservation();
-                        return;
-                    }
-                    session = createdSession;
-                    session.onEvent(forwardRuntimeEvent);
-                    return;
-                } catch (error) {
-                    createdSession?.close('client_close');
-                    realtimeLogger.error(
-                        'Internal voice realtime session start failed.',
-                        {
-                            error:
-                                error instanceof Error
-                                    ? error.message
-                                    : String(error),
-                        }
-                    );
-                    if (isSocketOpen()) {
-                        sendServerEvent(ws, {
-                            type: 'error',
-                            message:
-                                error instanceof Error
-                                    ? error.message
-                                    : 'Failed to start realtime session.',
-                        });
-                    }
-                    finishCall('setup_failed', false, true);
-                    return;
-                }
             }
-
-            if (!session) {
-                sendServerEvent(ws, {
-                    type: 'error',
-                    message: 'Realtime session not initialized.',
-                });
-                return;
-            }
-
-            if (!sessionReady) {
+            if (mode && !sessionReady) {
                 sendServerEvent(ws, {
                     type: 'error',
                     message: 'Realtime provider session is not ready.',
@@ -1755,49 +1316,14 @@ export const createInternalVoiceRealtimeHandler = ({
                 return;
             }
 
-            if (event.type === 'input_audio.append') {
-                // Skip per-chunk logging to keep realtime logs readable.
-            } else if (event.type === 'input_audio.commit') {
-                realtimeLogger.debug('Internal voice realtime audio commit.');
-            } else if (event.type === 'input_audio.clear') {
-                realtimeLogger.debug('Internal voice realtime audio clear.');
-            } else if (event.type === 'input_text.create') {
-                realtimeLogger.debug('Internal voice realtime input text.', {
-                    textLength: event.text.length,
-                    speakerLabelLength: event.speakerLabel?.length,
-                    speakerId: event.speakerId,
-                });
-            } else if (event.type === 'response.create') {
-                realtimeLogger.debug(
-                    'Internal voice realtime response create.'
-                );
-            } else {
-                realtimeLogger.debug('Internal voice realtime client event.');
-            }
-
-            try {
-                await session.send(event);
-            } catch (error) {
-                realtimeLogger.error(
-                    'Internal voice realtime event forwarding failed.',
-                    {
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                        eventType: event.type,
-                    }
-                );
-                sendServerEvent(ws, {
-                    type: 'error',
-                    message:
-                        error instanceof Error
-                            ? error.message
-                            : 'Failed to forward realtime event.',
-                });
-            }
+            sendServerEvent(ws, {
+                type: 'error',
+                message: mode
+                    ? 'That event is not supported for this voice mode.'
+                    : 'Realtime session not initialized.',
+                ...(mode ? { code: 'unsupported_voice_event' } : {}),
+            });
         });
-
         ws.on('close', () => {
             socketClosed = true;
             finishCall('client_close', true, false);
@@ -1866,11 +1392,7 @@ export const createInternalVoiceRealtimeHandler = ({
             return;
         }
 
-        if (
-            !realtimeVoiceRuntime &&
-            !openRouterVoiceService &&
-            !openAiLiveVoiceSessionFactory
-        ) {
+        if (!openRouterVoiceService && !openAiLiveVoiceSessionFactory) {
             realtimeLogger.warn(
                 'Internal voice realtime rejected: service unavailable.'
             );

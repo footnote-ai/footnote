@@ -100,23 +100,26 @@ provider or mode. Realtime call state and transcript content are transient.
 Provider retention, real audio timing, quality, complete usage/cost and local
 playback on Discord are not verified by synthetic tests.
 
-## Legacy OpenAI Realtime settings
+## Retained legacy adapter settings
 
-These are the main settings that change realtime voice behavior.
+The exported `openAiRealtimeVoiceRuntime` adapter remains in `agent-runtime`
+with package-level tests, but the backend does not wire it into `/call`.
+Standard uses OpenRouter and Live requires GPT-Live; neither mode falls back to
+the legacy adapter. The old `REALTIME_DEFAULT_MODEL`,
+`REALTIME_DEFAULT_VOICE`, and `/call voice` settings have been removed. The
+remaining VAD and greeting settings below describe the legacy adapter and do
+not configure the current call modes.
 
-| Setting                           | Default             | Allowed Values                                                                               | Purpose                                                                                                                              |
-| --------------------------------- | ------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `REALTIME_DEFAULT_MODEL`          | `gpt-realtime-mini` | Enum (valid realtime model IDs from the shared provider catalog)                             | Default provider model for realtime voice sessions.                                                                                  |
-| `REALTIME_DEFAULT_VOICE`          | `echo`              | Enum (`alloy`, `ash`, `ballad`, `coral`, `echo`, `fable`, `nova`, `onyx`, `sage`, `shimmer`) | Default output voice when a call does not override it.                                                                               |
-| `REALTIME_GREETING`               | `Hey, {bot} here.`  | String (non-empty, supports `{bot}`)                                                         | Greeting text sent when the session starts.                                                                                          |
-| `REALTIME_TURN_DETECTION`         | `server_vad`        | Enum (`server_vad`, `semantic_vad`)                                                          | Selects provider-side turn handling strategy.                                                                                        |
-| `REALTIME_VAD_THRESHOLD`          | provider default    | Number (`0`-`1`)                                                                             | Optional server VAD sensitivity threshold.                                                                                           |
-| `REALTIME_VAD_SILENCE_MS`         | provider default    | Integer (`>= 0`)                                                                             | Optional provider silence window used to close a turn. Also used by Discord-side silence-tail injection when `server_vad` is active. |
-| `REALTIME_VAD_PREFIX_MS`          | provider default    | Integer (`>= 0`)                                                                             | Optional provider prefix padding so the provider keeps some audio before speech start.                                               |
-| `REALTIME_VAD_CREATE_RESPONSE`    | provider default    | Boolean (`true` or `false`)                                                                  | When true, provider auto-creates a response after a detected turn.                                                                   |
-| `REALTIME_VAD_INTERRUPT_RESPONSE` | provider default    | Boolean (`true` or `false`)                                                                  | When true, new user speech can interrupt an in-flight response.                                                                      |
-| `REALTIME_VAD_EAGERNESS`          | provider default    | Enum (`low`, `medium`, `high`, `auto`)                                                       | Optional semantic VAD eagerness for `semantic_vad`.                                                                                  |
-| `/call voice`                     | per-call override   | Enum (same values as `REALTIME_DEFAULT_VOICE`)                                               | Overrides the default voice for one call session.                                                                                    |
+| Setting                           | Default            | Allowed Values                         | Purpose                                                                                                                              |
+| --------------------------------- | ------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `REALTIME_GREETING`               | `Hey, {bot} here.` | String (non-empty, supports `{bot}`)   | Greeting text sent when the session starts.                                                                                          |
+| `REALTIME_TURN_DETECTION`         | `server_vad`       | Enum (`server_vad`, `semantic_vad`)    | Selects provider-side turn handling strategy.                                                                                        |
+| `REALTIME_VAD_THRESHOLD`          | provider default   | Number (`0`-`1`)                       | Optional server VAD sensitivity threshold.                                                                                           |
+| `REALTIME_VAD_SILENCE_MS`         | provider default   | Integer (`>= 0`)                       | Optional provider silence window used to close a turn. Also used by Discord-side silence-tail injection when `server_vad` is active. |
+| `REALTIME_VAD_PREFIX_MS`          | provider default   | Integer (`>= 0`)                       | Optional provider prefix padding so the provider keeps some audio before speech start.                                               |
+| `REALTIME_VAD_CREATE_RESPONSE`    | provider default   | Boolean (`true` or `false`)            | When true, provider auto-creates a response after a detected turn.                                                                   |
+| `REALTIME_VAD_INTERRUPT_RESPONSE` | provider default   | Boolean (`true` or `false`)            | When true, new user speech can interrupt an in-flight response.                                                                      |
+| `REALTIME_VAD_EAGERNESS`          | provider default   | Enum (`low`, `medium`, `high`, `auto`) | Optional semantic VAD eagerness for `semantic_vad`.                                                                                  |
 
 ## Legacy OpenAI Realtime system breakdown
 
