@@ -217,17 +217,19 @@ initiating human's audio is forwarded; the call ends if another human joins
 or the caller mutes, deafens or leaves. The legacy Realtime adapter remains
 available for package tests but is not a fallback for either mode.
 
-`voice.max-answer-tokens` defaults to 160 and limits delivered text separately
-from generation tokens for both modes. The Unicode-aware estimate does not use
-English word splitting or claim an exact provider count. Internal safeguards
-cap Live at 400 estimated tokens and Standard at 1,600 estimated tokens and
-3,686 code points. After normal assessment approves an over-budget draft, one
-dedicated `condense` Step can produce a new candidate for ordinary reassessment.
-Insufficient capacity, cancellation, failed/rejected assessment or remaining
-overlength blocks Workflow-answer handoff; Live may still speak independently.
-TRACE still controls answer style. The six-case
-synthetic evaluation fixture is checked in, but no paid/provider comparison has
-been run; quality, latency, tokens and cost are unverified.
+`voice.max-answer-tokens` defaults to 160 and limits text handed to
+speech, independently of the generation budget. Both modes share this setting.
+The Unicode-aware estimate does not depend on English word boundaries or claim
+to match a provider's tokenizer. Internal limits cap Live at 400 estimated
+tokens and Standard at 1,600 estimated tokens and 3,686 code points.
+
+When an approved draft exceeds the delivery limit, a single `condense` Step
+may shorten it before another assessment. Voice withholds the Workflow answer
+if there is too little capacity, the call is cancelled, reassessment fails,
+or the result is still too long. Live may still speak independently. TRACE
+continues to guide the answer's style and substance. A six-case synthetic
+evaluation fixture exists, but real-model quality, latency, usage, and cost
+have not been evaluated.
 
 All results so far are synthetic. We have not verified provider retention,
 transcript timing, latency, voice quality, complete usage/cost or playback
