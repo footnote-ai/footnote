@@ -3092,10 +3092,9 @@ export const runBoundedReviewWorkflow = async (
                     )
                 );
                 generationResult = normalizeGenerationResultEvidence(generated);
-                providers.set(
-                    generationResult,
-                    boundedRequest.provider ?? 'unknown'
-                );
+                if (boundedRequest.provider !== undefined) {
+                    providers.set(generationResult, boundedRequest.provider);
+                }
                 attempts.push(generationResult);
                 selectedCapabilityFacts = resolveAttemptCapabilityFacts(
                     boundedRequest.provider,
