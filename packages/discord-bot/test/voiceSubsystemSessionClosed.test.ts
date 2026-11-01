@@ -87,3 +87,26 @@ test('conversation startup is reserved per guild while session creation awaits',
     }
     await Promise.all([first, duplicate, otherGuild]);
 });
+
+test('concurrent startup callers share failure and a later retry can succeed', async () => {
+    const failure = new Error('startup failed');
+    let attempts = 0;
+    const subsystem = new VoiceSubsystem({} as Client);
+    const probe = subsystem as unknown as VoiceSubsystemStartupProbe;
+    probe.activateConversation = async () => {
+        attempts += 1;
+        if (attempts === 1) throw failure;
+    };
+
+    const first = probe.startConversation('guild-1');
+    const duplicate = probe.startConversation('guild-1');
+    assert.equal(first, duplicate);
+    await Promise.all([
+        assert.rejects(first, (error) => error === failure),
+        assert.rejects(duplicate, (error) => error === failure),
+    ]);
+    assert.equal(attempts, 1);
+
+    await probe.startConversation('guild-1');
+    assert.equal(attempts, 2);
+});

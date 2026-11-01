@@ -55,7 +55,7 @@ export class VoiceSubsystem extends Event {
             requestExtendedDuration: boolean;
         }
     >();
-    private startingConversations = new Set<string>();
+    private startingConversations = new Map<string, Promise<void>>();
 
     constructor(client: Client) {
         super({
@@ -269,14 +269,16 @@ export class VoiceSubsystem extends Event {
         this.audioPlaybackHandler.cleanupGuild(guildId);
     }
 
-    private async startConversation(guildId: string): Promise<void> {
-        if (this.startingConversations.has(guildId)) return;
-        this.startingConversations.add(guildId);
-        try {
-            await this.activateConversation(guildId);
-        } finally {
-            this.startingConversations.delete(guildId);
-        }
+    private startConversation(guildId: string): Promise<void> {
+        const starting = this.startingConversations.get(guildId);
+        if (starting) return starting;
+
+        const startup = this.activateConversation(guildId).finally(() => {
+            if (this.startingConversations.get(guildId) === startup)
+                this.startingConversations.delete(guildId);
+        });
+        this.startingConversations.set(guildId, startup);
+        return startup;
     }
 
     private async activateConversation(guildId: string): Promise<void> {
