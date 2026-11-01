@@ -3768,25 +3768,34 @@ export const runBoundedReviewWorkflow = async (
             result: reviewResult,
             parse: parseReviewDecisionForValidation,
         });
-        if (!typedValidation.valid) {
+        const typedValidationFailure = (
+            validation: Extract<typeof typedValidation, { valid: false }>
+        ): AttemptResult => {
             const parseFailure =
-                typedValidation.failure === 'malformed' ||
-                typedValidation.failure === 'schema_invalid'
+                validation.failure === 'malformed' ||
+                validation.failure === 'schema_invalid'
                     ? (
                           input.parseReviewDecision ??
                           parseReviewDecisionOutputResult
                       )(reviewResult.text)
                     : undefined;
+            let errorCode: string;
+            switch (validation.failure) {
+                case 'empty':
+                    errorCode = 'review_empty_output';
+                    break;
+                case 'incomplete':
+                    errorCode = 'review_incomplete_output';
+                    break;
+                case 'refusal':
+                    errorCode = 'review_refusal_output';
+                    break;
+                default:
+                    errorCode = 'review_parse_error';
+            }
             return {
                 status: 'failed',
-                errorCode:
-                    typedValidation.failure === 'empty'
-                        ? 'review_empty_output'
-                        : typedValidation.failure === 'incomplete'
-                          ? 'review_incomplete_output'
-                          : typedValidation.failure === 'refusal'
-                            ? 'review_refusal_output'
-                            : 'review_parse_error',
+                errorCode,
                 retryable: false,
                 ...(usage.totalTokens === undefined
                     ? {}
@@ -3796,7 +3805,7 @@ export const runBoundedReviewWorkflow = async (
                     summary:
                         'Assessment returned no acceptable typed result; the latest valid draft was preserved.',
                     reasonCode: typedReviewFailureToReasonCode(
-                        typedValidation.failure
+                        validation.failure
                     ),
                     ...assessmentAttemptMetadata,
                     terminationReason: 'executor_error_fail_open',
@@ -3811,6 +3820,9 @@ export const runBoundedReviewWorkflow = async (
                         : {}),
                 }),
             };
+        };
+        if (!typedValidation.valid) {
+            return typedValidationFailure(typedValidation);
         }
         return {
             decision: typedValidation.value,
