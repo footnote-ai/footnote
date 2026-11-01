@@ -165,6 +165,7 @@ export const workflowStepKind = (stepId: string): WorkflowStepKind => {
     if (stepId === 'retrieve' || stepId === 'tool') return 'tool';
     if (stepId === 'presentation') return 'presentation';
     if (stepId === 'generate') return 'generate';
+    if (stepId === 'condense') return 'condense';
     if (stepId === 'assess') return 'assess';
     return 'finalize';
 };
@@ -239,14 +240,21 @@ export const buildWorkflowLineage = (input: {
                 .find((record) => candidates.includes(record.stepKind));
         const parent =
             kind === 'assess'
-                ? priorOfKind('generate')
-                : kind === 'plan' && step.stepId === 'replan'
+                ? latestOfKinds(['generate', 'condense'])
+                : kind === 'condense'
                   ? priorOfKind('assess')
-                  : kind === 'generate'
-                    ? latestOfKinds(['assess', 'presentation', 'plan', 'tool'])
-                    : kind === 'presentation' || kind === 'tool'
-                      ? latestOfKinds(['assess', 'plan', 'tool'])
-                      : undefined;
+                  : kind === 'plan' && step.stepId === 'replan'
+                    ? priorOfKind('assess')
+                    : kind === 'generate'
+                      ? latestOfKinds([
+                            'assess',
+                            'presentation',
+                            'plan',
+                            'tool',
+                        ])
+                      : kind === 'presentation' || kind === 'tool'
+                        ? latestOfKinds(['assess', 'plan', 'tool'])
+                        : undefined;
         const successfulAttempt = [...step.attempts]
             .reverse()
             .find((attempt) => attempt.status === 'succeeded');

@@ -136,17 +136,19 @@ primary labels under an answer.
 
 All three modes use the reviewed workflow shape:
 
-| Workflow shape | Purpose                     | Main steps                                                                                                 |
-| -------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `reviewed`     | reviewed message generation | `plan? -> retrieve? -> presentation? -> generate -> assess? -> [replan? -> generate -> assess?] -> finish` |
+| Workflow shape | Purpose                     | Main steps                                                                                                                          |
+| -------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `reviewed`     | reviewed message generation | `plan? -> retrieve? -> presentation? -> generate -> assess? -> [replan? -> generate -> assess?] -> [condense -> assess?] -> finish` |
 
 The live conditional topology is `plan? -> retrieve? -> presentation? -> generate
--> assess? -> [replan? -> generate -> assess?] -> finish`. A `?` step runs only
-when the active policy and dependencies enable it. When assessment requests a
-revision, `replan` returns to `generate`, which may enter `assess` again before
-`finish`. Assessment can also request a bounded search; that transition reuses
-the same `retrieve` Step and then returns to generation and assessment. Search
-is an assessment decision, not a new Workflow Step.
+-> assess? -> [replan? -> generate -> assess?] -> [condense -> assess?] -> finish`.
+A `?` step runs only when the active policy and dependencies enable it. When
+assessment requests a revision, `replan` returns to `generate`, which may enter
+`assess` again before `finish`. Assessment can also request a bounded search;
+that transition reuses the same `retrieve` Step and then returns to generation
+and assessment. Search is an assessment decision, not a new Workflow Step.
+Voice may take the `condense -> assess` branch only after an ordinary assessment
+finalizes a draft that exceeds the backend-measured delivery budget.
 
 Mode details:
 
@@ -254,9 +256,9 @@ Run begins. Each Step declares its accepted outcomes, named Result output, and
 next Step. `presentation` is an optional candidate: an unavailable candidate
 routes to authoritative generation and does not consume a workflow-step
 allowance. `generate` is the authoritative writer, and `assess` can emit
-`done`, `revise`, `search`, or `limit`. A revision uses `replan` when configured and
-otherwise follows the declared direct-generation route. `finish` emits no
-Result and is not counted as a semantic workflow Step.
+`done`, `condense`, `revise`, `search`, or `limit`. A revision uses `replan` when
+configured and otherwise follows the declared direct-generation route.
+`finish` emits no Result and is not counted as a semantic workflow Step.
 
 `generate` produces the current draft. `assess` returns `reviewDecision` and
 `reviewReason`. It can finalize, request a bounded revision, or request another
@@ -278,6 +280,44 @@ assessment decisions remain advisory: the backend checks policy, query
 repetition, provider availability, and all existing limits before retrieval.
 When the decision is `revise`, `assess` may also return
 `revisionInstruction`, which guides the follow-up `generate` step.
+
+#### Voice answer condensation
+
+`condense` is a Voice-only recovery Step for an objectively measured delivery
+constraint. Ordinary assessment and search/revision recovery run first. An
+in-budget approved draft follows the existing path without a condensation call.
+For an over-budget `finalize`, the backend gives `condense` the original request
+context, permitted conversation, latest approved draft, available retrieval
+evidence, assessment concerns, TRACE posture and effective delivery limit with
+the measured original length and overage. Retrieved content, the draft and
+review prose remain data; they do not gain instruction authority. The Step uses
+configured generation routing and the shared runtime, has one pass, and cannot
+execute tools or terminal actions.
+
+The Step produces a new `draft` Result and a `condensation` response candidate
+linked to its source candidate. A normal `assess` then reviews that exact Result.
+Voice eligibility checks the condensation Result, its source's successful
+final assessment, the new assessment's parent/input references, candidate
+identity, persistence, freshness, consent and delivery measurement. Only that
+exact assessed candidate can enter Standard TTS or Live commentary. Standard
+hands off the approved text unchanged; Live may paraphrase commentary and does
+not claim exact spoken equivalence.
+
+Condensation and revision have different purposes: `revise` answers identified
+quality concerns, while `condense` addresses measured delivery length. If
+condensation fails, remains over budget, or its assessment requests revision or
+search, Voice withholds speech. The current topology deliberately does not run
+another recovery after condensation. The assess step reserves Workflow,
+deliberation, token and elapsed-time capacity for one condensation and its
+required assessment before starting; the existing Execution Contract and
+cancellation signal remain authoritative. Insufficient capacity or a deadline
+failure is recorded as a limit and never authorizes the earlier over-budget
+candidate. Text chat does not enter this branch.
+
+Voice canonical records retain only content-free condensation measurements,
+disposition, candidate/Result references, timing, usage and cost. Drafts,
+prompts, retrieval bodies, questions and free-form assessment text stay out of
+canonical persistence and public Trace.
 
 Assessment receives the bounded retrieval outcome, query, provider status,
 returned source titles and URLs, and the answer's own citations. Retrieved text

@@ -22,6 +22,7 @@ const STEP_LABELS: Record<WorkflowStepKind, string> = {
     assess: 'Assessment',
     evaluator: 'Evaluation',
     revise: 'Revision',
+    condense: 'Answer condensation',
     presentation: 'Presentation',
     finalize: 'Finalization',
 };

@@ -23,6 +23,7 @@ import type {
 } from '../../src/services/presentation.js';
 import type { AppliedPlanState } from '../../src/services/plannerWorkflowSeams.js';
 import { parseReviewDecisionOutputResult } from '../../src/services/workflowEngine/reviewDecision.js';
+import { withRealtimeWorkflowScope } from '../../src/services/realtimeWorkflowScope.js';
 import {
     buildExecutedContextStepResult,
     buildSkippedContextStepResult,
@@ -315,6 +316,7 @@ const runRecovery = async (input: {
     maxIterations?: number;
     generationStartedAtMs?: number;
     requestTimePrompt?: string;
+    workflowMaxDurationMs?: number;
 }) => {
     const requestMessages = [
         { role: 'user' as const, content: input.fixture.userRequest },
@@ -386,7 +388,7 @@ const runRecovery = async (input: {
         workflowConfig: {
             workflowName: 'message_reviewed',
             maxIterations: input.maxIterations ?? 3,
-            maxDurationMs: 90_000,
+            maxDurationMs: input.workflowMaxDurationMs ?? 90_000,
             maxSearchRecoveryCycles: input.maxSearchRecoveryCycles,
             executionLimits: input.executionLimits ?? executionLimits(),
         },
@@ -677,6 +679,125 @@ test('missed initial search is recovered with merged evidence and linked lineage
         retrieval.inputRefs?.some((reference) => reference.name === 'review')
     );
     assert.equal(requests.length, 4);
+});
+
+test('search recovery finishes before an over-budget approved Voice draft is condensed', async () => {
+    const requests: GenerationRequest[] = [];
+    const { result, executedQueries } = await withRealtimeWorkflowScope(
+        {
+            sessionCorrelationId: 'voice-search-test',
+            turnId: 'voice-search-turn',
+            onRunStarted: () => undefined,
+            deliveryPolicy: { mode: 'live', maxAnswerTokens: 8 },
+        },
+        () =>
+            runRecovery({
+                fixture: fixtures.missedInitialSearch,
+                maxSearchRecoveryCycles: 1,
+                maxIterations: 3,
+                assessmentDecisions: [
+                    makeDecision(
+                        'search',
+                        fixtures.missedInitialSearch.followUpQuery
+                    ),
+                    makeDecision('finalize'),
+                    makeDecision('finalize'),
+                ],
+                executionLimits: executionLimits({
+                    maxWorkflowSteps: 8,
+                    maxToolCalls: 2,
+                    maxDeliberationCalls: 10,
+                    maxReviewCycles: 4,
+                }),
+                requests,
+            })
+    );
+
+    assert.deepEqual(executedQueries, [
+        fixtures.missedInitialSearch.followUpQuery,
+    ]);
+    assert.deepEqual(
+        result.workflowLineage.steps.map((step) => step.stepKind),
+        [
+            'generate',
+            'assess',
+            'tool',
+            'generate',
+            'assess',
+            'condense',
+            'assess',
+        ]
+    );
+    const condensationInput = requests[4]?.messages
+        .map((message) => message.content)
+        .join('\n');
+    assert.match(
+        condensationInput ?? '',
+        /Updated draft based on the returned discovery context/
+    );
+    assert.match(
+        condensationInput ?? '',
+        /Synthetic current release-line evidence/
+    );
+    const condensation = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'condense'
+    );
+    const reassessment = result.workflowLineage.steps.findLast(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.ok(condensation);
+    assert.equal(reassessment?.parentStepId, condensation.stepId);
+    assert.equal(requests.length, 6);
+});
+
+test('the 60-second Voice Workflow deadline can stop condensation before reassessment', async () => {
+    const requests: GenerationRequest[] = [];
+    const result = await withFakeClock(1_000, (advanceByMs) =>
+        withRealtimeWorkflowScope(
+            {
+                sessionCorrelationId: 'voice-deadline-test',
+                turnId: 'voice-deadline-turn',
+                onRunStarted: () => undefined,
+                deliveryPolicy: { mode: 'live', maxAnswerTokens: 8 },
+            },
+            async () =>
+                (
+                    await runRecovery({
+                        fixture: fixtures.missedInitialSearch,
+                        maxSearchRecoveryCycles: 0,
+                        maxIterations: 3,
+                        assessmentDecisions: [makeDecision('finalize')],
+                        executionLimits: executionLimits({
+                            maxWorkflowSteps: 6,
+                            maxToolCalls: 0,
+                            maxDeliberationCalls: 10,
+                            maxReviewCycles: 4,
+                            maxDurationMs: 60_000,
+                        }),
+                        workflowMaxDurationMs: 60_000,
+                        clockAdvancesMs: [0, 0, 60_001],
+                        advanceClock: advanceByMs,
+                        requests,
+                    })
+                ).result
+        )
+    );
+
+    assert.deepEqual(
+        result.workflowLineage.steps.map((step) => step.stepKind),
+        ['generate', 'assess', 'condense']
+    );
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_time'
+    );
+    assert.equal(requests.length, 3);
+    assert.equal(
+        result.workflowLineage.steps.findLast(
+            (step) => step.stepKind === 'assess'
+        )?.outcome.signals?.reviewDecision,
+        'finalize'
+    );
 });
 
 test('declines recovery when the current assessment has no reassessment iteration left', async () => {
@@ -1436,7 +1557,8 @@ test('cancellation during recovery is recorded and does not regenerate', async (
     assert.deepEqual(executedQueries, []);
     assert.equal(
         result.workflowLineage.terminationReason,
-        'provider_cancelled'
+        'provider_cancelled',
+        JSON.stringify(result.workflowLineage)
     );
     assert.equal(
         generatedText(result),

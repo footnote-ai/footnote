@@ -101,31 +101,122 @@ export const assessRealtimeFinalResponse = (
         Buffer.byteLength(candidate.text, 'utf8') > 16 * 1024
     )
         return { disposition: 'selection_unverified' };
-    if (!['initial_generation', 'revision'].includes(candidate.stage))
+    const expectedProducerKind =
+        candidate.stage === 'condensation'
+            ? 'condense'
+            : candidate.stage === 'initial_generation' ||
+                candidate.stage === 'revision'
+              ? 'generate'
+              : undefined;
+    if (expectedProducerKind === undefined)
         return { disposition: 'unsupported_response' };
-    const generation = workflow?.steps.find(
+    const producer = workflow?.steps.find(
         (step) => step.stepId === candidate.workflowStepId
     );
     const draft = workflow?.results?.find(
         (result) =>
-            result.producedByStepId === generation?.stepId &&
+            result.producedByStepId === producer?.stepId &&
             result.name === 'draft' &&
             result.status === 'produced'
     );
     if (
-        generation?.stepKind !== 'generate' ||
-        generation.outcome.status !== 'executed' ||
-        !generation.outcome.artifacts?.includes(candidate.id) ||
-        !draft
+        producer?.stepKind !== expectedProducerKind ||
+        producer.outcome.status !== 'executed' ||
+        !producer.outcome.artifacts?.includes(candidate.id) ||
+        !draft ||
+        !producer.resultRefs?.some(
+            (ref) => ref.name === 'draft' && ref.resultId === draft.resultId
+        )
     )
         return { disposition: 'selection_unverified' };
     if (
         !assessment.inputRefs?.some(
             (ref) => ref.name === 'draft' && ref.resultId === draft.resultId
         ) ||
-        assessment.parentStepId !== generation.stepId
+        assessment.parentStepId !== producer.stepId
     )
         return { disposition: 'selection_unverified' };
+    if (candidate.stage === 'condensation') {
+        const sourceCandidate = selection.candidates?.find(
+            (entry) => entry.id === candidate.parentCandidateId
+        );
+        const producerIndex = workflow?.steps.findIndex(
+            (step) => step.stepId === producer.stepId
+        );
+        const priorAssessment =
+            producerIndex === undefined || producerIndex < 0
+                ? undefined
+                : workflow?.steps
+                      .slice(0, producerIndex)
+                      .findLast((step) => step.stepKind === 'assess');
+        const sourceProducer = sourceCandidate
+            ? workflow?.steps.find(
+                  (step) => step.stepId === sourceCandidate.workflowStepId
+              )
+            : undefined;
+        const sourceDraft = sourceCandidate
+            ? workflow?.results?.find(
+                  (result) =>
+                      result.name === 'draft' &&
+                      result.producedByStepId === sourceProducer?.stepId &&
+                      result.status === 'produced'
+              )
+            : undefined;
+        const sourceReview = priorAssessment
+            ? workflow?.results?.find(
+                  (result) =>
+                      result.name === 'review' &&
+                      result.producedByStepId === priorAssessment.stepId &&
+                      result.status === 'produced'
+              )
+            : undefined;
+        if (
+            priorAssessment === undefined ||
+            sourceCandidate === undefined ||
+            sourceCandidate.sequence >= candidate.sequence ||
+            sourceCandidate.state !== 'superseded' ||
+            !['initial_generation', 'revision'].includes(
+                sourceCandidate.stage
+            ) ||
+            sourceProducer?.stepKind !== 'generate' ||
+            !sourceProducer.outcome.artifacts?.includes(sourceCandidate.id) ||
+            sourceDraft === undefined ||
+            !sourceProducer.resultRefs?.some(
+                (ref) =>
+                    ref.name === 'draft' &&
+                    ref.resultId === sourceDraft.resultId
+            ) ||
+            priorAssessment.stepId !== producer.parentStepId ||
+            priorAssessment.outcome.status !== 'executed' ||
+            !priorAssessment.attempts?.some(
+                (attempt) => attempt.status === 'succeeded'
+            ) ||
+            priorAssessment.outcome.signals?.reviewDecision !== 'finalize' ||
+            sourceReview === undefined ||
+            !priorAssessment.resultRefs?.some(
+                (ref) =>
+                    ref.name === 'review' &&
+                    ref.resultId === sourceReview.resultId
+            ) ||
+            !priorAssessment.inputRefs?.some(
+                (ref) =>
+                    ref.name === 'draft' &&
+                    ref.resultId === sourceDraft.resultId
+            ) ||
+            priorAssessment.parentStepId !== sourceProducer.stepId ||
+            !producer.inputRefs?.some(
+                (ref) =>
+                    ref.name === 'draft' &&
+                    ref.resultId === sourceDraft.resultId
+            ) ||
+            !producer.inputRefs?.some(
+                (ref) =>
+                    ref.name === 'review' &&
+                    ref.resultId === sourceReview.resultId
+            )
+        )
+            return { disposition: 'selection_unverified' };
+    }
     if (
         !workflow?.runId ||
         workflow.runStatus !== 'completed' ||
@@ -146,7 +237,7 @@ export const assessRealtimeFinalResponse = (
         responseId: metadata.responseId,
         runId: workflow.runId,
         candidateId: candidate.id,
-        generationStepId: generation.stepId,
+        generationStepId: producer.stepId,
         assessmentStepId: assessment.stepId,
         text: selection.message,
     };
@@ -232,6 +323,19 @@ const projectOutcome = (outcome: StepOutcome): StepOutcome => {
             'policy_blocked',
             'execution_limit',
         ],
+        condensationOutcome: [
+            'requested',
+            'completed',
+            'still_overlong',
+            'budget_blocked',
+            'provider_failed',
+            'empty_output',
+            'incomplete_output',
+            'output_rejected',
+            'tool_rejected',
+            'cancelled',
+            'assessment_recovery_blocked',
+        ],
     };
     for (const [key, allowed] of Object.entries(machineSignals)) {
         const value = outcome.signals?.[key];
@@ -241,10 +345,22 @@ const projectOutcome = (outcome: StepOutcome): StepOutcome => {
     if (outcome.signals?.clarification === true) {
         signals.clarification = true;
     }
+    if (typeof outcome.signals?.condensationAttempted === 'boolean') {
+        signals.condensationAttempted = outcome.signals.condensationAttempted;
+    }
     for (const key of [
         'clarificationOptionCount',
         'contextStepCount',
         'retrievedSourceCount',
+        'originalEstimatedTokens',
+        'condensedEstimatedTokens',
+        'effectiveDeliveryTokenCeiling',
+        'deliveryOverageTokens',
+        'originalCodePoints',
+        'condensedCodePoints',
+        'deliveryCodePointLimit',
+        'deliveryCodePointOverage',
+        'condensedCodePointOverage',
     ]) {
         const value = outcome.signals?.[key];
         if (
@@ -273,9 +389,17 @@ const projectOutcome = (outcome: StepOutcome): StepOutcome => {
         }
     }
     Object.assign(signals, projectTraceAlignmentSignals(outcome.signals));
+    const artifacts = outcome.artifacts?.filter((artifact) =>
+        /^candidate_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+            artifact
+        )
+    );
     return {
         status: outcome.status,
         summary: 'Voice execution metadata only.',
+        ...(artifacts === undefined || artifacts.length === 0
+            ? {}
+            : { artifacts: artifacts.slice(-1) }),
         ...(Object.keys(signals).length === 0 ? {} : { signals }),
     };
 };
@@ -455,7 +579,38 @@ export const storeRealtimeWorkflowMetadata = async (
     const voice = realtimeWorkflowScope();
     if (voice === undefined)
         throw new Error('Realtime execution scope is required.');
-    const projected = projectRealtimeWorkflowMetadata(metadata, voice);
+    const finalResponse = assessRealtimeFinalResponse(
+        metadata,
+        voice.deliveryPolicy,
+        selection
+    );
+    const persistenceMetadata =
+        finalResponse.disposition === 'approved' && metadata.workflow
+            ? {
+                  ...metadata,
+                  workflow: {
+                      ...metadata.workflow,
+                      steps: metadata.workflow.steps.map((step) =>
+                          step.stepId === finalResponse.assessmentStepId
+                              ? {
+                                    ...step,
+                                    outcome: {
+                                        ...step.outcome,
+                                        artifacts: [
+                                            ...(step.outcome.artifacts ?? []),
+                                            finalResponse.candidateId,
+                                        ],
+                                    },
+                                }
+                              : step
+                      ),
+                  },
+              }
+            : metadata;
+    const projected = projectRealtimeWorkflowMetadata(
+        persistenceMetadata,
+        voice
+    );
     const runId = projected.workflow?.runId;
     if (!projected.responseId || !runId)
         throw new Error('Realtime canonical execution receipt is unavailable.');
@@ -467,10 +622,6 @@ export const storeRealtimeWorkflowMetadata = async (
         responseId: projected.responseId,
         runId,
         status,
-        finalResponse: assessRealtimeFinalResponse(
-            metadata,
-            voice.deliveryPolicy,
-            selection
-        ),
+        finalResponse,
     };
 };

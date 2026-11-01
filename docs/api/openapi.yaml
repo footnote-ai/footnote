@@ -3014,6 +3014,7 @@ components:
                         - plan
                         - tool
                         - generate
+                        - condense
                         - assess
                         - revise
                         - presentation
@@ -4261,6 +4262,7 @@ components:
                         - generation
                         - assessment
                         - revision
+                        - condensation
                         - presentation
                 surface:
                     type: string
@@ -4304,6 +4306,7 @@ components:
                         - generation
                         - assessment
                         - revision
+                        - condensation
                         - presentation
                         - unknown
                 provider:
@@ -5700,6 +5703,7 @@ components:
                     enum:
                         - initial_generation
                         - revision
+                        - condensation
                         - presentation_draft
                         - presentation_finalization
                         - presentation_repair

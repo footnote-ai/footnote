@@ -28,6 +28,7 @@ import path from 'node:path';
 import { SqliteTraceStore } from '../src/storage/traces/sqliteTraceStore.js';
 import { storeTrace } from '../src/services/traceStore.js';
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
+import { assessRealtimeFinalResponse } from '../src/services/realtimeWorkflowScope.js';
 
 test.beforeEach((t) => {
     if (!('mock' in t)) throw new Error('Test context is required.');
@@ -422,11 +423,399 @@ test('only the selected, assessed final answer is returned for voice staging', a
     }
 });
 
-test('an over-limit answer remains unapproved after the normal Workflow assessment', async () => {
+test('an over-limit approved Voice answer is condensed, reassessed, and persisted as metadata only', async () => {
     const previousMode = runtimeConfig.chatWorkflow.modeId;
     const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
     runtimeConfig.chatWorkflow.modeId = 'grounded';
     runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    let calls = 0;
+    const requests: Parameters<GenerationRuntime['generate']>[0][] = [];
+    const originalAnswer =
+        'The detailed answer repeats itself, adds background, and spends too long explaining the setup.';
+    const condensedAnswer = 'Evidence is limited.';
+    const outputs = [
+        JSON.stringify(answerPlan()),
+        originalAnswer,
+        JSON.stringify({
+            reviewDecision: 'finalize',
+            reviewReason: 'Keep the evidence limitation clear.',
+        }),
+        condensedAnswer,
+        JSON.stringify({
+            reviewDecision: 'finalize',
+            reviewReason: 'The limitation remains clear.',
+        }),
+    ];
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'voice-condense-'));
+    const store = new SqliteTraceStore({ dbPath: path.join(root, 'trace.db') });
+    let storedResponseId: string | undefined;
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: {
+                kind: 'synthetic',
+                generate: async (request) => {
+                    const call = calls++;
+                    requests.push(request);
+                    return {
+                        model: request.model,
+                        text: outputs[call] ?? '',
+                        usage: {
+                            promptTokens: 10,
+                            completionTokens: 5,
+                            totalTokens: 15,
+                        },
+                    };
+                },
+            },
+            storeTrace: (metadata, ...rest) => {
+                storedResponseId = metadata.responseId;
+                return storeTrace(store, metadata, ...rest);
+            },
+            buildResponseMetadata,
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+        });
+        const result = await orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: () => undefined,
+            voiceMode: 'live',
+            maxAnswerTokens: 12,
+        });
+        const approvedFinalResponse = result.finalResponse;
+        const stored = await store.retrieve(storedResponseId ?? '');
+        assert.equal(
+            result.finalResponse?.disposition,
+            'approved',
+            JSON.stringify({ calls, workflowStatus: stored?.workflow?.status })
+        );
+        assert.ok(approvedFinalResponse?.disposition === 'approved');
+        assert.equal(approvedFinalResponse.text, condensedAnswer);
+        assert.equal(calls, 5);
+        const condensationInput = requests[3]?.messages
+            .map((message) => message.content)
+            .join('\n');
+        assert.match(condensationInput ?? '', /VOICE_SECRET/);
+        assert.match(
+            condensationInput ?? '',
+            /The detailed answer repeats itself/
+        );
+        assert.match(
+            condensationInput ?? '',
+            /Keep the evidence limitation clear/
+        );
+        assert.match(condensationInput ?? '', /12/);
+
+        assert.ok(stored?.workflow);
+        assert.doesNotMatch(
+            JSON.stringify(stored),
+            /VOICE_SECRET|The detailed answer repeats itself|Evidence is limited/
+        );
+        const workflow = stored.workflow;
+        const condensation = workflow.steps.find(
+            (step) => step.stepKind === 'condense'
+        );
+        assert.ok(condensation);
+        assert.equal(condensation.usage?.totalTokens, 15);
+        assert.equal(condensation.attempts?.[0]?.usage?.totalTokens, 15);
+        assert.ok(condensation.cost);
+        const candidate = approvedFinalResponse.candidateId;
+        assert.ok(condensation.outcome.artifacts?.includes(candidate));
+        const condensedResult = workflow.results?.find(
+            (entry) =>
+                entry.producedByStepId === condensation.stepId &&
+                entry.name === 'draft' &&
+                entry.status === 'produced'
+        );
+        assert.ok(condensedResult);
+        const assessment = workflow.steps.find(
+            (step) => step.stepId === approvedFinalResponse.assessmentStepId
+        );
+        assert.equal(assessment?.parentStepId, condensation.stepId);
+        assert.ok(
+            assessment?.inputRefs?.some(
+                (ref) =>
+                    ref.name === 'draft' &&
+                    ref.resultId === condensedResult.resultId
+            )
+        );
+        assert.ok(assessment?.outcome.artifacts?.includes(candidate));
+        const initialGeneration = workflow.steps.find(
+            (step) => step.stepKind === 'generate'
+        );
+        assert.ok(initialGeneration);
+        const sourceCandidateId = initialGeneration?.outcome.artifacts?.[0];
+        assert.ok(sourceCandidateId);
+        const selection = {
+            message: condensedAnswer,
+            answerProvenanceEligible: true,
+            candidates: [
+                {
+                    id: sourceCandidateId,
+                    stage: 'initial_generation' as const,
+                    workflowStepId: initialGeneration.stepId,
+                    sequence: 0,
+                    state: 'superseded' as const,
+                    text: originalAnswer,
+                },
+                {
+                    id: candidate,
+                    parentCandidateId: sourceCandidateId,
+                    stage: 'condensation' as const,
+                    workflowStepId: condensation.stepId,
+                    sequence: 1,
+                    state: 'selected' as const,
+                    text: condensedAnswer,
+                },
+            ],
+        };
+        assert.equal(
+            assessRealtimeFinalResponse(
+                stored!,
+                {
+                    mode: 'live',
+                    maxAnswerTokens: 12,
+                },
+                selection
+            ).disposition,
+            'approved'
+        );
+        assert.notEqual(
+            assessRealtimeFinalResponse(
+                stored!,
+                {
+                    mode: 'live',
+                    maxAnswerTokens: 12,
+                },
+                {
+                    ...selection,
+                    candidates: [
+                        selection.candidates[0],
+                        {
+                            ...selection.candidates[1],
+                            parentCandidateId: 'candidate_wrong_parent',
+                        },
+                    ],
+                }
+            ).disposition,
+            'approved'
+        );
+    } finally {
+        store.close();
+        await fs.rm(root, { recursive: true, force: true });
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+    }
+});
+
+test('failed or unresolved condensation never releases the original or condensed text', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    const originalAnswer =
+        'The original answer is much longer than this configured Voice delivery budget and must never be released without a compliant approved replacement.';
+    const cases: Array<{
+        name: string;
+        outcome: string;
+        calls: number;
+        failProvider?: boolean;
+        condensed?: string;
+        completion?: {
+            status: 'incomplete';
+            visibleTextLength: number;
+        };
+        reassessment?: 'revise' | 'search';
+        toolExecution?: boolean;
+    }> = [
+        {
+            name: 'provider failure',
+            outcome: 'provider_failed',
+            calls: 4,
+            failProvider: true,
+        },
+        {
+            name: 'empty output',
+            outcome: 'empty_output',
+            calls: 4,
+            condensed: ' \u200b ',
+        },
+        {
+            name: 'incomplete output',
+            outcome: 'incomplete_output',
+            calls: 4,
+            condensed: 'Evidence is limited.',
+            completion: { status: 'incomplete', visibleTextLength: 20 },
+        },
+        {
+            name: 'provider tool result',
+            outcome: 'tool_rejected',
+            calls: 4,
+            condensed: 'Evidence is limited.',
+            toolExecution: true,
+        },
+        {
+            name: 'still over budget',
+            outcome: 'still_overlong',
+            calls: 5,
+            condensed:
+                'This answer is still much longer than the configured Voice delivery budget.',
+        },
+        {
+            name: 'reassessment requests revision',
+            outcome: 'completed',
+            calls: 5,
+            condensed: 'Evidence is limited.',
+            reassessment: 'revise' as const,
+        },
+        {
+            name: 'reassessment requests search',
+            outcome: 'completed',
+            calls: 5,
+            condensed: 'Evidence is limited.',
+            reassessment: 'search' as const,
+        },
+    ];
+    try {
+        for (const scenario of cases) {
+            let calls = 0;
+            let stored: ResponseMetadata | undefined;
+            const orchestrator = createChatOrchestrator({
+                generationRuntime: {
+                    kind: 'synthetic',
+                    generate: async (request) => {
+                        const call = calls++;
+                        if (scenario.failProvider && call === 3)
+                            throw new Error('VOICE_SECRET provider failure');
+                        const text =
+                            call === 0
+                                ? JSON.stringify(answerPlan())
+                                : call === 1
+                                  ? originalAnswer
+                                  : call === 2
+                                    ? JSON.stringify({
+                                          reviewDecision: 'finalize',
+                                          reviewReason:
+                                              'Preserve this qualification.',
+                                      })
+                                    : call === 3
+                                      ? (scenario.condensed ?? '')
+                                      : JSON.stringify({
+                                            reviewDecision:
+                                                scenario.reassessment ??
+                                                'finalize',
+                                            reviewReason:
+                                                'VOICE_SECRET reassessment',
+                                            ...(scenario.reassessment ===
+                                            'revise'
+                                                ? {
+                                                      revisionInstruction:
+                                                          'Restore the qualification.',
+                                                  }
+                                                : {}),
+                                            ...(scenario.reassessment ===
+                                            'search'
+                                                ? {
+                                                      search: {
+                                                          query: 'restricted follow-up',
+                                                      },
+                                                  }
+                                                : {}),
+                                        });
+                        return {
+                            model: request.model,
+                            text,
+                            ...(call === 3 && scenario.completion !== undefined
+                                ? { completion: scenario.completion }
+                                : {}),
+                            ...(call === 3 && scenario.toolExecution
+                                ? {
+                                      toolExecution: {
+                                          toolName: 'web_search',
+                                          status: 'executed' as const,
+                                      },
+                                  }
+                                : {}),
+                        };
+                    },
+                },
+                storeTrace: async (metadata) => {
+                    stored = metadata;
+                },
+                buildResponseMetadata,
+                defaultModel: 'gpt-5-mini',
+                recordUsage: () => undefined,
+            });
+            const result = await orchestrator.runRealtimeConversation(
+                snapshot(),
+                {
+                    signal: new AbortController().signal,
+                    onRunStarted: () => undefined,
+                    voiceMode: 'live',
+                    maxAnswerTokens: 12,
+                }
+            );
+            assert.equal(calls, scenario.calls, scenario.name);
+            assert.notEqual(
+                result.finalResponse?.disposition,
+                'approved',
+                scenario.name
+            );
+            assert.equal(
+                'text' in (result.finalResponse ?? {}),
+                false,
+                scenario.name
+            );
+            const condensation = stored?.workflow?.steps.find(
+                (step) => step.stepKind === 'condense'
+            );
+            assert.equal(
+                condensation?.outcome.signals?.condensationOutcome,
+                scenario.outcome,
+                scenario.name
+            );
+            if (scenario.toolExecution) {
+                assert.equal(
+                    stored?.workflow?.steps.some(
+                        (step) => step.stepKind === 'tool'
+                    ),
+                    false
+                );
+            }
+            if (scenario.reassessment !== undefined) {
+                const finalAssessment = stored?.workflow?.steps.findLast(
+                    (step) => step.stepKind === 'assess'
+                );
+                assert.equal(
+                    finalAssessment?.outcome.signals?.reviewDecision,
+                    scenario.reassessment,
+                    `${scenario.name}: ${JSON.stringify(finalAssessment)}`
+                );
+                assert.equal(
+                    finalAssessment?.outcome.signals?.condensationOutcome,
+                    'assessment_recovery_blocked',
+                    scenario.name
+                );
+            }
+            assert.doesNotMatch(
+                JSON.stringify(stored),
+                /VOICE_SECRET|The original answer is much longer|Evidence is limited/u,
+                scenario.name
+            );
+        }
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+    }
+});
+
+test('Voice condensation is withheld when the existing Workflow step limit cannot reserve reassessment', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    const previousStepLimit =
+        runtimeConfig.chatWorkflow.maxWorkflowStepsOverride;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    runtimeConfig.chatWorkflow.maxWorkflowStepsOverride = 4;
     let calls = 0;
     let stored: ResponseMetadata | undefined;
     try {
@@ -438,10 +827,10 @@ test('an over-limit answer remains unapproved after the normal Workflow assessme
                     text:
                         [
                             JSON.stringify(answerPlan()),
-                            'The reviewed answer.',
+                            'This approved original is too long for the configured Voice delivery budget.',
                             JSON.stringify({
                                 reviewDecision: 'finalize',
-                                reviewReason: 'Sufficient evidence.',
+                                reviewReason: 'The answer is complete.',
                             }),
                         ][calls++] ?? '',
                 }),
@@ -457,12 +846,135 @@ test('an over-limit answer remains unapproved after the normal Workflow assessme
             signal: new AbortController().signal,
             onRunStarted: () => undefined,
             voiceMode: 'live',
-            maxAnswerTokens: 1,
+            maxAnswerTokens: 12,
         });
-        assert.equal(result.status, 'completed');
-        assert.equal(result.finalResponse?.disposition, 'answer_too_long');
-        assert.equal(calls, 3);
-        assert.doesNotMatch(JSON.stringify(stored), /The reviewed answer/);
+        assert.equal(
+            calls,
+            3,
+            JSON.stringify({
+                workflow: stored?.workflow?.steps.map((step) => ({
+                    kind: step.stepKind,
+                    outcome: step.outcome,
+                })),
+                terminationReason: stored?.workflow?.terminationReason,
+            })
+        );
+        assert.notEqual(result.finalResponse?.disposition, 'approved');
+        assert.equal('text' in (result.finalResponse ?? {}), false);
+        const assessment = stored?.workflow?.steps.findLast(
+            (step) => step.stepKind === 'assess'
+        );
+        assert.equal(
+            assessment?.outcome.signals?.condensationOutcome,
+            'budget_blocked'
+        );
+        assert.equal(assessment?.outcome.signals?.condensationAttempted, false);
+        assert.equal(
+            stored?.workflow?.terminationReason,
+            'budget_exhausted_steps'
+        );
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+        runtimeConfig.chatWorkflow.maxWorkflowStepsOverride = previousStepLimit;
+    }
+});
+
+test('caller cancellation during condensation or reassessment cannot approve a late provider result', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    try {
+        for (const stage of ['condense', 'assess'] as const) {
+            let calls = 0;
+            let releaseProvider!: () => void;
+            let markProviderStarted!: () => void;
+            const providerStarted = new Promise<void>((resolve) => {
+                markProviderStarted = resolve;
+            });
+            const delayedProvider = new Promise<void>((resolve) => {
+                releaseProvider = resolve;
+            });
+            let observedSignal: AbortSignal | undefined;
+            let stored: ResponseMetadata | undefined;
+            const controller = new AbortController();
+            const orchestrator = createChatOrchestrator({
+                generationRuntime: {
+                    kind: 'synthetic',
+                    generate: async (request) => {
+                        const call = calls++;
+                        if (
+                            (stage === 'condense' && call === 3) ||
+                            (stage === 'assess' && call === 4)
+                        ) {
+                            observedSignal = request.signal;
+                            markProviderStarted();
+                            await delayedProvider;
+                            return {
+                                model: request.model,
+                                text:
+                                    stage === 'condense'
+                                        ? 'Evidence is limited.'
+                                        : JSON.stringify({
+                                              reviewDecision: 'finalize',
+                                              reviewReason: 'Ready.',
+                                          }),
+                            };
+                        }
+                        return {
+                            model: request.model,
+                            text:
+                                [
+                                    JSON.stringify(answerPlan()),
+                                    'This original answer is much too long for the configured Voice delivery ceiling.',
+                                    JSON.stringify({
+                                        reviewDecision: 'finalize',
+                                        reviewReason: 'The original is sound.',
+                                    }),
+                                    'Evidence is limited.',
+                                ][call] ?? '',
+                        };
+                    },
+                },
+                storeTrace: async (metadata) => {
+                    stored = metadata;
+                },
+                buildResponseMetadata,
+                defaultModel: 'gpt-5-mini',
+                recordUsage: () => undefined,
+            });
+            const pending = orchestrator.runRealtimeConversation(snapshot(), {
+                signal: controller.signal,
+                onRunStarted: () => undefined,
+                voiceMode: 'live',
+                maxAnswerTokens: 12,
+            });
+            await providerStarted;
+            controller.abort(new Error('Caller interrupted the turn.'));
+            releaseProvider();
+            const result = await pending;
+            assert.equal(observedSignal?.aborted, true, stage);
+            assert.notEqual(
+                result.finalResponse?.disposition,
+                'approved',
+                stage
+            );
+            assert.equal('text' in (result.finalResponse ?? {}), false, stage);
+            assert.doesNotMatch(
+                JSON.stringify(stored),
+                /This original answer is much too long|Evidence is limited/u,
+                stage
+            );
+            if (stage === 'assess') {
+                assert.equal(
+                    stored?.workflow?.steps.findLast(
+                        (step) => step.stepKind === 'assess'
+                    )?.outcome.status,
+                    'failed'
+                );
+            }
+        }
     } finally {
         runtimeConfig.chatWorkflow.modeId = previousMode;
         runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
@@ -550,10 +1062,14 @@ test('an apparently final assessment cannot approve a missing Result or a differ
 test('revision becomes speakable only when its own selected draft is finalized', async () => {
     const previousMode = runtimeConfig.chatWorkflow.modeId;
     const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    const previousDeliberationLimit =
+        runtimeConfig.chatWorkflow.maxDeliberationCallsOverride;
     runtimeConfig.chatWorkflow.modeId = 'grounded';
     runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    runtimeConfig.chatWorkflow.maxDeliberationCallsOverride = 8;
     let calls = 0;
     let stored: ResponseMetadata | undefined;
+    const requests: Parameters<GenerationRuntime['generate']>[0][] = [];
     try {
         const outputs = [
             JSON.stringify(answerPlan()),
@@ -564,19 +1080,27 @@ test('revision becomes speakable only when its own selected draft is finalized',
                 revisionInstruction: 'State the limit.',
             }),
             JSON.stringify(answerPlan()),
-            'Revised answer with its limit.',
+            'Revised answer with its limit, supporting evidence, and enough useful explanation to exceed the Voice delivery limit.',
             JSON.stringify({
                 reviewDecision: 'finalize',
                 reviewReason: 'Ready.',
+            }),
+            'The source remains uncertain.',
+            JSON.stringify({
+                reviewDecision: 'finalize',
+                reviewReason: 'The source remains qualified.',
             }),
         ];
         const orchestrator = createChatOrchestrator({
             generationRuntime: {
                 kind: 'synthetic',
-                generate: async (request) => ({
-                    model: request.model,
-                    text: outputs[calls++] ?? '',
-                }),
+                generate: async (request) => {
+                    requests.push(request);
+                    return {
+                        model: request.model,
+                        text: outputs[calls++] ?? '',
+                    };
+                },
             },
             storeTrace: async (metadata) => {
                 stored = metadata;
@@ -588,26 +1112,47 @@ test('revision becomes speakable only when its own selected draft is finalized',
         const result = await orchestrator.runRealtimeConversation(snapshot(), {
             signal: new AbortController().signal,
             onRunStarted: () => undefined,
+            voiceMode: 'live',
+            maxAnswerTokens: 12,
         });
         assert.ok(
             result.finalResponse?.disposition === 'approved',
-            JSON.stringify(result)
+            JSON.stringify({ result, calls, workflow: stored?.workflow })
         );
         assert.equal(
             result.finalResponse.text,
-            'Revised answer with its limit.'
+            'The source remains uncertain.'
         );
+        assert.equal(calls, 8);
+        const condensationInput = requests[6]?.messages
+            .map((message) => message.content)
+            .join('\n');
+        assert.match(
+            condensationInput ?? '',
+            /Revised answer with its limit, supporting evidence/
+        );
+        assert.doesNotMatch(condensationInput ?? '', /First draft\./);
+        const condensation = stored?.workflow?.steps.find(
+            (step) => step.stepKind === 'condense'
+        );
+        assert.ok(condensation);
+        const assessment = stored?.workflow?.steps.findLast(
+            (step) => step.stepKind === 'assess'
+        );
+        assert.equal(assessment?.parentStepId, condensation.stepId);
         const finalResponse = result.finalResponse;
-        const assessment = stored?.workflow?.steps.find(
+        const finalAssessment = stored?.workflow?.steps.find(
             (step) => step.stepId === finalResponse.assessmentStepId
         );
         assert.equal(
-            assessment?.parentStepId,
+            finalAssessment?.parentStepId,
             result.finalResponse.generationStepId
         );
     } finally {
         runtimeConfig.chatWorkflow.modeId = previousMode;
         runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+        runtimeConfig.chatWorkflow.maxDeliberationCallsOverride =
+            previousDeliberationLimit;
     }
 });
 

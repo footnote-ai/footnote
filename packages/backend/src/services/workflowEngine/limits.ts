@@ -268,6 +268,7 @@ export const activityForWorkflowStep = (
     if (stepKind === 'tool') return { tool: 'one-or-more' };
     if (stepKind === 'plan') return { deliberation: 'plan' };
     if (stepKind === 'assess') return { deliberation: 'review' };
+    if (stepKind === 'condense') return { deliberation: 'general' };
     return undefined;
 };
 

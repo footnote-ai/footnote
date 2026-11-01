@@ -117,6 +117,7 @@ const formatWorkflowStep = (
 const isIncludedWorkflowStep = (step: StepRecord): boolean =>
     step.stepKind === 'plan' ||
     step.stepKind === 'assess' ||
+    step.stepKind === 'condense' ||
     step.stepKind === 'presentation' ||
     step.stepKind === 'tool' ||
     step.stepKind === 'evaluator' ||

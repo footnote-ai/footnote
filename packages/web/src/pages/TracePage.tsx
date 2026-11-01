@@ -139,6 +139,7 @@ const RESPONSE_CANDIDATE_STAGE_LABELS: Record<
 > = {
     initial_generation: 'Initial answer',
     revision: 'Revised answer',
+    condensation: 'Condensed answer',
     presentation_draft: 'Presentation candidate (expression only)',
     presentation_finalization: 'Finalized answer',
     presentation_repair: 'Repaired final answer',

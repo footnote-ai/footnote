@@ -17,6 +17,16 @@ const LIVE_COMMENTARY_LIMIT_TOKENS = 400;
 const STANDARD_TTS_LIMIT_TOKENS = 1_600;
 const STANDARD_TTS_LIMIT_CHARACTERS = 3_686;
 
+export type VoiceAnswerMeasurement = {
+    estimatedTokens: number;
+    tokenLimit: number;
+    tokenOverage: number;
+    codePoints: number;
+    characterLimit?: number;
+    characterOverage: number;
+    fits: boolean;
+};
+
 /**
  * Estimates tokens without an English word-split assumption. This is deliberately
  * upper-biased for multilingual text, not an exact provider tokenizer count.
@@ -25,7 +35,8 @@ export const estimateVoiceAnswerTokens = (text: string): number => {
     let asciiLettersAndSpaces = 0;
     let otherTokens = 0;
     for (const character of text) {
-        if (character.codePointAt(0)! > 0x7f) otherTokens += 2;
+        if (character.codePointAt(0)! > 0x7f)
+            otherTokens += Math.max(2, Buffer.byteLength(character, 'utf8'));
         else if (/[a-z\s]/i.test(character)) asciiLettersAndSpaces += 1;
         else otherTokens += 1;
     }
@@ -47,9 +58,31 @@ export const fitsVoiceAnswerDelivery = (
     text: string,
     mode: VoiceMode,
     configuredLimit: number
-): boolean =>
-    estimateVoiceAnswerTokens(text) <=
-        resolveVoiceAnswerTokenLimit(mode, configuredLimit) &&
-    (mode !== 'standard' ||
-        Array.from(text).length <= STANDARD_TTS_LIMIT_CHARACTERS);
+): boolean => measureVoiceAnswerDelivery(text, mode, configuredLimit).fits;
 
+/** Shares one measured result across admission, prompts, and content-free receipts. */
+export const measureVoiceAnswerDelivery = (
+    text: string,
+    mode: VoiceMode,
+    configuredLimit: number
+): VoiceAnswerMeasurement => {
+    const estimatedTokens = estimateVoiceAnswerTokens(text);
+    const tokenLimit = resolveVoiceAnswerTokenLimit(mode, configuredLimit);
+    const codePoints = Array.from(text).length;
+    const characterLimit =
+        mode === 'standard' ? STANDARD_TTS_LIMIT_CHARACTERS : undefined;
+    const tokenOverage = Math.max(0, estimatedTokens - tokenLimit);
+    const characterOverage = Math.max(
+        0,
+        codePoints - (characterLimit ?? Number.MAX_SAFE_INTEGER)
+    );
+    return {
+        estimatedTokens,
+        tokenLimit,
+        tokenOverage,
+        codePoints,
+        ...(characterLimit === undefined ? {} : { characterLimit }),
+        characterOverage,
+        fits: tokenOverage === 0 && characterOverage === 0,
+    };
+};

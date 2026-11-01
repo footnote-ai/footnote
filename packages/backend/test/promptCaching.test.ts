@@ -368,6 +368,47 @@ test('cache summary excludes not-called routes and groups by actual serving prov
     assert.equal(requested?.cacheReadTokens, 5);
 });
 
+test('condensation cache attempts retain their distinct purpose', () => {
+    const workflow: WorkflowRecord = {
+        workflowId: 'fixture',
+        workflowName: 'fixture',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 1,
+        maxSteps: 10,
+        steps: [
+            {
+                stepId: 'condense',
+                startedAt: '2026-10-27T00:00:00Z',
+                finishedAt: '2026-10-27T00:00:01Z',
+                durationMs: 1000,
+                stepKind: 'condense',
+                attempt: 1,
+                outcome: { status: 'executed', summary: 'fixture' },
+                attempts: [
+                    {
+                        attempt: 1,
+                        status: 'succeeded',
+                        startedAt: '2026-10-27T00:00:00Z',
+                        finishedAt: '2026-10-27T00:00:01Z',
+                        durationMs: 1000,
+                        promptCache: {
+                            mode: 'explicit',
+                            purpose: 'condensation',
+                            surface: 'unknown',
+                            stablePrefixTokensEstimate: 12,
+                        },
+                    },
+                ],
+            },
+        ],
+    };
+
+    const [summary] = summarizePromptCaching(workflow);
+    assert.equal(summary?.purpose, 'condensation');
+    assert.equal(summary?.attempts, 1);
+});
+
 test('disabled controls retain version attribution without changing provider wire options', () => {
     const observed = applyPromptCaching(
         request,

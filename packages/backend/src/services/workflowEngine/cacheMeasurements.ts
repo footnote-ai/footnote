@@ -23,9 +23,13 @@ export const summarizePromptCaching = (
     >();
     for (const step of workflow.steps) {
         if (
-            !['plan', 'generate', 'assess', 'presentation'].includes(
-                step.stepKind
-            )
+            ![
+                'plan',
+                'generate',
+                'assess',
+                'condense',
+                'presentation',
+            ].includes(step.stepKind)
         )
             continue;
         for (const parent of step.attempts ?? []) {
@@ -46,10 +50,12 @@ export const summarizePromptCaching = (
                           ? 'assessment'
                           : step.stepKind === 'presentation'
                             ? 'presentation'
-                            : step.outcome.signals?.refinementSourceStepId ===
-                                'assess'
-                              ? 'revision'
-                              : 'generation');
+                            : step.stepKind === 'condense'
+                              ? 'condensation'
+                              : step.outcome.signals?.refinementSourceStepId ===
+                                  'assess'
+                                ? 'revision'
+                                : 'generation');
                 const provider =
                     attempt.actualProvider ??
                     attempt.requestedProvider ??

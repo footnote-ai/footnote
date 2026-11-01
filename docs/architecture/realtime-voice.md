@@ -105,23 +105,41 @@ Generation still follows TRACE. The limit does not raise Tightness or remove
 needed reasoning, attribution or qualifications.
 
 The backend estimates answer tokens because the available providers do not
-share a tokenizer. The estimate counts ASCII letters and spaces in groups of
-three, counts ASCII punctuation and digits once each, and counts each non-ASCII
-code point twice. It does not split on English spaces and is deliberately
-upper-biased, but it is not an exact provider token count. Live uses the lower of
-the configured ceiling and 400 estimated tokens, leaving 20% below the GPT-Live
+share a tokenizer. It estimates ASCII letters and spaces in groups of three,
+counts other ASCII characters once, and weights each non-ASCII code point by
+the greater of two or its UTF-8 byte length. It does not split on English
+spaces, but it is not an exact provider token count. Live uses the lower of the
+configured ceiling and 400 estimated tokens, leaving 20% below the GPT-Live
 500-token commentary-event maximum. Standard uses the lower of the configured
 ceiling and 1,600 estimated tokens, plus a 3,686-code-point cap below the TTS
 provider's 2,000-token and 4,096-character input limits. These provider limits
 are internal safeguards, not additional settings. ([Live commentary limit](https://developers.openai.com/api/reference/resources/live/sideband-websocket),
 [speech input limits](https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create))
 
+After ordinary assessment finalizes an over-budget answer, the existing
+Workflow may run one Voice-scoped `condense` Step. In-budget answers add no
+model call. Condensation receives the measured length, overage and effective
+limit along with approved context, evidence, assessment concerns and TRACE
+posture. It produces a separate Result and candidate, then goes through normal
+assessment. If the Step or reassessment fails, the output stays over budget, or
+assessment asks for more revision/search, Voice withholds speech. The Workflow
+does not start a second recovery pass or raise configured limits to make the
+candidate fit. The backend measures the new text; model claims about length are
+not used for eligibility.
+
 The completed answer is checked before Voice marks it approved for delivery,
-and both provider adapters check again before handoff. Over-limit answers return
-`answer_too_long`; they are not truncated, condensed or sent for speech. The
-conditional Workflow condensation step belongs to
-[#968](https://github.com/footnote-ai/footnote/issues/968), is deliberately
-deferred, and is not a prerequisite for #965.
+and both provider adapters check again before handoff. Standard sends the exact
+approved text to TTS. Live commentary is a handoff that GPT-Live may paraphrase;
+it is not proof of exact-text playback. Canonical Voice records retain only
+content-free condensation measurements, outcome, Result/candidate references,
+timing, usage and cost. They do not retain prompts, questions, conversation,
+retrieval bodies, assessment prose or answer drafts.
+
+Synthetic evaluation fixtures for six representative cases are in
+[`voiceCondensationEvaluation.json`](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json).
+No provider comparison has been run: candidate outputs, accuracy and TRACE
+fidelity, measured latency, tokens and cost remain unverified pending an
+authorized provider evaluation.
 
 Provider failures close the selected mode; they do not switch to another
 provider or mode. Realtime call state and transcript content are transient.

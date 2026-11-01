@@ -1739,6 +1739,8 @@ export const createChatService = ({
                             workflowRuntimeConfig.maxSearchRecoveryCycles,
                     },
                     workflowPolicy,
+                    traceTarget: routingRequest?.traceTarget,
+                    traceTemperament: effectivePlannerTemperament,
                     ...(workflowProfile.optionalExtensions
                         ?.reviewDecisionPrompt !== undefined && {
                         reviewDecisionPrompt:

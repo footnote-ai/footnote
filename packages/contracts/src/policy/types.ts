@@ -682,6 +682,7 @@ export const WORKFLOW_STEP_KINDS = [
     'plan',
     'tool',
     'generate',
+    'condense',
     'assess',
     'evaluator',
     'revise',
