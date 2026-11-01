@@ -3014,12 +3014,12 @@ export const runBoundedReviewWorkflow = async (
                                   work.envelope.diagnostics.surface
                               )
                           );
-                          boundedRequest.signal?.throwIfAborted();
                           const result =
                               normalizeGenerationResultEvidence(generated);
                           providers.set(result, profile.provider);
                           attempts.push(result);
                           attemptsByIndex.set(attemptIndex, result);
+                          boundedRequest.signal?.throwIfAborted();
                           return result;
                       },
                       retryReasonCode: (result) => {
@@ -3030,6 +3030,7 @@ export const runBoundedReviewWorkflow = async (
                       },
                   })
                 : undefined;
+            boundedRequest.signal?.throwIfAborted();
             const routedResult =
                 routed === undefined ? undefined : toRoutingChainResult(routed);
             if (routedResult?.isErr()) {
@@ -3090,13 +3091,17 @@ export const runBoundedReviewWorkflow = async (
                         work.envelope.diagnostics.surface
                     )
                 );
-                boundedRequest.signal?.throwIfAborted();
                 generationResult = normalizeGenerationResultEvidence(generated);
+                providers.set(
+                    generationResult,
+                    boundedRequest.provider ?? 'unknown'
+                );
                 attempts.push(generationResult);
                 selectedCapabilityFacts = resolveAttemptCapabilityFacts(
                     boundedRequest.provider,
                     boundedRequest.capabilities
                 );
+                boundedRequest.signal?.throwIfAborted();
             }
         } catch (error) {
             const cancelled = boundedRequest.signal?.aborted === true;
@@ -3114,18 +3119,21 @@ export const runBoundedReviewWorkflow = async (
                           : { promptCache: error.promptCache }),
                   }
                 : undefined;
-            const failedUsage =
-                failedResult === undefined
-                    ? undefined
-                    : captureUsage(
-                          failedResult,
-                          boundedRequest.model,
-                          boundedRequest.provider
-                      );
             const failedResults = [
                 ...attempts,
                 ...(failedResult === undefined ? [] : [failedResult]),
             ];
+            const failureUsage = combineGenerationUsage(
+                failedResults.map((attempt) =>
+                    captureUsage(
+                        attempt,
+                        boundedRequest.model,
+                        providers.get(attempt) ?? boundedRequest.provider
+                    )
+                ),
+                routingAttempts,
+                failedResults
+            );
             return {
                 status: 'failed',
                 errorCode: cancelled
@@ -3134,9 +3142,9 @@ export const runBoundedReviewWorkflow = async (
                 errorMessage:
                     error instanceof Error ? error.message : String(error),
                 retryable: false,
-                ...(failedUsage?.totalTokens === undefined
+                ...(failureUsage.totalTokens === undefined
                     ? {}
-                    : { usage: { totalTokens: failedUsage.totalTokens } }),
+                    : { usage: { totalTokens: failureUsage.totalTokens } }),
                 metadata: encodeMetadata({
                     status: 'failed',
                     summary:
@@ -3154,13 +3162,7 @@ export const runBoundedReviewWorkflow = async (
                                   failedResults,
                                   routingAttempts
                               ),
-                              estimatedCost: combineGenerationUsage(
-                                  failedUsage === undefined
-                                      ? []
-                                      : [failedUsage],
-                                  routingAttempts,
-                                  failedResults
-                              ).estimatedCost,
+                              estimatedCost: failureUsage.estimatedCost,
                           }),
                     signals: condensationSignals(
                         cancelled ? 'cancelled' : 'provider_failed'
@@ -3329,6 +3331,8 @@ export const runBoundedReviewWorkflow = async (
         recordAttempt?: (attempt: RoutingChainInternalAttempt) => void;
         reviewAttempts: GenerationResult[];
         reviewProviders: WeakMap<GenerationResult, string>;
+        reviewAttemptsByIndex: Map<number, GenerationResult>;
+        attemptIndex?: number;
     };
     const nextReviewOutputPath = (
         path: TypedModelOutputPath,
@@ -3410,13 +3414,20 @@ export const runBoundedReviewWorkflow = async (
                         )
                     )
                 );
-                generationInput.request.signal?.throwIfAborted();
                 const provider =
                     generationInput.request.provider ??
                     generationInput.profile?.provider;
                 if (provider !== undefined) {
                     generationInput.reviewProviders.set(result, provider);
                 }
+                generationInput.reviewAttempts.push(result);
+                if (generationInput.attemptIndex !== undefined) {
+                    generationInput.reviewAttemptsByIndex.set(
+                        generationInput.attemptIndex,
+                        result
+                    );
+                }
+                generationInput.request.signal?.throwIfAborted();
                 return result;
             } catch (error) {
                 generationInput.request.signal?.throwIfAborted();
@@ -3579,9 +3590,9 @@ export const runBoundedReviewWorkflow = async (
                               recordAttempt,
                               reviewAttempts,
                               reviewProviders,
+                              reviewAttemptsByIndex,
+                              attemptIndex,
                           });
-                          reviewAttempts.push(result);
-                          reviewAttemptsByIndex.set(attemptIndex, result);
                           return result;
                       },
                       retryReasonCode: (result) => {
@@ -3597,6 +3608,7 @@ export const runBoundedReviewWorkflow = async (
                       },
                   })
                 : undefined;
+            bounded.signal?.throwIfAborted();
             const routed =
                 chain === undefined ? undefined : toRoutingChainResult(chain);
             if (routed?.isErr()) {
@@ -3658,8 +3670,8 @@ export const runBoundedReviewWorkflow = async (
                     providerModel: bounded.model ?? 'unknown',
                     reviewAttempts,
                     reviewProviders,
+                    reviewAttemptsByIndex,
                 });
-                reviewAttempts.push(reviewResult);
                 selectedCapabilityFacts = resolveAttemptCapabilityFacts(
                     bounded.provider,
                     bounded.capabilities
@@ -4736,7 +4748,10 @@ export const runBoundedReviewWorkflow = async (
             : workflowStepKind(blockedStepId);
     const stoppedBeforeStepKind =
         lastMetadata?.terminationReason === 'budget_exhausted_steps'
-            ? 'generate'
+            ? lastMetadata.signals?.condensationOutcome === 'budget_blocked' &&
+              lastMetadata.signals.condensationAttempted === false
+                ? 'condense'
+                : 'generate'
             : genericLimit === undefined || providerExceededTokenLimit
               ? undefined
               : genericLimit === 'maxTokensTotal' &&

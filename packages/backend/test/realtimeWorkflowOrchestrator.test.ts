@@ -877,6 +877,10 @@ test('Voice condensation is withheld when the existing Workflow step limit canno
             stored?.workflow?.terminationReason,
             'budget_exhausted_steps'
         );
+        assert.equal(
+            stored?.workflow?.limitStop?.stoppedBeforeStepKind,
+            'condense'
+        );
     } finally {
         runtimeConfig.chatWorkflow.modeId = previousMode;
         runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
@@ -996,6 +1000,11 @@ test('caller cancellation during condensation or reassessment cannot approve a l
                                               reviewDecision: 'finalize',
                                               reviewReason: 'Ready.',
                                           }),
+                                usage: {
+                                    promptTokens: 100,
+                                    completionTokens: 20,
+                                    totalTokens: 120,
+                                },
                             };
                         }
                         return {
@@ -1042,6 +1051,19 @@ test('caller cancellation during condensation or reassessment cannot approve a l
                 /This original answer is much too long|Evidence is limited/u,
                 stage
             );
+            const completedProviderStep = stored?.workflow?.steps.findLast(
+                (step) =>
+                    step.stepKind ===
+                    (stage === 'condense' ? 'condense' : 'assess')
+            );
+            assert.equal(completedProviderStep?.usage?.totalTokens, 120, stage);
+            assert.equal(
+                completedProviderStep?.attempts?.[0]?.usage?.totalTokens,
+                120,
+                stage
+            );
+            assert.ok(completedProviderStep?.cost, stage);
+            assert.ok(completedProviderStep?.attempts?.[0]?.cost, stage);
             if (stage === 'assess') {
                 assert.equal(
                     stored?.workflow?.steps.findLast(
