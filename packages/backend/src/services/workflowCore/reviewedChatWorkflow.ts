@@ -3320,83 +3320,19 @@ export const runBoundedReviewWorkflow = async (
         };
     };
 
-    const assessHandler = async (
-        handlerInput: StepHandlerInput<RunBoundedReviewWorkflowInput>
-    ): Promise<AttemptResult> => {
-        const draft = readGenerationResult(handlerInput.results.draft);
-        if (draft === undefined) {
-            return {
-                status: 'failed',
-                errorCode: 'missing_draft',
-                retryable: false,
-                metadata: encodeMetadata({
-                    status: 'failed',
-                    summary:
-                        'Assessment could not run because no valid draft existed.',
-                    terminationReason: 'executor_error_fail_open',
-                }),
-            };
-        }
-        const projected = messagesFor(handlerInput.results);
-        const assessPrompt = composeAssessPrompt({
-            moduleIds: input.reviewModuleIds,
-            basePromptOverride:
-                input.reviewDecisionPrompt?.trim() ||
-                DEFAULT_REVIEW_DECISION_PROMPT,
-            personaExpressionGuidance: input.personaExpressionGuidance,
-        });
-        const evidence = readEvidenceEnvelope(handlerInput.results.evidence);
-        const request: GenerationRequest = {
-            ...projected.request,
-            // Assessment decides whether search is warranted; it must not
-            // execute inherited provider-native search hints itself.
-            search: undefined,
-            messages: [
-                ...projected.messages,
-                {
-                    role: 'user',
-                    content: buildAssessmentRetrievalContext(
-                        evidence,
-                        draft.citations ?? [],
-                        {
-                            query: projected.request.search?.query,
-                            requested: draft.retrieval?.requested,
-                            used: draft.retrieval?.used,
-                            ...(draft.toolExecution?.toolName === 'web_search'
-                                ? {
-                                      toolExecution: {
-                                          status: draft.toolExecution.status,
-                                      },
-                                  }
-                                : {}),
-                        }
-                    ),
-                },
-                { role: 'assistant', content: draft.text },
-                { role: 'system', content: assessPrompt.prompt },
-            ],
-            maxOutputTokens: DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
-            reasoningEffort: 'low',
-            verbosity: 'low',
-        };
-        const bounded = boundGenerationRequestToWorkflowBudget({
-            request,
-            totalTokens: handlerInput.execution.totalTokens,
-            maxTokensTotal: executionLimits.maxTokensTotal,
-        });
-        if (bounded === undefined) {
-            return {
-                status: 'failed',
-                errorCode: 'execution_limit',
-                retryable: false,
-                metadata: encodeMetadata({
-                    status: 'failed',
-                    summary:
-                        'Assessment was blocked by the cumulative token limit; the latest draft was preserved.',
-                    terminationReason: 'budget_exhausted_tokens',
-                }),
-            };
-        }
+    type AssessmentReviewExecution =
+        | AttemptResult
+        | {
+              decision: ReviewDecision;
+              reviewResult: GenerationResult;
+              usage: ReviewWorkflowUsageSummary;
+              assessmentAttemptMetadata: ReturnType<
+                  typeof toAssessmentAttemptMetadata
+              >;
+          };
+    const executeAssessmentReview = async (
+        bounded: GenerationRequest
+    ): Promise<AssessmentReviewExecution> => {
         let reviewResult: GenerationResult;
         const reviewAttempts: GenerationResult[] = [];
         const reviewProviders = new WeakMap<GenerationResult, string>();
@@ -3818,7 +3754,95 @@ export const runBoundedReviewWorkflow = async (
                 }),
             };
         }
-        const decision = typedValidation.value;
+        return {
+            decision: typedValidation.value,
+            reviewResult,
+            usage,
+            assessmentAttemptMetadata,
+        };
+    };
+
+    const assessHandler = async (
+        handlerInput: StepHandlerInput<RunBoundedReviewWorkflowInput>
+    ): Promise<AttemptResult> => {
+        const draft = readGenerationResult(handlerInput.results.draft);
+        if (draft === undefined) {
+            return {
+                status: 'failed',
+                errorCode: 'missing_draft',
+                retryable: false,
+                metadata: encodeMetadata({
+                    status: 'failed',
+                    summary:
+                        'Assessment could not run because no valid draft existed.',
+                    terminationReason: 'executor_error_fail_open',
+                }),
+            };
+        }
+        const projected = messagesFor(handlerInput.results);
+        const assessPrompt = composeAssessPrompt({
+            moduleIds: input.reviewModuleIds,
+            basePromptOverride:
+                input.reviewDecisionPrompt?.trim() ||
+                DEFAULT_REVIEW_DECISION_PROMPT,
+            personaExpressionGuidance: input.personaExpressionGuidance,
+        });
+        const evidence = readEvidenceEnvelope(handlerInput.results.evidence);
+        const request: GenerationRequest = {
+            ...projected.request,
+            // Assessment decides whether search is warranted; it must not
+            // execute inherited provider-native search hints itself.
+            search: undefined,
+            messages: [
+                ...projected.messages,
+                {
+                    role: 'user',
+                    content: buildAssessmentRetrievalContext(
+                        evidence,
+                        draft.citations ?? [],
+                        {
+                            query: projected.request.search?.query,
+                            requested: draft.retrieval?.requested,
+                            used: draft.retrieval?.used,
+                            ...(draft.toolExecution?.toolName === 'web_search'
+                                ? {
+                                      toolExecution: {
+                                          status: draft.toolExecution.status,
+                                      },
+                                  }
+                                : {}),
+                        }
+                    ),
+                },
+                { role: 'assistant', content: draft.text },
+                { role: 'system', content: assessPrompt.prompt },
+            ],
+            maxOutputTokens: DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
+            reasoningEffort: 'low',
+            verbosity: 'low',
+        };
+        const bounded = boundGenerationRequestToWorkflowBudget({
+            request,
+            totalTokens: handlerInput.execution.totalTokens,
+            maxTokensTotal: executionLimits.maxTokensTotal,
+        });
+        if (bounded === undefined) {
+            return {
+                status: 'failed',
+                errorCode: 'execution_limit',
+                retryable: false,
+                metadata: encodeMetadata({
+                    status: 'failed',
+                    summary:
+                        'Assessment was blocked by the cumulative token limit; the latest draft was preserved.',
+                    terminationReason: 'budget_exhausted_tokens',
+                }),
+            };
+        }
+        const reviewExecution = await executeAssessmentReview(bounded);
+        if (!('decision' in reviewExecution)) return reviewExecution;
+        const { decision, reviewResult, usage, assessmentAttemptMetadata } =
+            reviewExecution;
         const hints = extractRoutingHintsFromAssess({
             assessRawText: reviewResult.text,
             reviewDecision: decision,
