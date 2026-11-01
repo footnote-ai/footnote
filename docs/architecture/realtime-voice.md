@@ -75,6 +75,9 @@ Calls are limited to 60 seconds, or five minutes for the configured developer.
 The backend verifies the caller identity across the trusted service boundary;
 Discord forwards audio from that caller only. A second human joining or the
 caller muting, deafening or leaving closes the session.
+`DISCORD_USER_ID` is the authorized human's Discord user ID, not the bot client
+ID. Set the same value in the backend environment and each bot process to enable
+the five-minute override; without it, the backend rejects extended calls.
 
 ### Standard
 
@@ -369,11 +372,12 @@ unresolved; this implementation withholds it. Trace alignment describes metadata
 alignment, not a second content approval decision.
 
 `RealtimeConversationState` holds at most one answer, bounded to 16 KiB of UTF-8
-text. Its **30-second deadline runs from staging until a playback start is
-reported**, without restarting when delivery is requested. It binds the initiating
-turn, intent revision, call instance, private session ID, audience IDs, Run,
-response, candidate and assessment/generation Steps. `completedExecution()` still
-exposes only identity, execution status and review disposition.
+text. A 30-second handoff deadline starts when the answer is staged. At handoff,
+a fresh 30-second deadline starts for the adapter's playback-start report; a
+timely report clears it. The slot binds the initiating turn, intent revision,
+call instance, private session ID, audience IDs, Run, response, candidate and
+assessment/generation Steps. `completedExecution()` still exposes only identity,
+execution status and review disposition.
 
 The delivery slot tracks permission to speak separately from playback reports:
 

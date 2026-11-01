@@ -322,14 +322,15 @@ and actual Run outcome remain distinct. Unassessed fail-open text remains valid
 under text-chat policy but is withheld from voice. Whether to permit a particular
 fallback later is an unresolved policy decision, not implicit approval.
 
-The delivery slot holds at most 16 KiB of text. The adapter must report that
-playback started within 30 seconds of staging, including any time spent waiting
-for handoff. Requesting delivery doesn't return the text. The backend checks
-permission and expiry again before releasing it once at a speaking boundary.
-Handoff alone doesn't count as playback. Synthetic reports distinguish started,
-completed, interrupted and failed playback; completion requires a start report.
-The text is cleared at handoff, expiry or revocation. Playback may continue past
-the deadline if its start was reported in time.
+The delivery slot holds at most 16 KiB of text. The initial 30-second deadline
+runs from staging until the adapter hands the text off. A fresh 30-second limit
+then applies for the playback-start report. Requesting delivery doesn't return
+the text. The backend checks permission and expiry again before releasing it
+once at a speaking boundary. Handoff alone doesn't count as playback. Synthetic
+reports distinguish started, completed, interrupted and failed playback;
+completion requires a start report. The text is cleared at handoff, expiry or
+revocation. Playback may continue past the start-report deadline if its start
+was reported in time.
 
 Interruptions and ambiguous speech now discard queued text and revoke late staging without
 aborting reasoning. Continuation does not revive that text; a new question is

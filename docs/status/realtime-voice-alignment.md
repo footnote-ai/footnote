@@ -175,8 +175,9 @@ is neither a reported start nor a completed delivery. `deliveryStatus()` contain
 metadata only, including whether a start was reported before interruption/failure.
 
 The body is bounded to 16 KiB and cleared at handoff, expiry or revocation. The
-30-second deadline runs from staging until start is reported, including pending
-delivery time; a timely start report allows playback to finish after the deadline.
+initial 30-second deadline runs from staging until handoff. A fresh 30-second
+limit then applies for the playback-start report; a timely report allows playback
+to finish after that deadline.
 Clock checks enforce expiry even if timers run late. Interruptions,
 ambiguous user input, corrections, cancellation, consent/roster changes and close
 discard text and prevent prior callbacks from restaging it. Continuation cannot
@@ -262,7 +263,7 @@ Before paid/live rollout, verify provider behavior and retention, deployment
 capacity/recovery ownership and local playback on real Discord. The bounded
 Workflow admission/persistence, 30-second result TTL, audio path and call
 lifetime limits are implemented with synthetic evidence.
-The [ordered slices](../proposals/realtime-talker-reasoner.md#small-follow-up-sequence)
+The [ordered slices](../proposals/realtime-talker-reasoner.md#remaining-558-follow-up-sequence)
 assign identity, asynchronous delivery, gating and adapter work to #558.
 [#559](https://github.com/footnote-ai/footnote/issues/559) must separately approve
 cross-surface consent, retention/deletion and historical playback policy.
