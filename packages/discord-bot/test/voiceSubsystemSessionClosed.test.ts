@@ -28,6 +28,11 @@ type VoiceSubsystemProbe = {
     ): Promise<RealtimeSession>;
 };
 
+type VoiceSubsystemStartupProbe = {
+    startConversation(guildId: string): Promise<void>;
+    activateConversation(guildId: string): Promise<void>;
+};
+
 test('backend session closure removes the local voice session immediately', async () => {
     const removedGuilds: string[] = [];
     const stoppedGuilds: string[] = [];
@@ -57,4 +62,28 @@ test('backend session closure removes the local voice session immediately', asyn
     } finally {
         RealtimeSession.prototype.connect = originalConnect;
     }
+});
+
+test('conversation startup is reserved per guild while session creation awaits', async () => {
+    let releaseStartup!: () => void;
+    const startup = new Promise<void>((resolve) => {
+        releaseStartup = resolve;
+    });
+    const startedGuilds: string[] = [];
+    const subsystem = new VoiceSubsystem({} as Client);
+    const probe = subsystem as unknown as VoiceSubsystemStartupProbe;
+    probe.activateConversation = async (guildId) => {
+        startedGuilds.push(guildId);
+        await startup;
+    };
+
+    const first = probe.startConversation('guild-1');
+    const duplicate = probe.startConversation('guild-1');
+    const otherGuild = probe.startConversation('guild-2');
+    try {
+        assert.deepEqual(startedGuilds, ['guild-1', 'guild-2']);
+    } finally {
+        releaseStartup();
+    }
+    await Promise.all([first, duplicate, otherGuild]);
 });

@@ -55,6 +55,7 @@ export class VoiceSubsystem extends Event {
             requestExtendedDuration: boolean;
         }
     >();
+    private startingConversations = new Set<string>();
 
     constructor(client: Client) {
         super({
@@ -269,6 +270,16 @@ export class VoiceSubsystem extends Event {
     }
 
     private async startConversation(guildId: string): Promise<void> {
+        if (this.startingConversations.has(guildId)) return;
+        this.startingConversations.add(guildId);
+        try {
+            await this.activateConversation(guildId);
+        } finally {
+            this.startingConversations.delete(guildId);
+        }
+    }
+
+    private async activateConversation(guildId: string): Promise<void> {
         let session = this.sessionManager.getSession(guildId);
 
         if (!session) {
