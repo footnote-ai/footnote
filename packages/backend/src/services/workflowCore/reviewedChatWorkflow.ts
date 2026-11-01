@@ -3320,6 +3320,164 @@ export const runBoundedReviewWorkflow = async (
         };
     };
 
+    type AssessmentReviewGenerationInput = {
+        request: GenerationRequest;
+        profile?: ModelProfile;
+        initialOutputPath: TypedModelOutputPath;
+        capabilityFacts: ReturnType<typeof resolveAttemptCapabilityFacts>;
+        providerModel: string;
+        recordAttempt?: (attempt: RoutingChainInternalAttempt) => void;
+        reviewAttempts: GenerationResult[];
+        reviewProviders: WeakMap<GenerationResult, string>;
+    };
+    const nextReviewOutputPath = (
+        path: TypedModelOutputPath,
+        capabilityFacts: ReturnType<typeof resolveAttemptCapabilityFacts>
+    ): TypedModelOutputPath | undefined => {
+        if (path === 'native_schema') {
+            return capabilityFacts.jsonMode === 'supported'
+                ? 'json_compatibility'
+                : 'parser_compatibility';
+        }
+        return path === 'json_compatibility'
+            ? 'parser_compatibility'
+            : undefined;
+    };
+    const recordReviewTransportFailure = (
+        attempt: {
+            providerModel: string;
+            providerCallStatus: 'failed' | 'not_called';
+            provider?: string;
+            model?: string;
+            usage?: GenerationUsage;
+            promptCache?: GenerationResult['promptCache'];
+        },
+        reviewAttempts: GenerationResult[],
+        reviewProviders: WeakMap<GenerationResult, string>,
+        recordAttempt?: (attempt: RoutingChainInternalAttempt) => void
+    ): void => {
+        const failureResult: GenerationResult = {
+            text: '',
+            model: attempt.model ?? attempt.providerModel,
+            promptCache: attempt.promptCache,
+            finishReason: 'structured_output_unavailable',
+            completion: {
+                status: 'failed',
+                reason: 'structured_output_unavailable',
+                visibleTextLength: 0,
+            },
+            ...(attempt.usage !== undefined && { usage: attempt.usage }),
+        };
+        if (attempt.provider !== undefined) {
+            reviewProviders.set(failureResult, attempt.provider);
+        }
+        reviewAttempts.push(failureResult);
+        recordAttempt?.({
+            promptCache: attempt.promptCache,
+            providerCallStatus: attempt.providerCallStatus,
+            status: 'failed_transport_fallback',
+            finishReason: failureResult.finishReason,
+            completion: failureResult.completion,
+            ...(failureResult.usage !== undefined && {
+                usage: failureResult.usage,
+            }),
+        });
+    };
+    const runAssessmentReviewGeneration = async (
+        generationInput: AssessmentReviewGenerationInput
+    ): Promise<GenerationResult> => {
+        let outputPath: TypedModelOutputPath =
+            generationInput.initialOutputPath;
+        while (true) {
+            const requestForOutput: GenerationRequest = {
+                ...generationInput.request,
+                ...(outputPath === 'native_schema'
+                    ? { structuredOutput: REVIEW_DECISION_STRUCTURED_OUTPUT }
+                    : outputPath === 'json_compatibility'
+                      ? { jsonMode: true }
+                      : {}),
+            };
+            const startedAtMs = Date.now();
+            try {
+                generationInput.request.signal?.throwIfAborted();
+                const result = normalizeGenerationResultEvidence(
+                    await generationRuntime.generate(
+                        applyPromptCaching(
+                            requestForOutput,
+                            generationInput.profile,
+                            'assessment',
+                            contextEnvelope.diagnostics.surface
+                        )
+                    )
+                );
+                generationInput.request.signal?.throwIfAborted();
+                const provider =
+                    generationInput.request.provider ??
+                    generationInput.profile?.provider;
+                if (provider !== undefined) {
+                    generationInput.reviewProviders.set(result, provider);
+                }
+                return result;
+            } catch (error) {
+                generationInput.request.signal?.throwIfAborted();
+                const finishedAtMs = Date.now();
+                const nextOutputPath = nextReviewOutputPath(
+                    outputPath,
+                    generationInput.capabilityFacts
+                );
+                if (
+                    nextOutputPath === undefined ||
+                    !isTypedOutputTransportUnavailable(error)
+                ) {
+                    throw error;
+                }
+                recordReviewTransportFailure(
+                    {
+                        providerModel: generationInput.providerModel,
+                        providerCallStatus: isPreProviderCallFailure(error)
+                            ? 'not_called'
+                            : 'failed',
+                        provider:
+                            generationInput.request.provider ??
+                            generationInput.profile?.provider,
+                        ...(isGenerationRuntimeError(error) && {
+                            model: error.model,
+                            usage: error.usage,
+                            promptCache: error.promptCache,
+                        }),
+                    },
+                    generationInput.reviewAttempts,
+                    generationInput.reviewProviders,
+                    (attempt) =>
+                        generationInput.recordAttempt?.({
+                            ...attempt,
+                            startedAtMs,
+                            finishedAtMs,
+                            cost: captureUsage(
+                                {
+                                    text: '',
+                                    model:
+                                        isGenerationRuntimeError(error) &&
+                                        error.model !== undefined
+                                            ? error.model
+                                            : generationInput.providerModel,
+                                    ...(isGenerationRuntimeError(error) &&
+                                    error.usage !== undefined
+                                        ? { usage: error.usage }
+                                        : {}),
+                                },
+                                generationInput.providerModel,
+                                generationInput.request.provider ??
+                                    generationInput.profile?.provider ??
+                                    'unknown'
+                            ).estimatedCost,
+                        })
+                );
+                outputPath = nextOutputPath;
+            }
+        }
+    };
+
     type AssessmentReviewExecution =
         | AttemptResult
         | {
@@ -3337,46 +3495,7 @@ export const runBoundedReviewWorkflow = async (
         const reviewAttempts: GenerationResult[] = [];
         const reviewProviders = new WeakMap<GenerationResult, string>();
         const reviewAttemptsByIndex = new Map<number, GenerationResult>();
-        const recordStructuredOutputTransportFailure = (
-            attempt: {
-                providerModel: string;
-                providerCallStatus: 'failed' | 'not_called';
-                provider?: string;
-                model?: string;
-                usage?: GenerationUsage;
-                promptCache?: GenerationResult['promptCache'];
-            },
-            recordAttempt?: (attempt: RoutingChainInternalAttempt) => void
-        ): void => {
-            // Keep the consumed native transport visible in the bounded
-            // Attempt collection even when the adapter cannot report usage.
-            // The follow-up JSON/parser result is recorded separately below.
-            const failureResult: GenerationResult = {
-                text: '',
-                model: attempt.model ?? attempt.providerModel,
-                promptCache: attempt.promptCache,
-                finishReason: 'structured_output_unavailable',
-                completion: {
-                    status: 'failed',
-                    reason: 'structured_output_unavailable',
-                    visibleTextLength: 0,
-                },
-                ...(attempt.usage !== undefined && { usage: attempt.usage }),
-            };
-            if (attempt.provider !== undefined)
-                reviewProviders.set(failureResult, attempt.provider);
-            reviewAttempts.push(failureResult);
-            recordAttempt?.({
-                promptCache: attempt.promptCache,
-                providerCallStatus: attempt.providerCallStatus,
-                status: 'failed_transport_fallback',
-                finishReason: failureResult.finishReason,
-                completion: failureResult.completion,
-                ...(failureResult.usage !== undefined && {
-                    usage: failureResult.usage,
-                }),
-            });
-        };
+        let routingAttempts: RoutingChainAttemptLog[] | undefined;
         const parseReviewDecisionForValidation = (
             text: string
         ): TypedModelOutputValidation<ReviewDecision> => {
@@ -3393,113 +3512,6 @@ export const runBoundedReviewWorkflow = async (
                               : 'malformed',
                   };
         };
-
-        // Native schema is authoritative, then JSON mode, then parser fallback;
-        // each downgrade stays fail-open when transport metadata is unavailable.
-        const runReviewGeneration = async (generationInput: {
-            profile?: ModelProfile;
-            request: GenerationRequest;
-            initialOutputPath: TypedModelOutputPath;
-            capabilityFacts: ReturnType<typeof resolveAttemptCapabilityFacts>;
-            providerModel: string;
-            recordAttempt?: (attempt: RoutingChainInternalAttempt) => void;
-        }): Promise<GenerationResult> => {
-            let outputPath: TypedModelOutputPath =
-                generationInput.initialOutputPath;
-            while (true) {
-                const requestForOutput: GenerationRequest = {
-                    ...generationInput.request,
-                    ...(outputPath === 'native_schema'
-                        ? {
-                              structuredOutput:
-                                  REVIEW_DECISION_STRUCTURED_OUTPUT,
-                          }
-                        : outputPath === 'json_compatibility'
-                          ? { jsonMode: true }
-                          : {}),
-                };
-                const startedAtMs = Date.now();
-                try {
-                    generationInput.request.signal?.throwIfAborted();
-                    const result = normalizeGenerationResultEvidence(
-                        await generationRuntime.generate(
-                            applyPromptCaching(
-                                requestForOutput,
-                                generationInput.profile,
-                                'assessment',
-                                contextEnvelope.diagnostics.surface
-                            )
-                        )
-                    );
-                    generationInput.request.signal?.throwIfAborted();
-                    const provider =
-                        generationInput.request.provider ??
-                        generationInput.profile?.provider;
-                    if (provider !== undefined)
-                        reviewProviders.set(result, provider);
-                    return result;
-                } catch (error) {
-                    generationInput.request.signal?.throwIfAborted();
-                    const finishedAtMs = Date.now();
-                    const nextOutputPath: TypedModelOutputPath | undefined =
-                        outputPath === 'native_schema'
-                            ? generationInput.capabilityFacts.jsonMode ===
-                              'supported'
-                                ? 'json_compatibility'
-                                : 'parser_compatibility'
-                            : outputPath === 'json_compatibility'
-                              ? 'parser_compatibility'
-                              : undefined;
-                    if (
-                        nextOutputPath === undefined ||
-                        !isTypedOutputTransportUnavailable(error)
-                    ) {
-                        throw error;
-                    }
-                    recordStructuredOutputTransportFailure(
-                        {
-                            providerModel: generationInput.providerModel,
-                            providerCallStatus: isPreProviderCallFailure(error)
-                                ? 'not_called'
-                                : 'failed',
-                            provider:
-                                generationInput.request.provider ??
-                                generationInput.profile?.provider,
-                            ...(isGenerationRuntimeError(error) && {
-                                model: error.model,
-                                usage: error.usage,
-                                promptCache: error.promptCache,
-                            }),
-                        },
-                        (attempt) =>
-                            generationInput.recordAttempt?.({
-                                ...attempt,
-                                startedAtMs,
-                                finishedAtMs,
-                                cost: captureUsage(
-                                    {
-                                        text: '',
-                                        model:
-                                            isGenerationRuntimeError(error) &&
-                                            error.model !== undefined
-                                                ? error.model
-                                                : generationInput.providerModel,
-                                        ...(isGenerationRuntimeError(error) &&
-                                        error.usage !== undefined
-                                            ? { usage: error.usage }
-                                            : {}),
-                                    },
-                                    generationInput.providerModel,
-                                    generationInput.request.provider ??
-                                        generationInput.profile?.provider ??
-                                        'unknown'
-                                ).estimatedCost,
-                            })
-                    );
-                    outputPath = nextOutputPath;
-                }
-            }
-        };
         const reviewUsage = (): ReviewWorkflowUsageSummary =>
             combineGenerationUsage(
                 reviewAttempts.map((attempt) =>
@@ -3512,7 +3524,6 @@ export const runBoundedReviewWorkflow = async (
                 routingAttempts,
                 reviewAttempts
             );
-        let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
         let selectedSettings:
             ReturnType<typeof resolveModelSettings> | undefined;
@@ -3559,13 +3570,15 @@ export const runBoundedReviewWorkflow = async (
                               providerRouting: profile.providerRouting,
                               providerOptions: profile.providerOptions,
                           };
-                          const result = await runReviewGeneration({
+                          const result = await runAssessmentReviewGeneration({
                               request: requestForProfile,
                               profile,
                               initialOutputPath: outputPath,
                               capabilityFacts,
                               providerModel: profile.providerModel,
                               recordAttempt,
+                              reviewAttempts,
+                              reviewProviders,
                           });
                           reviewAttempts.push(result);
                           reviewAttemptsByIndex.set(attemptIndex, result);
@@ -3638,11 +3651,13 @@ export const runBoundedReviewWorkflow = async (
                     capabilities: bounded.capabilities,
                     capabilityFacts,
                 });
-                reviewResult = await runReviewGeneration({
+                reviewResult = await runAssessmentReviewGeneration({
                     request: bounded,
                     initialOutputPath: outputPath,
                     capabilityFacts,
                     providerModel: bounded.model ?? 'unknown',
+                    reviewAttempts,
+                    reviewProviders,
                 });
                 reviewAttempts.push(reviewResult);
                 selectedCapabilityFacts = resolveAttemptCapabilityFacts(
@@ -3762,6 +3777,370 @@ export const runBoundedReviewWorkflow = async (
         };
     };
 
+    const searchRecoveryLimitReason = (input: {
+        handlerInput: StepHandlerInput<RunBoundedReviewWorkflowInput>;
+        repeatedQuery: boolean;
+        tokenBudget: number | undefined;
+        remainingDurationMs: number;
+        estimatedDurationMs: number;
+    }): WorkflowTerminationReason | undefined => {
+        const { handlerInput } = input;
+        if (input.repeatedQuery) return undefined;
+        if (handlerInput.iteration >= effectiveMaxIterations) {
+            return 'budget_exhausted_steps';
+        }
+        if (
+            handlerInput.execution.stepCount + 4 >
+            executionLimits.maxWorkflowSteps
+        ) {
+            return 'budget_exhausted_steps';
+        }
+        if (
+            handlerInput.execution.toolCallCount + 1 >
+            executionLimits.maxToolCalls
+        ) {
+            return 'max_tool_calls_reached';
+        }
+        if (input.tokenBudget === undefined) return 'budget_exhausted_tokens';
+        if (
+            handlerInput.execution.deliberationCallCount + 2 >
+                executionLimits.maxDeliberationCalls ||
+            handlerInput.execution.reviewCallCount + 2 >
+                (executionLimits.maxReviewCycles ??
+                    executionLimits.maxDeliberationCalls)
+        ) {
+            return 'max_deliberation_calls_reached';
+        }
+        if (input.remainingDurationMs <= input.estimatedDurationMs) {
+            return 'budget_exhausted_time';
+        }
+        return undefined;
+    };
+
+    const searchRecoveryAdmission = (input: {
+        handlerInput: StepHandlerInput<RunBoundedReviewWorkflowInput>;
+        decision: ReviewDecision;
+        draft: GenerationResult;
+        projected: ReturnType<typeof messagesFor>;
+        evidence: ReturnType<typeof readEvidenceEnvelope>;
+        assessPrompt: ReturnType<typeof composeAssessPrompt>;
+        usage: ReviewWorkflowUsageSummary;
+        condensationAlreadyAttempted: boolean;
+    }): {
+        blockedReason: WorkflowTerminationReason | undefined;
+        currentAssessmentDurationMs: number;
+        remainingDurationMs: number;
+    } => {
+        const { handlerInput, decision } = input;
+        const previousQueries = executedSearchQueries(input.evidence);
+        const requestedQuery = decision.search?.query;
+        const repeatedQuery =
+            decision.reviewDecision === 'search' &&
+            requestedQuery !== undefined &&
+            previousQueries.some(
+                (query) =>
+                    normalizeSearchQuery(query) ===
+                    normalizeSearchQuery(requestedQuery)
+            );
+        const cyclesExhausted =
+            decision.reviewDecision === 'search' &&
+            input.evidence.results.filter(
+                (result) => readWebSearchQuerySource(result) === 'assessment'
+            ).length >= maxSearchRecoveryCycles;
+        const now = Date.now();
+        const currentAssessmentDurationMs = Math.max(
+            0,
+            now - (handlerInput.attemptStartedAtMs ?? now)
+        );
+        const remainingDurationMs =
+            executionLimits.maxDurationMs -
+            (now - handlerInput.execution.startedAtMs);
+        const estimatedRecoveryDurationMs =
+            maximumObservedAttemptDurationMs(handlerInput.run, 'retrieve') +
+            maximumObservedAttemptDurationMs(handlerInput.run, 'generate') +
+            Math.max(
+                currentAssessmentDurationMs,
+                maximumObservedAttemptDurationMs(handlerInput.run, 'assess')
+            );
+        const tokenBudget =
+            decision.reviewDecision === 'search'
+                ? reserveRecoveryGenerationOutputTokens({
+                      generationRequest: {
+                          ...input.projected.request,
+                          messages: [
+                              ...input.projected.messages,
+                              { role: 'assistant', content: input.draft.text },
+                              {
+                                  role: 'system',
+                                  content: SEARCH_RECOVERY_GENERATION_NOTE,
+                              },
+                          ],
+                      },
+                      assessmentMessagesWithoutDraft: [
+                          ...input.projected.messages,
+                          {
+                              role: 'user',
+                              content: buildAssessmentRetrievalContext(
+                                  input.evidence,
+                                  []
+                              ),
+                          },
+                          {
+                              role: 'system',
+                              content: input.assessPrompt.prompt,
+                          },
+                      ],
+                      totalTokens:
+                          handlerInput.execution.totalTokens +
+                          (input.usage.totalTokens ?? 0),
+                      maxTokensTotal: executionLimits.maxTokensTotal,
+                  })
+                : 0;
+        const executionLimit = searchRecoveryLimitReason({
+            handlerInput,
+            repeatedQuery,
+            tokenBudget,
+            remainingDurationMs,
+            estimatedDurationMs: estimatedRecoveryDurationMs,
+        });
+        const blockedReason = searchRecoveryBlockedReason({
+            decision,
+            condensationAlreadyAttempted: input.condensationAlreadyAttempted,
+            repeatedQuery,
+            cyclesExhausted,
+            executionLimit,
+        });
+        return {
+            blockedReason,
+            currentAssessmentDurationMs,
+            remainingDurationMs,
+        };
+    };
+
+    const searchRecoveryBlockedReason = (input: {
+        decision: ReviewDecision;
+        condensationAlreadyAttempted: boolean;
+        repeatedQuery: boolean;
+        cyclesExhausted: boolean;
+        executionLimit: WorkflowTerminationReason | undefined;
+    }): WorkflowTerminationReason | undefined => {
+        if (input.decision.reviewDecision !== 'search') return undefined;
+        if (input.condensationAlreadyAttempted) {
+            return 'transition_blocked_by_policy';
+        }
+        if (input.repeatedQuery) return 'search_query_repeated';
+        if (!workflowPolicy.enableToolUse || !hasToolStep) {
+            return 'transition_blocked_by_policy';
+        }
+        if (input.cyclesExhausted) {
+            return 'max_search_recovery_cycles_reached';
+        }
+        return input.executionLimit;
+    };
+
+    const condensationAdmission = (input: {
+        handlerInput: StepHandlerInput<RunBoundedReviewWorkflowInput>;
+        decision: ReviewDecision;
+        usage: ReviewWorkflowUsageSummary;
+        condensationAlreadyAttempted: boolean;
+        currentAssessmentDurationMs: number;
+        remainingDurationMs: number;
+    }): {
+        needed: boolean;
+        ready: boolean;
+        blockReason: WorkflowTerminationReason | undefined;
+        signals: Partial<StepSignals>;
+    } => {
+        const voice = realtimeWorkflowScope();
+        const draft = readGenerationResult(input.handlerInput.results.draft);
+        const measurement =
+            voice === undefined || draft === undefined
+                ? undefined
+                : measureVoiceAnswerDelivery(
+                      draft.text,
+                      voice.deliveryPolicy.mode,
+                      voice.deliveryPolicy.maxAnswerTokens
+                  );
+        const needed =
+            input.decision.reviewDecision === 'finalize' &&
+            measurement !== undefined &&
+            !measurement.fits;
+        const signals: Partial<StepSignals> = {};
+        let blockReason: WorkflowTerminationReason | undefined;
+        let ready = false;
+        if (
+            input.condensationAlreadyAttempted &&
+            input.decision.reviewDecision !== 'finalize'
+        ) {
+            blockReason = 'transition_blocked_by_policy';
+            signals.condensationOutcome = 'assessment_recovery_blocked';
+        } else if (input.condensationAlreadyAttempted && needed) {
+            signals.condensationOutcome = 'still_overlong';
+        } else if (needed && measurement !== undefined) {
+            Object.assign(signals, {
+                condensationAttempted: false,
+                originalEstimatedTokens: measurement.estimatedTokens,
+                effectiveDeliveryTokenCeiling: measurement.tokenLimit,
+                deliveryOverageTokens: measurement.tokenOverage,
+                originalCodePoints: measurement.codePoints,
+                ...(measurement.characterLimit === undefined
+                    ? {}
+                    : {
+                          deliveryCodePointLimit: measurement.characterLimit,
+                          deliveryCodePointOverage:
+                              measurement.characterOverage,
+                      }),
+            });
+            const condensation = condensationFor(
+                input.handlerInput.results,
+                input.decision
+            );
+            const tokenBudget =
+                condensation === undefined
+                    ? undefined
+                    : reserveRecoveryGenerationOutputTokens({
+                          generationRequest: condensation.request,
+                          assessmentMessagesWithoutDraft:
+                              condensation.assessmentMessagesWithoutDraft,
+                          totalTokens:
+                              input.handlerInput.execution.totalTokens +
+                              (input.usage.totalTokens ?? 0),
+                          maxTokensTotal: executionLimits.maxTokensTotal,
+                      });
+            const estimatedDurationMs =
+                maximumObservedAttemptDurationMs(
+                    input.handlerInput.run,
+                    'generate'
+                ) +
+                Math.max(
+                    input.currentAssessmentDurationMs,
+                    maximumObservedAttemptDurationMs(
+                        input.handlerInput.run,
+                        'assess'
+                    )
+                );
+            blockReason = condensationLimitReason({
+                handlerInput: input.handlerInput,
+                condensationAvailable: condensation !== undefined,
+                tokenBudgetAvailable: tokenBudget !== undefined,
+                remainingDurationMs: input.remainingDurationMs,
+                estimatedDurationMs,
+            });
+            ready = blockReason === undefined;
+            signals.condensationOutcome = ready
+                ? 'requested'
+                : 'budget_blocked';
+        }
+        return { needed, ready, blockReason, signals };
+    };
+
+    const condensationLimitReason = (input: {
+        handlerInput: StepHandlerInput<RunBoundedReviewWorkflowInput>;
+        condensationAvailable: boolean;
+        tokenBudgetAvailable: boolean;
+        remainingDurationMs: number;
+        estimatedDurationMs: number;
+    }): WorkflowTerminationReason | undefined => {
+        if (!input.condensationAvailable) return 'transition_blocked_by_policy';
+        if (input.handlerInput.iteration >= effectiveMaxIterations) {
+            return 'budget_exhausted_steps';
+        }
+        if (
+            input.handlerInput.execution.stepCount + 3 >
+            executionLimits.maxWorkflowSteps
+        ) {
+            return 'budget_exhausted_steps';
+        }
+        if (
+            input.handlerInput.execution.deliberationCallCount + 3 >
+                executionLimits.maxDeliberationCalls ||
+            input.handlerInput.execution.reviewCallCount + 2 >
+                (executionLimits.maxReviewCycles ??
+                    executionLimits.maxDeliberationCalls)
+        ) {
+            return 'max_deliberation_calls_reached';
+        }
+        if (!input.tokenBudgetAvailable) return 'budget_exhausted_tokens';
+        if (input.remainingDurationMs <= input.estimatedDurationMs) {
+            return 'budget_exhausted_time';
+        }
+        return undefined;
+    };
+
+    const assessmentOutcome = (input: {
+        decision: ReviewDecision;
+        iteration: number;
+        condensationAlreadyAttempted: boolean;
+        condensationReady: boolean;
+        condensationBlockReason: WorkflowTerminationReason | undefined;
+        searchBlockedReason: WorkflowTerminationReason | undefined;
+    }): {
+        outcome: 'limit' | 'done' | 'condense' | 'search' | 'revise';
+        terminationReason: WorkflowTerminationReason | undefined;
+    } => {
+        let outcome: 'limit' | 'done' | 'condense' | 'search' | 'revise';
+        if (input.condensationBlockReason !== undefined) {
+            outcome = 'limit';
+        } else {
+            switch (input.decision.reviewDecision) {
+                case 'finalize':
+                    outcome = input.condensationReady ? 'condense' : 'done';
+                    break;
+                case 'search':
+                    outcome =
+                        !input.condensationAlreadyAttempted &&
+                        input.searchBlockedReason === undefined
+                            ? 'search'
+                            : 'limit';
+                    break;
+                default:
+                    outcome =
+                        input.condensationAlreadyAttempted ||
+                        input.iteration >= regularMaxIterations
+                            ? 'limit'
+                            : 'revise';
+            }
+        }
+        let terminationReason =
+            input.condensationBlockReason ?? input.searchBlockedReason;
+        if (
+            terminationReason === undefined &&
+            input.decision.reviewDecision === 'revise' &&
+            !workflowPolicy.enableRevision
+        ) {
+            terminationReason = 'transition_blocked_by_policy';
+        }
+        if (
+            terminationReason === undefined &&
+            outcome === 'limit' &&
+            input.decision.reviewDecision !== 'search'
+        ) {
+            terminationReason = 'budget_exhausted_steps';
+        }
+        return { outcome, terminationReason };
+    };
+
+    const searchRecoveryOutcome = (
+        blockedReason: WorkflowTerminationReason | undefined,
+        decision: ReviewDecision
+    ): StepSignals['searchRecoveryOutcome'] | undefined => {
+        if (blockedReason === undefined) {
+            return decision.reviewDecision === 'search'
+                ? 'requested'
+                : undefined;
+        }
+        switch (blockedReason) {
+            case 'search_query_repeated':
+                return 'repeated_query';
+            case 'max_search_recovery_cycles_reached':
+                return 'cycle_limit';
+            case 'transition_blocked_by_policy':
+                return 'policy_blocked';
+            default:
+                return 'execution_limit';
+        }
+    };
+
     const assessHandler = async (
         handlerInput: StepHandlerInput<RunBoundedReviewWorkflowInput>
     ): Promise<AttemptResult> => {
@@ -3843,6 +4222,9 @@ export const runBoundedReviewWorkflow = async (
         if (!('decision' in reviewExecution)) return reviewExecution;
         const { decision, reviewResult, usage, assessmentAttemptMetadata } =
             reviewExecution;
+        const condensationAlreadyAttempted = handlerInput.run.steps.some(
+            (step) => step.stepId === 'condense'
+        );
         const hints = extractRoutingHintsFromAssess({
             assessRawText: reviewResult.text,
             reviewDecision: decision,
@@ -3861,257 +4243,39 @@ export const runBoundedReviewWorkflow = async (
                 routingHintConflictResolved: hintDecision.conflictResolved,
             }),
         };
-        const priorEvidence = readEvidenceEnvelope(
-            handlerInput.results.evidence
+        const admission = searchRecoveryAdmission({
+            handlerInput,
+            decision,
+            draft,
+            projected,
+            evidence,
+            assessPrompt,
+            usage,
+            condensationAlreadyAttempted,
+        });
+        const condensation = condensationAdmission({
+            handlerInput,
+            decision,
+            usage,
+            condensationAlreadyAttempted,
+            ...admission,
+        });
+        Object.assign(signals, condensation.signals);
+        const searchOutcome = searchRecoveryOutcome(
+            admission.blockedReason,
+            decision
         );
-        const previousSearchQueries = executedSearchQueries(priorEvidence);
-        const requestedSearchQuery = decision.search?.query;
-        const completedSearchRecoveryCycles = priorEvidence.results.filter(
-            (result) => readWebSearchQuerySource(result) === 'assessment'
-        ).length;
-        const repeatedSearchQuery =
-            decision.reviewDecision === 'search' &&
-            requestedSearchQuery !== undefined &&
-            previousSearchQueries.some(
-                (query) =>
-                    normalizeSearchQuery(query) ===
-                    normalizeSearchQuery(requestedSearchQuery)
-            );
-        const searchRecoveryCyclesExhausted =
-            decision.reviewDecision === 'search' &&
-            completedSearchRecoveryCycles >= maxSearchRecoveryCycles;
-        // Missing timing history fails open; observed estimates never replace hard Attempt admission.
-        const recoveryAdmissionNowMs = Date.now();
-        const currentAssessmentDurationMs = Math.max(
-            0,
-            recoveryAdmissionNowMs -
-                (handlerInput.attemptStartedAtMs ?? recoveryAdmissionNowMs)
-        );
-        const estimatedRecoveryDurationMs =
-            maximumObservedAttemptDurationMs(handlerInput.run, 'retrieve') +
-            maximumObservedAttemptDurationMs(handlerInput.run, 'generate') +
-            Math.max(
-                currentAssessmentDurationMs,
-                maximumObservedAttemptDurationMs(handlerInput.run, 'assess')
-            );
-        const remainingDurationMs =
-            executionLimits.maxDurationMs -
-            (recoveryAdmissionNowMs - handlerInput.execution.startedAtMs);
-        const recoveryTokenBudget =
-            decision.reviewDecision === 'search'
-                ? reserveRecoveryGenerationOutputTokens({
-                      generationRequest: {
-                          ...projected.request,
-                          messages: [
-                              ...projected.messages,
-                              { role: 'assistant', content: draft.text },
-                              {
-                                  role: 'system',
-                                  content: SEARCH_RECOVERY_GENERATION_NOTE,
-                              },
-                          ],
-                      },
-                      assessmentMessagesWithoutDraft: [
-                          ...projected.messages,
-                          {
-                              role: 'user',
-                              content: buildAssessmentRetrievalContext(
-                                  evidence,
-                                  []
-                              ),
-                          },
-                          { role: 'system', content: assessPrompt.prompt },
-                      ],
-                      totalTokens:
-                          handlerInput.execution.totalTokens +
-                          (usage.totalTokens ?? 0),
-                      maxTokensTotal: executionLimits.maxTokensTotal,
-                  })
-                : 0;
-        let executionLimitReason: WorkflowTerminationReason | undefined;
-        if (decision.reviewDecision === 'search' && !repeatedSearchQuery) {
-            if (handlerInput.iteration >= effectiveMaxIterations) {
-                executionLimitReason = 'budget_exhausted_steps';
-            } else if (
-                handlerInput.execution.stepCount + 4 >
-                executionLimits.maxWorkflowSteps
-            ) {
-                executionLimitReason = 'budget_exhausted_steps';
-            } else if (
-                handlerInput.execution.toolCallCount + 1 >
-                executionLimits.maxToolCalls
-            ) {
-                executionLimitReason = 'max_tool_calls_reached';
-            } else if (recoveryTokenBudget === undefined) {
-                executionLimitReason = 'budget_exhausted_tokens';
-            } else if (
-                handlerInput.execution.deliberationCallCount + 2 >
-                    executionLimits.maxDeliberationCalls ||
-                handlerInput.execution.reviewCallCount + 2 >
-                    (executionLimits.maxReviewCycles ??
-                        executionLimits.maxDeliberationCalls)
-            ) {
-                executionLimitReason = 'max_deliberation_calls_reached';
-            } else if (remainingDurationMs <= estimatedRecoveryDurationMs) {
-                executionLimitReason = 'budget_exhausted_time';
-            }
+        if (searchOutcome !== undefined) {
+            signals.searchRecoveryOutcome = searchOutcome;
         }
-        const condensationAlreadyAttempted = handlerInput.run.steps.some(
-            (step) => step.stepId === 'condense'
-        );
-        let searchBlockedReason: WorkflowTerminationReason | undefined;
-        if (decision.reviewDecision === 'search') {
-            if (condensationAlreadyAttempted) {
-                searchBlockedReason = 'transition_blocked_by_policy';
-            } else if (repeatedSearchQuery) {
-                searchBlockedReason = 'search_query_repeated';
-            } else if (!workflowPolicy.enableToolUse || !hasToolStep) {
-                searchBlockedReason = 'transition_blocked_by_policy';
-            } else if (searchRecoveryCyclesExhausted) {
-                searchBlockedReason = 'max_search_recovery_cycles_reached';
-            } else {
-                searchBlockedReason = executionLimitReason;
-            }
-        }
-        const voice = realtimeWorkflowScope();
-        const currentDraft = readGenerationResult(handlerInput.results.draft);
-        const deliveryMeasurement =
-            voice === undefined || currentDraft === undefined
-                ? undefined
-                : measureVoiceAnswerDelivery(
-                      currentDraft.text,
-                      voice.deliveryPolicy.mode,
-                      voice.deliveryPolicy.maxAnswerTokens
-                  );
-        const condensationNeeded =
-            decision.reviewDecision === 'finalize' &&
-            deliveryMeasurement !== undefined &&
-            !deliveryMeasurement.fits;
-        let condensationBlockReason: WorkflowTerminationReason | undefined;
-        let condensationReady = false;
-        if (
-            condensationAlreadyAttempted &&
-            decision.reviewDecision !== 'finalize'
-        ) {
-            condensationBlockReason = 'transition_blocked_by_policy';
-            signals.condensationOutcome = 'assessment_recovery_blocked';
-        } else if (
-            condensationAlreadyAttempted &&
-            condensationNeeded &&
-            deliveryMeasurement !== undefined
-        ) {
-            signals.condensationOutcome = 'still_overlong';
-        } else if (condensationNeeded && deliveryMeasurement !== undefined) {
-            signals.condensationAttempted = false;
-            signals.originalEstimatedTokens =
-                deliveryMeasurement.estimatedTokens;
-            signals.effectiveDeliveryTokenCeiling =
-                deliveryMeasurement.tokenLimit;
-            signals.deliveryOverageTokens = deliveryMeasurement.tokenOverage;
-            signals.originalCodePoints = deliveryMeasurement.codePoints;
-            if (deliveryMeasurement.characterLimit !== undefined) {
-                signals.deliveryCodePointLimit =
-                    deliveryMeasurement.characterLimit;
-                signals.deliveryCodePointOverage =
-                    deliveryMeasurement.characterOverage;
-            }
-            const condensation = condensationFor(
-                handlerInput.results,
-                decision
-            );
-            const condensationTokenBudget =
-                condensation === undefined
-                    ? undefined
-                    : reserveRecoveryGenerationOutputTokens({
-                          generationRequest: condensation.request,
-                          assessmentMessagesWithoutDraft:
-                              condensation.assessmentMessagesWithoutDraft,
-                          totalTokens:
-                              handlerInput.execution.totalTokens +
-                              (usage.totalTokens ?? 0),
-                          maxTokensTotal: executionLimits.maxTokensTotal,
-                      });
-            const estimatedCondensationDurationMs =
-                maximumObservedAttemptDurationMs(handlerInput.run, 'generate') +
-                Math.max(
-                    currentAssessmentDurationMs,
-                    maximumObservedAttemptDurationMs(handlerInput.run, 'assess')
-                );
-            if (condensation === undefined) {
-                condensationBlockReason = 'transition_blocked_by_policy';
-            } else if (handlerInput.iteration >= effectiveMaxIterations) {
-                condensationBlockReason = 'budget_exhausted_steps';
-            } else if (
-                handlerInput.execution.stepCount + 3 >
-                executionLimits.maxWorkflowSteps
-            ) {
-                condensationBlockReason = 'budget_exhausted_steps';
-            } else if (
-                handlerInput.execution.deliberationCallCount + 3 >
-                    executionLimits.maxDeliberationCalls ||
-                handlerInput.execution.reviewCallCount + 2 >
-                    (executionLimits.maxReviewCycles ??
-                        executionLimits.maxDeliberationCalls)
-            ) {
-                condensationBlockReason = 'max_deliberation_calls_reached';
-            } else if (condensationTokenBudget === undefined) {
-                condensationBlockReason = 'budget_exhausted_tokens';
-            } else if (remainingDurationMs <= estimatedCondensationDurationMs) {
-                condensationBlockReason = 'budget_exhausted_time';
-            } else {
-                condensationReady = true;
-            }
-            signals.condensationOutcome = condensationReady
-                ? 'requested'
-                : 'budget_blocked';
-        }
-        if (searchBlockedReason !== undefined) {
-            switch (searchBlockedReason) {
-                case 'search_query_repeated':
-                    signals.searchRecoveryOutcome = 'repeated_query';
-                    break;
-                case 'max_search_recovery_cycles_reached':
-                    signals.searchRecoveryOutcome = 'cycle_limit';
-                    break;
-                case 'transition_blocked_by_policy':
-                    signals.searchRecoveryOutcome = 'policy_blocked';
-                    break;
-                default:
-                    signals.searchRecoveryOutcome = 'execution_limit';
-            }
-        } else if (decision.reviewDecision === 'search') {
-            signals.searchRecoveryOutcome = 'requested';
-        }
-        let outcome: 'limit' | 'done' | 'condense' | 'search' | 'revise';
-        if (condensationBlockReason !== undefined) {
-            outcome = 'limit';
-        } else if (decision.reviewDecision === 'finalize') {
-            outcome = condensationReady ? 'condense' : 'done';
-        } else if (condensationAlreadyAttempted) {
-            outcome = 'limit';
-        } else if (decision.reviewDecision === 'search') {
-            outcome = searchBlockedReason === undefined ? 'search' : 'limit';
-        } else {
-            outcome =
-                handlerInput.iteration >= regularMaxIterations
-                    ? 'limit'
-                    : 'revise';
-        }
-        let terminationReason = condensationBlockReason ?? searchBlockedReason;
-        if (
-            terminationReason === undefined &&
-            decision.reviewDecision === 'revise' &&
-            !workflowPolicy.enableRevision
-        ) {
-            terminationReason = 'transition_blocked_by_policy';
-        }
-        if (
-            terminationReason === undefined &&
-            outcome === 'limit' &&
-            decision.reviewDecision !== 'search'
-        ) {
-            terminationReason = 'budget_exhausted_steps';
-        }
+        const { outcome, terminationReason } = assessmentOutcome({
+            decision,
+            iteration: handlerInput.iteration,
+            condensationAlreadyAttempted,
+            condensationReady: condensation.ready,
+            condensationBlockReason: condensation.blockReason,
+            searchBlockedReason: admission.blockedReason,
+        });
         return {
             status: 'succeeded',
             outcome,
