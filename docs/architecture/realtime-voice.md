@@ -375,7 +375,7 @@ passed review, not that it is necessarily true or private.
 | Finalized draft but Run/Workflow did not complete successfully | `workflow_not_completed` |
 | Non-answer, terminal action or unsupported candidate stage     | `unsupported_response`   |
 | Selected answer exceeds its Voice delivery limit               | `answer_too_long`        |
-| Condensation or reassessment exceeds Workflow limits                | `workflow_limit_reached` |
+| Condensation or reassessment exceeds Workflow limits           | `workflow_limit_reached` |
 
 Only `approved` carries text. For `workflow_limit_reached`, `limitReason`
 identifies `budget_exhausted_steps`, `budget_exhausted_tokens`,
