@@ -710,7 +710,20 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
     const inputAudio = Buffer.from([0, 0, 1, 0]);
     const synthesized: string[] = [];
     const snapshots: string[] = [];
+    const profile: BotProfileConfig = {
+        ...testProfile,
+        id: 'custom',
+        displayName: 'Custom operator',
+        personaExpressionStrength: 'subtle',
+        promptOverlay: {
+            source: 'inline',
+            text: 'PRIVATE_OVERLAY',
+            path: null,
+            length: 15,
+        },
+    };
     const harness = await createRealtimeHandlerHarness({
+        profile,
         defaultMode: 'standard',
         openRouterVoiceService: {
             async transcribe(audio) {
@@ -731,6 +744,12 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
             async runRealtimeConversation(snapshot, context) {
                 assert.equal(context.voiceMode, 'standard');
                 assert.equal(context.maxAnswerTokens, 160);
+                assert.equal(context.persona?.profile.id, 'custom');
+                assert.equal(
+                    context.persona?.profile.promptOverlay.text,
+                    'PRIVATE_OVERLAY'
+                );
+                assert.equal(context.persona?.expression.strength, 'subtle');
                 context.onRunStarted('workflow-run');
                 snapshots.push(JSON.stringify(snapshot));
                 return {
@@ -767,6 +786,9 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
         );
         const ready = await waitForJsonMessage(ws, 1000);
         assert.equal(ready.type, 'session.ready');
+        profile.id = 'changed-after-admission';
+        profile.promptOverlay.text = 'changed-after-admission';
+        profile.personaExpressionStrength = 'strong';
         ws.send(
             JSON.stringify({
                 type: 'input_audio.append',
@@ -946,6 +968,12 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
             async runRealtimeConversation(snapshot, context) {
                 assert.equal(context.voiceMode, 'live');
                 assert.equal(context.maxAnswerTokens, 160);
+                assert.equal(context.persona?.profile.id, 'winter');
+                assert.match(
+                    context.persona?.profile.promptOverlay.text ?? '',
+                    /The active persona is Winter/
+                );
+                assert.equal(context.persona?.expression.strength, 'strong');
                 context.onRunStarted('live-workflow-run');
                 snapshots.push(JSON.stringify(snapshot));
                 return {
@@ -1044,6 +1072,66 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
         await harness.close();
     }
 });
+
+for (const mode of ['standard', 'live'] as const) {
+    test(`${mode} rejects an unavailable configured persona before provider startup and allows corrected admission`, async () => {
+        const profile: BotProfileConfig = {
+            ...testProfile,
+            id: 'custom',
+            promptOverlay: {
+                source: 'none',
+                text: null,
+                path: 'PRIVATE_MISSING_PATH',
+                length: 0,
+            },
+        };
+        let providerCalls = 0;
+        const harness = await createRealtimeHandlerHarness({
+            profile,
+            openAiLiveVoiceSessionFactory: async () => {
+                providerCalls++;
+                return new StubOpenAiLiveVoiceSession();
+            },
+            openRouterVoiceService: {
+                async transcribe() {
+                    providerCalls++;
+                    return { text: '' };
+                },
+                async synthesize() {
+                    providerCalls++;
+                    return { audio: Buffer.from([0, 0]) };
+                },
+            },
+        });
+        let ws: WebSocket | undefined;
+        try {
+            ws = await harness.connect();
+            const start = {
+                type: 'session.start',
+                mode,
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
+            };
+            ws.send(JSON.stringify(start));
+            const error = await waitForJsonMessage(ws);
+            assert.equal(error.code, 'voice_persona_unavailable');
+            assert.doesNotMatch(JSON.stringify(error), /PRIVATE_MISSING_PATH/);
+            assert.equal(providerCalls, 0);
+            profile.id = 'footnote';
+            profile.promptOverlay.path = null;
+            ws.send(JSON.stringify(start));
+            assert.equal((await waitForJsonMessage(ws)).type, 'session.ready');
+            ws.send(JSON.stringify({ type: 'session.close' }));
+        } finally {
+            if (ws) await closeWebSocket(ws);
+            await harness.close();
+        }
+    });
+}
 
 test('Live closes when audio comes from anyone except the consenting initiator', async () => {
     const stubLiveSession = new StubOpenAiLiveVoiceSession();

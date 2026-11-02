@@ -216,12 +216,90 @@ export const resolvePersonaExpression = (
 export const resolveChatPersonaProfile = (
     request: Pick<PostChatRequest, 'surface' | 'botPersonaId'>,
     logger: ChatProfileOverlayLogger
-): BotProfileConfig =>
-    buildPersonaProfileConfig(
+): BotProfileConfig => {
+    if (
+        request.surface === 'discord' &&
+        request.botPersonaId?.trim().toLowerCase() === runtimeConfig.profile.id
+    ) {
+        return resolveConfiguredPersonaProfile(runtimeConfig.profile, logger);
+    }
+    return buildPersonaProfileConfig(
         resolvePersonaEntry(request, logger),
         request,
         logger
     );
+};
+
+/** Operator identity and overlay take precedence over the bundled catalog. */
+const resolveConfiguredPersonaProfile = (
+    profile: BotProfileConfig,
+    logger: ChatProfileOverlayLogger
+): BotProfileConfig => {
+    if (
+        profile.promptOverlay.text?.trim() ||
+        profile.promptOverlay.path ||
+        profile.promptOverlay.unavailable
+    )
+        return profile;
+    const persona = PERSONA_CATALOG[profile.id];
+    if (!persona) return profile;
+    const bundled = buildPersonaProfileConfig(
+        persona,
+        { surface: 'discord', botPersonaId: profile.id },
+        logger
+    );
+    return { ...profile, promptOverlay: bundled.promptOverlay };
+};
+
+export type ResolvedVoicePersona = Readonly<{
+    profile: BotProfileConfig;
+    expression: PersonaExpressionResolution;
+    overlaySelection: 'configured' | 'catalog' | 'default';
+}>;
+
+/** Pins backend-owned persona data once per call, separately from speech selection. */
+export const resolveVoicePersona = (
+    configuredProfile: BotProfileConfig,
+    logger: ChatProfileOverlayLogger
+): ResolvedVoicePersona => {
+    const effective = resolveConfiguredPersonaProfile(
+        configuredProfile,
+        logger
+    );
+    if (
+        effective.promptOverlay.unavailable ||
+        (!effective.promptOverlay.text?.trim() &&
+            (effective.id !== DEFAULT_PERSONA_ID ||
+                effective.promptOverlay.path !== null ||
+                effective.promptOverlay.source !== 'none'))
+    )
+        throw new Error('Configured Voice persona overlay is unavailable.');
+    const profile: BotProfileConfig = {
+        id: effective.id,
+        displayName: effective.displayName,
+        mentionAliases: [...effective.mentionAliases],
+        promptOverlay: { ...effective.promptOverlay },
+        personaExpressionStrength: effective.personaExpressionStrength,
+    };
+    const expression = resolvePersonaExpression(
+        {},
+        profile,
+        profile.personaExpressionStrength ?? ''
+    );
+    Object.freeze(profile.mentionAliases);
+    Object.freeze(profile.promptOverlay);
+    Object.freeze(profile);
+    Object.freeze(expression);
+    return Object.freeze({
+        profile,
+        expression,
+        overlaySelection: configuredProfile.promptOverlay.text?.trim()
+            ? 'configured'
+            : profile.promptOverlay.text
+              ? 'catalog'
+              : 'default',
+    });
+};
 
 /**
  * Uses the shared profile display-name env so non-overlay persona templates

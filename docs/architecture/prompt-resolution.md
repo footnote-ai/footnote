@@ -27,6 +27,15 @@ This is the canonical order Footnote uses to build runtime prompt text.
 
 ## Operator Notes
 
+For Discord chat, a persona ID matching the backend's configured bot uses that
+operator profile and overlay before the bundled catalog. Other known IDs still
+use the catalog; unknown ordinary-chat IDs retain the warned Footnote fallback.
+Voice resolves the configured profile once at admission and pins its expression
+strength and overlay for Standard and Live Workflow. Unavailable required
+overlays reject admission instead of invoking that chat fallback. Custom IDs
+require an operator overlay. GPT-Live's own behavioral startup instructions are
+still deferred; see [Voice prompt composition](./realtime-voice.md#5-prompt-composition).
+
 - `PROMPT_CONFIG_PATH` is shared by backend and Discord bot runtimes.
 - `PROMPT_CONFIG_PATH` applies before Discord profile overlay composition.
 - `BOT_PROFILE_*` overlay settings are Discord bot runtime specific.

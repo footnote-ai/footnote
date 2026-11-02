@@ -7,15 +7,131 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { runtimeConfig } from '../src/config.js';
+import { parseBotProfileConfig } from '../src/config/profile.js';
 import {
     resolveChatPersonaProfile,
     resolvePersonaExpression,
     resolvePersonaPresentationGuidance,
+    resolveVoicePersona,
 } from '../src/services/chatProfileOverlay.js';
 
 const logger = {
     warn: () => undefined,
 };
+
+test('Voice admission pins bundled identity and expression defaults without acoustic settings', () => {
+    for (const [id, displayName, strength, overlaySelection] of [
+        ['footnote', 'Footnote', 'balanced', 'default'],
+        ['danny', 'Danny', 'balanced', 'catalog'],
+        ['myuri', 'Myuri', 'balanced', 'catalog'],
+        ['winter', 'Winter', 'strong', 'catalog'],
+    ] as const) {
+        const configured = parseBotProfileConfig({
+            profileId: id,
+            profileDisplayName: displayName,
+            speechPresentation: { ttsVoice: 'alloy' },
+        });
+        const resolved = resolveVoicePersona(configured, logger);
+        assert.equal(resolved.profile.id, id);
+        assert.equal(resolved.profile.displayName, displayName);
+        assert.equal(resolved.expression.strength, strength);
+        assert.equal(resolved.expression.source, 'persona_default');
+        assert.equal(resolved.overlaySelection, overlaySelection);
+        assert.equal(resolved.profile.speechPresentation, undefined);
+        if (id !== 'footnote') assert.ok(resolved.profile.promptOverlay.text);
+        configured.displayName = 'Changed after admission';
+        assert.equal(resolved.profile.displayName, displayName);
+        assert.ok(Object.isFrozen(resolved.profile.promptOverlay));
+        assert.ok(Object.isFrozen(resolved.profile.mentionAliases));
+        assert.ok(Object.isFrozen(resolved.expression));
+    }
+});
+
+test('matching Discord identity preserves the operator profile and overlay', () => {
+    const previous = { ...runtimeConfig.profile };
+    try {
+        Object.assign(runtimeConfig.profile, {
+            id: 'operator',
+            displayName: 'Operator identity',
+            mentionAliases: ['operator-bot'],
+            promptOverlay: {
+                source: 'inline',
+                text: 'PRIVATE_OPERATOR_OVERLAY',
+                path: null,
+                length: 24,
+            },
+        });
+        const profile = resolveChatPersonaProfile(
+            { surface: 'discord', botPersonaId: 'operator' },
+            logger
+        );
+        assert.equal(profile.id, 'operator');
+        assert.equal(profile.displayName, 'Operator identity');
+        assert.equal(profile.promptOverlay.text, 'PRIVATE_OPERATOR_OVERLAY');
+        assert.deepEqual(profile.mentionAliases, ['operator-bot']);
+    } finally {
+        Object.assign(runtimeConfig.profile, previous);
+    }
+});
+
+test('Voice preserves custom and built-in operator overlays and expression overrides', () => {
+    for (const id of ['operator', 'footnote', 'danny', 'myuri', 'winter']) {
+        const configured = parseBotProfileConfig({
+            profileId: id,
+            profileDisplayName: 'Operator name',
+            inlineOverlayText: 'PRIVATE_OPERATOR_OVERLAY',
+            personaExpressionStrength: 'subtle',
+        });
+        const resolved = resolveVoicePersona(configured, logger);
+        assert.equal(resolved.profile.id, id);
+        assert.equal(resolved.profile.displayName, 'Operator name');
+        assert.equal(
+            resolved.profile.promptOverlay.text,
+            'PRIVATE_OPERATOR_OVERLAY'
+        );
+        assert.equal(resolved.overlaySelection, 'configured');
+        assert.equal(resolved.expression.strength, 'subtle');
+        assert.equal(resolved.expression.source, 'profile');
+        assert.match(resolved.expression.guidance, /TRACE values/);
+        configured.promptOverlay.text = 'Changed overlay';
+        assert.equal(
+            resolved.profile.promptOverlay.text,
+            'PRIVATE_OPERATOR_OVERLAY'
+        );
+    }
+});
+
+test('Voice rejects unknown identity or unusable required overlays without substituting Footnote', () => {
+    const previousRoot = runtimeConfig.runtime.projectRoot;
+    for (const input of [
+        { profileId: 'unknown' },
+        { profileId: 'winter', overlayPath: 'missing-private-overlay.md' },
+        {
+            profileId: 'footnote',
+            inlineOverlayText: 'PRIVATE_TOO_LONG',
+            maxOverlayLength: 2,
+        },
+    ]) {
+        assert.throws(
+            () => resolveVoicePersona(parseBotProfileConfig(input), logger),
+            /^Error: Configured Voice persona overlay is unavailable\.$/
+        );
+    }
+    try {
+        runtimeConfig.runtime.projectRoot = 'missing-catalog-root';
+        assert.throws(
+            () =>
+                resolveVoicePersona(
+                    parseBotProfileConfig({ profileId: 'winter' }),
+                    logger
+                ),
+            /Configured Voice persona overlay is unavailable/
+        );
+    } finally {
+        runtimeConfig.runtime.projectRoot = previousRoot;
+    }
+});
 
 test('resolves every built-in Discord persona through the public profile seam', () => {
     const expectedProfiles = [
