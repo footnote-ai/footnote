@@ -7,6 +7,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { runtimeConfig } from '../src/config.js';
 import { parseBotProfileConfig } from '../src/config/profile.js';
 import {
@@ -19,6 +22,50 @@ import {
 const logger = {
     warn: () => undefined,
 };
+
+test('a different Discord identity uses its own file instead of the backend inline overlay', () => {
+    const previousBots = runtimeConfig.settings.discordBots;
+    const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'persona-overlay-precedence-')
+    );
+    const overlayPath = path.join(root, 'danny.md');
+    fs.writeFileSync(overlayPath, 'DANNY_OPERATOR_OVERLAY');
+    runtimeConfig.settings.discordBots = [
+        {
+            id: 'danny-bot',
+            profile: { id: 'danny', displayName: 'Danny', overlayPath },
+        },
+    ];
+    const identity = { discordNodeId: 'danny-bot', botPersonaId: 'danny' };
+    try {
+        for (const maxOverlayLength of [8000, 2]) {
+            const backend = parseBotProfileConfig({
+                profileId: 'footnote',
+                inlineOverlayText: 'FOOTNOTE_BACKEND_OVERLAY',
+                maxOverlayLength,
+            });
+            const resolved = resolveVoicePersona(backend, logger, identity);
+            assert.equal(
+                resolved.profile.promptOverlay.text,
+                'DANNY_OPERATOR_OVERLAY'
+            );
+            assert.equal(resolved.profile.promptOverlay.source, 'file');
+            assert.equal(resolved.overlaySelection, 'configured');
+        }
+        const matchingBackend = parseBotProfileConfig({
+            profileId: 'danny',
+            inlineOverlayText: 'DANNY_INLINE_OVERRIDE',
+        });
+        assert.equal(
+            resolveVoicePersona(matchingBackend, logger, identity).profile
+                .promptOverlay.text,
+            'DANNY_INLINE_OVERRIDE'
+        );
+    } finally {
+        runtimeConfig.settings.discordBots = previousBots;
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
 
 test('Voice admission pins bundled identity and expression defaults without acoustic settings', () => {
     for (const [id, displayName, strength, overlaySelection] of [

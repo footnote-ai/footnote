@@ -323,6 +323,7 @@ const resolveInvokingBotProfile = (
                 BOT_PROFILE_DISPLAY_NAME: selected.displayName,
                 BOT_PROFILE_MENTION_ALIASES: selected.mentionAliases?.join(','),
                 BOT_PROFILE_PROMPT_OVERLAY:
+                    selected.id === fallback.id &&
                     fallback.promptOverlay.source === 'inline'
                         ? (fallback.promptOverlay.text ?? undefined)
                         : undefined,
@@ -333,8 +334,8 @@ const resolveInvokingBotProfile = (
             projectRoot: runtimeConfig.runtime.projectRoot,
             warn: () => undefined,
         });
-        // A rejected inherited inline overlay still outranks a node's file overlay.
-        if (fallback.promptOverlay.unavailable)
+        // Overlay precedence applies within an identity, never across different bots.
+        if (selected.id === fallback.id && fallback.promptOverlay.unavailable)
             profile.promptOverlay = { ...fallback.promptOverlay };
         return profile;
     }
