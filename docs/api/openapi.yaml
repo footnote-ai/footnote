@@ -322,6 +322,14 @@ paths:
                 voice sessions. Clients send `InternalVoiceRealtimeClientEvent`
                 payloads and receive `InternalVoiceRealtimeServerEvent` payloads.
                 Requires either `x-service-token` or `x-trace-token`.
+                The authenticated adapter's `session.start` includes configured
+                `botPersonaId`, optional `discordNodeId`, and optional
+                `personaExpressionProfileStrength`. The backend resolves existing
+                bot configuration and pins persona for the call; clients never
+                supply overlay text or paths. Unknown identities or unavailable
+                required overlays return `voice_persona_unavailable` before
+                provider startup. Legacy clients without identity metadata use
+                the backend's configured profile.
             tags:
                 - Voice
             security:

@@ -19,6 +19,10 @@ import {
     InternalVoiceRealtimeServerEventSchema,
 } from '@footnote/contracts/voice';
 import type { BotProfileConfig } from '../config/profile.js';
+import {
+    resolveVoicePersona,
+    type ResolvedVoicePersona,
+} from '../services/chatProfileOverlay.js';
 import type {
     RealtimeFreshnessHandle,
     RealtimeWorkflowRunner,
@@ -170,6 +174,7 @@ export const createInternalVoiceRealtimeHandler = ({
             ReturnType<typeof setTimeout> | undefined;
         let providerSetupController: AbortController | undefined;
         let speechSelection: SpeechSelectionMetadata | undefined;
+        let persona: ResolvedVoicePersona | undefined;
         const sessionCorrelationId = randomUUID();
         const liveTranscriptEvents: Array<{
             eventId: string;
@@ -225,7 +230,7 @@ export const createInternalVoiceRealtimeHandler = ({
                 ? null
                 : {
                       runRealtimeConversation: async (snapshot, context) => {
-                          if (!mode)
+                          if (!mode || !persona)
                               throw new Error('Voice mode is unavailable.');
                           const result =
                               await workflowRunner.runRealtimeConversation(
@@ -234,6 +239,7 @@ export const createInternalVoiceRealtimeHandler = ({
                                       ...context,
                                       voiceMode: mode,
                                       maxAnswerTokens,
+                                      persona,
                                   }
                               );
                           const answer = result.finalResponse;
@@ -497,6 +503,7 @@ export const createInternalVoiceRealtimeHandler = ({
             audioBytes = 0;
             conversationState?.close();
             conversationState = undefined;
+            persona = undefined;
             if (waitForLiveFinalization) {
                 providerFinalizationTimeout = setTimer(() => {
                     realtimeLogger.warn(
@@ -1251,6 +1258,30 @@ export const createInternalVoiceRealtimeHandler = ({
                     });
                     return;
                 }
+                try {
+                    persona = resolveVoicePersona(
+                        profile,
+                        realtimeLogger,
+                        event
+                    );
+                } catch (error) {
+                    realtimeLogger.warn(
+                        'Configured Voice persona could not be resolved.',
+                        {
+                            cause:
+                                error instanceof Error
+                                    ? (error.stack ?? error.message)
+                                    : String(error),
+                        }
+                    );
+                    sendServerEvent(ws, {
+                        type: 'error',
+                        message:
+                            'Configured Voice persona is unavailable. Check the bot identity and overlay configuration.',
+                        code: 'voice_persona_unavailable',
+                    });
+                    return;
+                }
                 mode = requestedMode;
                 initiatorId = event.initiatorId;
                 callLimitMs =
@@ -1268,7 +1299,7 @@ export const createInternalVoiceRealtimeHandler = ({
                 setupTimeout.unref?.();
                 realtimeLogger.info('Internal voice session starting.', {
                     mode,
-                    profileId: profile.id,
+                    profileId: persona.profile.id,
                 });
                 if (mode === 'standard') {
                     speechSelection = resolveSpeechSelection({
@@ -1380,7 +1411,7 @@ export const createInternalVoiceRealtimeHandler = ({
                         const createdSession =
                             await openAiLiveVoiceSessionFactory({
                                 instructions: [
-                                    `You are ${profile.displayName}, Footnote's voice assistant.`,
+                                    `You are ${persona.profile.displayName}, Footnote's voice assistant.`,
                                     'Speak naturally and briefly. Listen for corrections and let the caller interrupt. Handle casual conversation, but delegate requests needing facts, research, decisions, or actions to Footnote. Do not invent results or announce an action before Footnote reports it. When Footnote sends a reviewed answer, communicate it naturally; your spoken wording may differ from the reviewed text.',
                                     ...(speechSelection.delivery
                                         ? [

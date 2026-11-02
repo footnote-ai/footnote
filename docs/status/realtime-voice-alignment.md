@@ -6,6 +6,16 @@ PR #965 connects Discord's Standard and Live modes to the existing Workflow
 and answer-approval path. The adapters and call lifecycle have synthetic tests.
 Paid-provider behavior and real Discord playback are still unverified.
 
+The first #974 slice pins backend persona resolution at call admission and
+propagates it to Standard and Live Workflow, including configured/custom overlays
+and expression strength. Resolver, handler and real Workflow tests use synthetic
+providers for Footnote, Danny, Myuri, Winter and a custom identity; private overlay
+text remains outside persisted Voice records. Required overlays that cannot be
+resolved reject admission. GPT-Live receives the pinned display name, but its
+behavioral overlay/expression startup parity and listening evaluations remain
+unimplemented. `realtimePromptComposer.ts` does not supply its current startup
+payload.
+
 The [architecture guide](../architecture/realtime-voice.md) describes the
 implementation. The [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
 covers the remaining work and consent decisions.

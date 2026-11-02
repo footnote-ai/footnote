@@ -224,7 +224,47 @@ Discord uses this handler for realtime voice rather than opening its own provide
 
 ## 5. Prompt Composition
 
-Realtime prompt composition lives in [realtimePromptComposer.ts](../../packages/backend/src/services/prompts/realtimePromptComposer.ts). The backend builds one instruction string for the provider session using:
+### Current Standard and Live calls
+
+At call admission, the backend resolves and freezes the configured bot persona:
+ID, display name, aliases, overlay and expression strength. An operator overlay
+wins over the bundled catalog; without one, Danny, Myuri and Winter use their
+bundled overlays, and Footnote uses its default persona layer. Custom identities
+require an overlay. Missing, empty or rejected required overlays return
+`voice_persona_unavailable` before provider startup rather than substituting
+Footnote. There is no `/call` persona selector.
+
+The authenticated Discord adapter sends its configured persona ID and, when
+supervised, `LOCAL_DISCORD_NODE_ID` as internal session metadata. The backend
+selects that node's profile from the existing `discord-bots` settings, reads its
+configured overlay through the shared profile parser, and checks that the
+adapter identity agrees. Overlay text and file paths never come from the
+session request. This supports several differently configured bots sharing one
+backend. Standalone adapters use the matching backend profile or bundled
+catalog; custom standalone profiles must also be configured on the backend.
+Legacy clients without identity metadata retain the backend profile default.
+
+Standard and Live delegation carry this call-scoped resolution through the
+existing `RealtimeWorkflowRunner` context into normal chat prompt assembly,
+generation, assessment and presentation. The private persona data stays outside
+the conversation snapshot and metadata-only Voice receipts. Corrections and
+interruptions do not re-resolve identity. Adapter profile expression preferences
+precede configured profile/deployment defaults and then catalog defaults
+(`strong` for Winter, `balanced` otherwise); ordinary chat retains its
+request-override precedence. Speech model, voice and delivery remain
+separate settings. Persona cannot alter TRACE, assessment or execution authority.
+
+GPT-Live startup currently receives the pinned display name, generic listening
+and delegation instructions, and acoustic delivery guidance. It does **not** yet
+receive the resolved behavioral overlay or expression guidance. Startup parity
+and listening evaluations are subsequent slices of #974; independently spoken
+or paraphrased Live output is not Workflow-approved speech.
+
+### Legacy realtime composer
+
+[realtimePromptComposer.ts](../../packages/backend/src/services/prompts/realtimePromptComposer.ts)
+is not used by the current Standard or GPT-Live handler. It builds legacy
+Realtime instructions using:
 
 - the shared conversational system layer
 - the realtime voice surface layer

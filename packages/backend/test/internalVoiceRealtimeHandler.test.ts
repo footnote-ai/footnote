@@ -8,6 +8,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { once } from 'node:events';
+import { runtimeConfig } from '../src/config.js';
+import { parseBotProfileConfig } from '../src/config/profile.js';
 import { Duplex } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import WebSocket from 'ws';
@@ -154,6 +160,7 @@ class StubOpenAiLiveVoiceSession implements OpenAiLiveVoiceSession {
 }
 
 type RealtimeHandlerHarness = {
+    baseUrl: string;
     close: () => Promise<void>;
     connect: (headers?: Record<string, string>) => Promise<WebSocket>;
     lastLiveSession: () => StubOpenAiLiveVoiceSession | null;
@@ -259,6 +266,7 @@ const createRealtimeHandlerHarness = async (
     assert.ok(address && typeof address === 'object');
 
     return {
+        baseUrl: `http://127.0.0.1:${address.port}`,
         close: () =>
             new Promise((resolve, reject) => {
                 server.close((error) => {
@@ -710,7 +718,20 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
     const inputAudio = Buffer.from([0, 0, 1, 0]);
     const synthesized: string[] = [];
     const snapshots: string[] = [];
+    const profile: BotProfileConfig = {
+        ...testProfile,
+        id: 'custom',
+        displayName: 'Custom operator',
+        personaExpressionStrength: 'subtle',
+        promptOverlay: {
+            source: 'inline',
+            text: 'PRIVATE_OVERLAY',
+            path: null,
+            length: 15,
+        },
+    };
     const harness = await createRealtimeHandlerHarness({
+        profile,
         defaultMode: 'standard',
         openRouterVoiceService: {
             async transcribe(audio) {
@@ -731,6 +752,12 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
             async runRealtimeConversation(snapshot, context) {
                 assert.equal(context.voiceMode, 'standard');
                 assert.equal(context.maxAnswerTokens, 160);
+                assert.equal(context.persona?.profile.id, 'custom');
+                assert.equal(
+                    context.persona?.profile.promptOverlay.text,
+                    'PRIVATE_OVERLAY'
+                );
+                assert.equal(context.persona?.expression.strength, 'subtle');
                 context.onRunStarted('workflow-run');
                 snapshots.push(JSON.stringify(snapshot));
                 return {
@@ -767,6 +794,9 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
         );
         const ready = await waitForJsonMessage(ws, 1000);
         assert.equal(ready.type, 'session.ready');
+        profile.id = 'changed-after-admission';
+        profile.promptOverlay.text = 'changed-after-admission';
+        profile.personaExpressionStrength = 'strong';
         ws.send(
             JSON.stringify({
                 type: 'input_audio.append',
@@ -946,6 +976,12 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
             async runRealtimeConversation(snapshot, context) {
                 assert.equal(context.voiceMode, 'live');
                 assert.equal(context.maxAnswerTokens, 160);
+                assert.equal(context.persona?.profile.id, 'winter');
+                assert.match(
+                    context.persona?.profile.promptOverlay.text ?? '',
+                    /The active persona is Winter/
+                );
+                assert.equal(context.persona?.expression.strength, 'strong');
                 context.onRunStarted('live-workflow-run');
                 snapshots.push(JSON.stringify(snapshot));
                 return {
@@ -1042,6 +1078,204 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
     } finally {
         if (ws) await closeWebSocket(ws);
         await harness.close();
+    }
+});
+
+for (const mode of ['standard', 'live'] as const) {
+    test(`${mode} rejects an unavailable configured persona before provider startup and allows corrected admission`, async () => {
+        const profile: BotProfileConfig = {
+            ...testProfile,
+            id: 'custom',
+            promptOverlay: {
+                source: 'none',
+                text: null,
+                path: 'PRIVATE_MISSING_PATH',
+                length: 0,
+            },
+        };
+        let providerCalls = 0;
+        const harness = await createRealtimeHandlerHarness({
+            profile,
+            openAiLiveVoiceSessionFactory: async () => {
+                providerCalls++;
+                return new StubOpenAiLiveVoiceSession();
+            },
+            openRouterVoiceService: {
+                async transcribe() {
+                    providerCalls++;
+                    return { text: '' };
+                },
+                async synthesize() {
+                    providerCalls++;
+                    return { audio: Buffer.from([0, 0]) };
+                },
+            },
+        });
+        let ws: WebSocket | undefined;
+        try {
+            ws = await harness.connect();
+            const start = {
+                type: 'session.start',
+                mode,
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
+            };
+            ws.send(JSON.stringify(start));
+            const error = await waitForJsonMessage(ws);
+            assert.equal(error.code, 'voice_persona_unavailable');
+            assert.doesNotMatch(JSON.stringify(error), /PRIVATE_MISSING_PATH/);
+            assert.equal(providerCalls, 0);
+            profile.id = 'footnote';
+            profile.promptOverlay.path = null;
+            ws.send(JSON.stringify(start));
+            assert.equal((await waitForJsonMessage(ws)).type, 'session.ready');
+            ws.send(JSON.stringify({ type: 'session.close' }));
+        } finally {
+            if (ws) await closeWebSocket(ws);
+            await harness.close();
+        }
+    });
+}
+
+test('real Discord adapters select their configured personas against a shared Footnote backend', async () => {
+    const envKeys = [
+        'DISCORD_TOKEN',
+        'DISCORD_CLIENT_ID',
+        'DISCORD_USER_ID',
+        'DISCORD_GUILD_IDS',
+        'INCIDENT_PSEUDONYMIZATION_SECRET',
+        'LOCAL_DISCORD_NODE_ID',
+    ] as const;
+    const previousEnv = envKeys.map((key) => [key, process.env[key]] as const);
+    for (const key of envKeys) process.env[key] = 'synthetic-only';
+    const previousBots = runtimeConfig.settings.discordBots;
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'voice-persona-'));
+    const overlayPath = path.join(root, 'operator.md');
+    await fs.writeFile(overlayPath, 'PRIVATE_NODE_OVERLAY');
+    const { RealtimeSession } =
+        await import('../../discord-bot/src/utils/realtimeService.js');
+    const { runtimeConfig: botConfig } =
+        await import('../../discord-bot/src/config.js');
+    const previousBotConfig = { ...botConfig };
+    runtimeConfig.settings.discordBots = [
+        {
+            id: 'danny-node',
+            profile: {
+                id: 'danny',
+                displayName: 'Danny',
+                personaExpressionStrength: 'subtle',
+            },
+        },
+        { id: 'winter-node', profile: { id: 'winter', displayName: 'Winter' } },
+        {
+            id: 'custom-node',
+            profile: { id: 'custom', displayName: 'Custom', overlayPath },
+        },
+    ];
+    try {
+        for (const id of ['danny', 'winter', 'custom']) {
+            let received: Parameters<
+                RealtimeWorkflowRunner['runRealtimeConversation']
+            >[1]['persona'];
+            const harness = await createRealtimeHandlerHarness({
+                profile: parseBotProfileConfig({
+                    profileId: 'footnote',
+                    profileDisplayName: 'Footnote',
+                }),
+                defaultMode: 'standard',
+                openRouterVoiceService: {
+                    async transcribe() {
+                        return { text: 'Question for the invoking bot' };
+                    },
+                    async synthesize() {
+                        return { audio: Buffer.from([0, 0]) };
+                    },
+                },
+                workflowRunner: {
+                    async runRealtimeConversation(_snapshot, context) {
+                        received = context.persona;
+                        context.onRunStarted('run');
+                        return {
+                            responseId: 'response',
+                            runId: 'run',
+                            status: 'completed',
+                            finalResponse: {
+                                disposition: 'approved',
+                                responseId: 'response',
+                                runId: 'run',
+                                candidateId: 'candidate',
+                                generationStepId: 'answer',
+                                assessmentStepId: 'review',
+                                text: 'Approved answer.',
+                            },
+                        };
+                    },
+                },
+            });
+            Object.assign(botConfig, {
+                backendBaseUrl: harness.baseUrl,
+                serviceToken: 'service-token',
+                traceApiToken: 'trace-token',
+                profile: parseBotProfileConfig({
+                    profileId: id,
+                    personaExpressionStrength:
+                        id === 'danny' ? 'subtle' : undefined,
+                }),
+            });
+            process.env.LOCAL_DISCORD_NODE_ID = `${id}-node`;
+            const session = new RealtimeSession({
+                mode: 'standard',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
+            });
+            session.on('error', () => undefined);
+            try {
+                await session.connect();
+                const delivered = once(session, 'audio', {
+                    signal: AbortSignal.timeout(2000),
+                });
+                await session.sendAudio(
+                    Buffer.from([0, 0, 1, 0]),
+                    'Alice',
+                    'user-1'
+                );
+                await session.commitAudio();
+                await delivered;
+                assert.equal(received?.profile.id, id);
+                assert.equal(
+                    received?.expression.strength,
+                    id === 'danny'
+                        ? 'subtle'
+                        : id === 'winter'
+                          ? 'strong'
+                          : 'balanced'
+                );
+                if (id === 'custom')
+                    assert.equal(
+                        received?.profile.promptOverlay.text,
+                        'PRIVATE_NODE_OVERLAY'
+                    );
+            } finally {
+                session.disconnect();
+                await harness.close();
+            }
+        }
+    } finally {
+        runtimeConfig.settings.discordBots = previousBots;
+        Object.assign(botConfig, previousBotConfig);
+        for (const [key, value] of previousEnv) {
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+        }
+        await fs.rm(root, { recursive: true, force: true });
     }
 });
 

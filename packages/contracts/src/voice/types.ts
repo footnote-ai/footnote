@@ -221,6 +221,10 @@ export type InternalVoiceRealtimeClientEvent =
     | {
           type: 'session.start';
           context: InternalVoiceSessionContext;
+          /** Config-derived identity from the authenticated Discord adapter, never a slash-command choice. */
+          botPersonaId?: string;
+          discordNodeId?: string;
+          personaExpressionProfileStrength?: 'subtle' | 'balanced' | 'strong';
           mode?: 'standard' | 'live';
           initiatorId?: string;
           requestExtendedDuration?: boolean;

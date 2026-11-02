@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import type { InternalVoiceParticipant } from '@footnote/contracts/voice';
 import type { RealtimeExecutionInspection } from '@footnote/contracts/web';
+import type { ResolvedVoicePersona } from './chatProfileOverlay.js';
 import type {
     ConversationContextEnvelope,
     ConversationContextServiceOutput,
@@ -82,6 +83,8 @@ export type RealtimeWorkflowRunner = {
             onRunStarted: (runId: string) => void;
             voiceMode?: 'standard' | 'live';
             maxAnswerTokens?: number;
+            /** Backend-owned call identity; kept outside context and persisted receipts. */
+            persona?: ResolvedVoicePersona;
         }
     ) => Promise<RealtimeWorkflowResult>;
 };

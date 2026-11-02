@@ -24,6 +24,8 @@ export interface BotProfilePromptOverlay {
     text: string | null;
     path: string | null;
     length: number;
+    /** An explicitly configured overlay was rejected; strict consumers must not substitute a default. */
+    unavailable?: boolean;
 }
 
 export interface BotProfileSpeechPresentation {
@@ -209,7 +211,7 @@ const parseInlineOverlay = (
     maxOverlayLength: number
 ): BotProfilePromptOverlay => {
     if (inlineOverlay.length > maxOverlayLength) {
-        return emptyOverlay();
+        return { ...emptyOverlay(), unavailable: true };
     }
 
     return {

@@ -201,6 +201,15 @@ export const InternalVoiceRealtimeClientEventSchema = z.discriminatedUnion(
             .object({
                 type: z.literal('session.start'),
                 context: InternalVoiceSessionContextSchema,
+                botPersonaId: z
+                    .string()
+                    .trim()
+                    .regex(/^[a-z0-9][a-z0-9-]{0,31}$/)
+                    .optional(),
+                discordNodeId: z.string().trim().min(1).max(128).optional(),
+                personaExpressionProfileStrength: z
+                    .enum(['subtle', 'balanced', 'strong'])
+                    .optional(),
                 mode: z.enum(['standard', 'live']).optional(),
                 initiatorId: z.string().min(1).max(128).optional(),
                 requestExtendedDuration: z.boolean().optional(),

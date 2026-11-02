@@ -52,11 +52,13 @@ import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructur
 import { chatPlannerDecisionStructuredOutput } from './chatPlannerDecisionContract.js';
 import { removePlannerTransportNulls } from './plannerSchemaAdapter.js';
 import {
-    resolveActiveProfileOverlayPrompt,
     resolveChatPersonaProfile,
     resolvePersonaExpression,
     resolvePersonaPresentationGuidance,
+    resolveVoicePersona,
+    type ResolvedVoicePersona,
 } from './chatProfileOverlay.js';
+import { buildProfileOverlaySystemMessage } from './prompts/profilePromptOverlay.js';
 import { createModelProfileResolver } from './modelProfileResolver.js';
 import { listCapabilityProfileOptionsForStep } from './modelCapabilityPolicy.js';
 import {
@@ -884,6 +886,7 @@ export const createChatOrchestrator = ({
             signal?: AbortSignal;
             realtimeContext?: RealtimeConversationSnapshot['context'];
             voiceAnswerTokenLimit?: number;
+            persona?: ResolvedVoicePersona;
         }
     ): Promise<PostChatResponse> => {
         context?.signal?.throwIfAborted();
@@ -920,14 +923,12 @@ export const createChatOrchestrator = ({
         // Total wall-clock budget for this request from planner entry to
         // final response payload. This is exposed as telemetry only.
         const orchestrationStartedAt = Date.now();
-        const personaProfile = resolveChatPersonaProfile(
-            request,
-            chatOrchestratorLogger
-        );
-        const personaExpression = resolvePersonaExpression(
-            request,
-            personaProfile
-        );
+        const personaProfile =
+            context?.persona?.profile ??
+            resolveChatPersonaProfile(request, chatOrchestratorLogger);
+        const personaExpression =
+            context?.persona?.expression ??
+            resolvePersonaExpression(request, personaProfile);
         const fallbackAssistantIdentity: ChatAssistantIdentity = {
             displayName: personaProfile.displayName,
             mentionAliases: [...personaProfile.mentionAliases],
@@ -1310,10 +1311,7 @@ export const createChatOrchestrator = ({
         );
         const backendOwnedProfileOverlay =
             normalizedRequest.surface === 'discord'
-                ? resolveActiveProfileOverlayPrompt(
-                      normalizedRequest,
-                      chatOrchestratorLogger
-                  )
+                ? buildProfileOverlaySystemMessage(personaProfile, 'chat')
                 : null;
         // Discord can inject backend-owned runtime overlay text.
         // Web keeps default prompt persona layers.
@@ -2158,6 +2156,12 @@ export const createChatOrchestrator = ({
     /** Runs the existing Workflow and returns persisted identity plus ephemeral final-response evidence. */
     const runRealtimeConversation: RealtimeWorkflowRunner['runRealtimeConversation'] =
         async (snapshot, context) => {
+            const persona =
+                context.persona ??
+                resolveVoicePersona(
+                    runtimeConfig.profile,
+                    chatOrchestratorLogger
+                );
             if (snapshot.intent?.status !== 'pending')
                 throw new Error('Realtime intent is unavailable.');
             const turnIndex = snapshot.context.contextEnvelope.turns.findIndex(
@@ -2183,7 +2187,7 @@ export const createChatOrchestrator = ({
                     {
                         surface: 'discord',
                         trigger: { kind: 'direct' },
-                        botPersonaId: runtimeConfig.profile.id,
+                        botPersonaId: persona.profile.id,
                         latestUserInput,
                         conversation: snapshot.context.messages,
                         // Surface capabilities are hints; the execution gate independently denies non-answer actions.
@@ -2196,6 +2200,7 @@ export const createChatOrchestrator = ({
                     {
                         signal: context.signal,
                         realtimeContext: snapshot.context,
+                        persona,
                         voiceAnswerTokenLimit: resolveVoiceAnswerTokenLimit(
                             voice.deliveryPolicy.mode,
                             voice.deliveryPolicy.maxAnswerTokens

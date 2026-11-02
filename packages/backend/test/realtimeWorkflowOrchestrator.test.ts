@@ -18,6 +18,8 @@ import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import { RealtimeConversationState } from '../src/services/realtimeConversationState.js';
 import { buildResponseMetadata } from '../src/services/responseMetadata.js';
 import { runtimeConfig } from '../src/config.js';
+import { parseBotProfileConfig } from '../src/config/profile.js';
+import { resolveVoicePersona } from '../src/services/chatProfileOverlay.js';
 import { Writable } from 'node:stream';
 import { transports } from 'winston';
 import { logger } from '../src/utils/logger.js';
@@ -67,6 +69,119 @@ const answerPlan = (generation: object = {}) => ({
         ...generation,
     },
 });
+
+for (const mode of ['standard', 'live'] as const) {
+    for (const id of ['footnote', 'danny', 'myuri', 'winter', 'operator']) {
+        test(`${mode} Workflow uses pinned ${id} persona after runtime configuration changes`, async () => {
+            const previousMode = runtimeConfig.chatWorkflow.modeId;
+            const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+            const previousProfile = { ...runtimeConfig.profile };
+            runtimeConfig.chatWorkflow.modeId = 'grounded';
+            runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+            const persona = resolveVoicePersona(
+                parseBotProfileConfig({
+                    profileId: id,
+                    profileDisplayName: 'Private operator name',
+                    ...(id === 'operator'
+                        ? {
+                              inlineOverlayText: 'PRIVATE_OPERATOR_BEHAVIOR',
+                              personaExpressionStrength: 'subtle',
+                          }
+                        : {}),
+                }),
+                { warn: () => undefined }
+            );
+            Object.assign(runtimeConfig.profile, {
+                id: 'footnote',
+                displayName: 'Changed after admission',
+                personaExpressionStrength: 'strong',
+            });
+            const inputs: string[] = [];
+            const records: string[] = [];
+            let calls = 0;
+            try {
+                const orchestrator = createChatOrchestrator({
+                    generationRuntime: {
+                        kind: 'synthetic',
+                        generate: async (request) => {
+                            inputs.push(
+                                request.messages
+                                    .map((message) => message.content)
+                                    .join('\n')
+                            );
+                            return {
+                                model: request.model,
+                                text:
+                                    [
+                                        JSON.stringify(answerPlan()),
+                                        'The reviewed answer.',
+                                        JSON.stringify({
+                                            reviewDecision: 'finalize',
+                                            reviewReason:
+                                                'Sufficient evidence.',
+                                        }),
+                                    ][calls++] ?? '',
+                            };
+                        },
+                    },
+                    storeTrace: async (
+                        metadata,
+                        candidates,
+                        publication,
+                        debug
+                    ) => {
+                        records.push(JSON.stringify(metadata));
+                        assert.equal(candidates, undefined);
+                        assert.equal(publication, undefined);
+                        assert.equal(debug, undefined);
+                    },
+                    buildResponseMetadata,
+                    defaultModel: 'gpt-5-mini',
+                    recordUsage: () => undefined,
+                });
+                const result = await orchestrator.runRealtimeConversation(
+                    snapshot(),
+                    {
+                        signal: new AbortController().signal,
+                        onRunStarted: () => undefined,
+                        voiceMode: mode,
+                        persona,
+                    }
+                );
+                assert.equal(result.finalResponse?.disposition, 'approved');
+                if (id === 'operator')
+                    assert.match(inputs[1], /PRIVATE_OPERATOR_BEHAVIOR/);
+                if (id !== 'footnote')
+                    assert.match(inputs[1], new RegExp(`Profile ID: ${id}`));
+                const strength =
+                    id === 'operator'
+                        ? 'subtle'
+                        : id === 'winter'
+                          ? 'strong'
+                          : 'balanced';
+                assert.match(
+                    inputs[1],
+                    new RegExp(`Persona expression strength: ${strength}`)
+                );
+                assert.match(
+                    inputs[2],
+                    new RegExp(`Persona expression strength: ${strength}`)
+                );
+                assert.ok(records.length);
+                assert.doesNotMatch(
+                    records.join('\n'),
+                    /PRIVATE_OPERATOR_BEHAVIOR|Private operator name|VOICE_SECRET/
+                );
+            } finally {
+                runtimeConfig.chatWorkflow.modeId = previousMode;
+                runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+                Object.assign(runtimeConfig.profile, previousProfile);
+                runtimeConfig.profile.personaExpressionStrength =
+                    previousProfile.personaExpressionStrength;
+            }
+        });
+    }
+}
 
 for (const provider of ['openrouter', 'openai'] as const) {
     test(`the configured ${provider} route plans, generates and assesses Voice with metadata-only SQLite receipts`, async (t) => {
