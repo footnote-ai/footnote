@@ -128,6 +128,14 @@ export const parseHostnameListEnv = (
 /**
  * Parses positive integer env values used for limits, ports, and timeouts.
  */
+const parsePositiveInteger = (value: string): number | undefined => {
+    const trimmedValue = value.trim();
+    const parsed = /^[+-]?\d+$/.test(trimmedValue)
+        ? Number(trimmedValue)
+        : Number.NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+};
+
 export const parsePositiveIntEnv = (
     value: string | undefined,
     fallback: number,
@@ -138,11 +146,8 @@ export const parsePositiveIntEnv = (
         return fallback;
     }
 
-    const trimmedValue = value.trim();
-    const parsed = /^[+-]?\d+$/.test(trimmedValue)
-        ? Number(trimmedValue)
-        : Number.NaN;
-    if (Number.isFinite(parsed) && parsed > 0) {
+    const parsed = parsePositiveInteger(value);
+    if (parsed !== undefined) {
         return parsed;
     }
 
@@ -163,10 +168,8 @@ export const parsePositiveIntOrAutoEnv = (
     const trimmedValue = value.trim();
     if (trimmedValue === 'auto') return 'auto';
 
-    const parsed = /^[+-]?\d+$/.test(trimmedValue)
-        ? Number(trimmedValue)
-        : Number.NaN;
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    const parsed = parsePositiveInteger(value);
+    if (parsed !== undefined) return parsed;
 
     warn(
         `Ignoring invalid positive integer or "auto" for ${key}: "${value}". Using default (${fallback}).`
