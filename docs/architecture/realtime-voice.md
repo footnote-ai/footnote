@@ -254,25 +254,34 @@ precede configured profile/deployment defaults and then catalog defaults
 request-override precedence. Speech model, voice and delivery remain
 separate settings. Persona cannot alter TRACE, assessment or execution authority.
 
-GPT-Live startup currently receives the pinned display name, generic listening
-and delegation instructions, and acoustic delivery guidance. It does **not** yet
-receive the resolved behavioral overlay or expression guidance. Startup parity
-and listening evaluations are subsequent slices of #974; independently spoken
-or paraphrased Live output is not Workflow-approved speech.
+GPT-Live startup uses the call-pinned persona resolution for its behavioral
+overlay and expression guidance, alongside the realtime shared prompt layers.
+Its Live-specific listening, interruption, delegation, and speech-presentation
+instructions remain at the handler boundary. The acoustic voice and delivery
+selection remains separate from behavioral identity. Personas affect style;
+they cannot override evidence, assessment, permissions, refusals, TRACE, safety,
+or Workflow decisions. Independently generated Live speech and paraphrased
+commentary are not exact reviewed output and do not acquire Workflow approval.
+Handler tests verify deterministic startup-payload wiring; provider-backed
+listening evaluations have not established conversational fidelity.
 
-### Legacy realtime composer
+### Realtime prompt composition
 
 [realtimePromptComposer.ts](../../packages/backend/src/services/prompts/realtimePromptComposer.ts)
-is not used by the current Standard or GPT-Live handler. It builds legacy
-Realtime instructions using:
+is used by the GPT-Live handler with the resolved call persona. It composes:
 
 - the shared conversational system layer
 - the realtime voice surface layer
 - one active persona layer (profile overlay when present, otherwise shared Footnote persona plus the realtime persona supplement)
+- expression guidance from the same call-pinned resolution used by Workflow
 - the current participant roster
 - optional recent transcript summary
 
-Realtime reuses the shared prompt-layer renderer and profile-overlay formatter, but it does not use normal chat's full request context, Context Steps, or model-input assembly. Its active profile is the backend's configured bot profile for the session.
+The handler appends Live-specific instructions and the separate acoustic
+delivery guidance after the shared composition. Realtime does not use normal
+chat's full request context, Context Steps, or model-input assembly. Standard
+Voice continues to use the resolved persona only through the existing Workflow
+generation, assessment, and presentation paths.
 
 ## 6. Provider Runtime Adapter
 

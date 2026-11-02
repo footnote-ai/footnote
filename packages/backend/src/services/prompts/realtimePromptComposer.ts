@@ -8,7 +8,7 @@
 import type { InternalVoiceSessionContext } from '@footnote/contracts/voice';
 import { renderConversationPromptLayers } from './conversationPromptLayers.js';
 import { buildProfileOverlaySystemMessage } from './profilePromptOverlay.js';
-import { runtimeConfig } from '../../config.js';
+import type { ResolvedVoicePersona } from '../chatProfileOverlay.js';
 
 const WHITESPACE_REGEX = /\s+/g;
 const MAX_PARTICIPANT_LABEL_LENGTH = 128;
@@ -51,9 +51,9 @@ const sanitizePromptLine = (
     return `${normalized.slice(0, trimLength)}...`;
 };
 
-const buildRealtimePersonaLayer = (): string => {
+const buildRealtimePersonaLayer = (persona: ResolvedVoicePersona): string => {
     const overlayMessage = buildProfileOverlaySystemMessage(
-        runtimeConfig.profile,
+        persona.profile,
         'realtime'
     );
 
@@ -62,7 +62,7 @@ const buildRealtimePersonaLayer = (): string => {
     }
 
     return renderConversationPromptLayers('discord-realtime', {
-        botProfileDisplayName: runtimeConfig.profile.displayName,
+        botProfileDisplayName: persona.profile.displayName,
     }).personaPrompt;
 };
 
@@ -107,14 +107,15 @@ const formatTranscriptBlock = (transcripts?: string[]): string => {
  * provider session.
  */
 export const buildRealtimeInstructions = (
-    context: InternalVoiceSessionContext
+    context: InternalVoiceSessionContext,
+    persona: ResolvedVoicePersona
 ): string => {
     const promptLayers = renderConversationPromptLayers('discord-realtime', {
-        botProfileDisplayName: runtimeConfig.profile.displayName,
+        botProfileDisplayName: persona.profile.displayName,
     });
-    const personaLayer = buildRealtimePersonaLayer();
+    const personaLayer = buildRealtimePersonaLayer(persona);
     const roster = formatParticipantRoster(context.participants);
     const transcriptBlock = formatTranscriptBlock(context.transcripts);
 
-    return `${promptLayers.systemPrompt.trimEnd()}\n\n${personaLayer}\n\nParticipants currently in the voice channel:\n${roster}${transcriptBlock}`.trim();
+    return `${promptLayers.systemPrompt.trimEnd()}\n\n${personaLayer}\n\n${persona.expression.guidance}\n\nParticipants currently in the voice channel:\n${roster}${transcriptBlock}`.trim();
 };

@@ -1022,6 +1022,14 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
         assert.equal(ready.mode, 'live');
         assert.equal(startRequest?.voice, 'marin');
         assert.match(startRequest?.instructions ?? '', /delegate/i);
+        assert.match(
+            startRequest?.instructions ?? '',
+            /The active persona is Winter/u
+        );
+        assert.match(
+            startRequest?.instructions ?? '',
+            /Persona expression strength: strong\./u
+        );
 
         ws.send(
             JSON.stringify({
@@ -1078,6 +1086,212 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
     } finally {
         if (ws) await closeWebSocket(ws);
         await harness.close();
+    }
+});
+
+test('Live startup payload and delegated Workflow share the call-pinned persona', async () => {
+    const previousBots = runtimeConfig.settings.discordBots;
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'live-persona-'));
+    const overlayPath = path.join(root, 'operator.md');
+    await fs.writeFile(overlayPath, 'Private operator behavior for this bot.');
+    runtimeConfig.settings.discordBots = [
+        {
+            id: 'operator-node',
+            profile: {
+                id: 'custom',
+                displayName: 'Operator',
+                overlayPath,
+                personaExpressionStrength: 'balanced',
+            },
+        },
+    ];
+    const cases = [
+        { id: 'footnote', displayName: 'Footnote', strength: 'balanced' },
+        {
+            id: 'danny',
+            displayName: 'Danny',
+            strength: 'strong',
+            override: 'strong' as const,
+            overlay: 'The active persona is Danny',
+        },
+        {
+            id: 'myuri',
+            displayName: 'Myuri',
+            strength: 'balanced',
+            overlay: 'The active persona is Myuri',
+        },
+        {
+            id: 'winter',
+            displayName: 'Winter',
+            strength: 'subtle',
+            override: 'subtle' as const,
+            overlay: 'The active persona is Winter',
+        },
+        {
+            id: 'custom',
+            displayName: 'Operator',
+            strength: 'subtle',
+            override: 'subtle' as const,
+            overlay: 'Private operator behavior for this bot.',
+            discordNodeId: 'operator-node',
+        },
+    ];
+
+    try {
+        for (const entry of cases) {
+            const liveSession = new StubOpenAiLiveVoiceSession();
+            let startRequest:
+                { instructions: string; voice: string } | undefined;
+            let delegatedPersona: Parameters<
+                RealtimeWorkflowRunner['runRealtimeConversation']
+            >[1]['persona'];
+            const harness = await createRealtimeHandlerHarness({
+                openAiLiveVoiceSessionFactory: async (request) => {
+                    startRequest = request;
+                    return liveSession;
+                },
+                workflowRunner: {
+                    async runRealtimeConversation(_snapshot, context) {
+                        delegatedPersona = context.persona;
+                        context.onRunStarted('persona-run');
+                        return {
+                            responseId: 'persona-response',
+                            runId: 'persona-run',
+                            status: 'completed',
+                            finalResponse: {
+                                disposition: 'approved',
+                                responseId: 'persona-response',
+                                runId: 'persona-run',
+                                candidateId: 'candidate',
+                                generationStepId: 'answer',
+                                assessmentStepId: 'review',
+                                text: 'Reviewed answer.',
+                            },
+                        };
+                    },
+                },
+            });
+            let ws: WebSocket | undefined;
+            try {
+                ws = await harness.connect();
+                ws.send(
+                    JSON.stringify({
+                        type: 'session.start',
+                        mode: 'live',
+                        initiatorId: 'user-1',
+                        botPersonaId: entry.id,
+                        ...(entry.discordNodeId
+                            ? { discordNodeId: entry.discordNodeId }
+                            : {}),
+                        ...(entry.override
+                            ? {
+                                  personaExpressionProfileStrength:
+                                      entry.override,
+                              }
+                            : {}),
+                        context: {
+                            participants: [
+                                {
+                                    id: 'user-1',
+                                    displayName: 'Alice',
+                                    isBot: false,
+                                },
+                            ],
+                        },
+                    })
+                );
+                const ready = await waitForJsonMessage(ws);
+                assert.equal(ready.type, 'session.ready', entry.id);
+                assert.equal(startRequest?.voice, 'marin', entry.id);
+                assert.match(
+                    startRequest?.instructions ?? '',
+                    entry.id === 'custom'
+                        ? new RegExp(
+                              `Profile Display Name: ${entry.displayName}`,
+                              'u'
+                          )
+                        : entry.overlay
+                          ? new RegExp(
+                                `The active persona is ${entry.displayName}`,
+                                'u'
+                            )
+                          : new RegExp(`You are ${entry.displayName}`, 'u'),
+                    entry.id
+                );
+                assert.match(
+                    startRequest?.instructions ?? '',
+                    new RegExp(
+                        `Persona expression strength: ${entry.strength}\\.`,
+                        'u'
+                    ),
+                    entry.id
+                );
+                if (entry.overlay)
+                    assert.ok(
+                        startRequest?.instructions.includes(entry.overlay),
+                        entry.id
+                    );
+                assert.match(
+                    startRequest?.instructions ?? '',
+                    /let the caller interrupt/u
+                );
+                assert.match(
+                    startRequest?.instructions ?? '',
+                    /delegate requests/u
+                );
+                assert.match(
+                    startRequest?.instructions ?? '',
+                    /not exact reviewed output/u
+                );
+
+                ws.send(
+                    JSON.stringify({
+                        type: 'input_audio.append',
+                        audioBase64: Buffer.from([0, 0]).toString('base64'),
+                        speakerLabel: 'Alice',
+                        speakerId: 'user-1',
+                    })
+                );
+                ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+                await new Promise((resolve) => setTimeout(resolve, 600));
+                liveSession.emit({
+                    type: 'session.input_transcript.delta',
+                    event_id: 'persona-transcript',
+                    delta: 'Check this request.',
+                    start_ms: 0,
+                    end_ms: 500,
+                });
+                liveSession.emit({
+                    type: 'session.delegation.created',
+                    event_id: 'persona-delegation-event',
+                    offset_ms: 600,
+                    delegation: {
+                        id: 'persona-delegation',
+                        target: 'client',
+                        type: 'delegation',
+                    },
+                });
+                await new Promise((resolve) => setTimeout(resolve, 600));
+                assert.equal(delegatedPersona?.profile.id, entry.id);
+                assert.equal(
+                    delegatedPersona?.expression.strength,
+                    entry.strength
+                );
+                if (entry.overlay)
+                    assert.ok(
+                        delegatedPersona?.profile.promptOverlay.text?.includes(
+                            entry.overlay
+                        ),
+                        entry.id
+                    );
+            } finally {
+                if (ws) await closeWebSocket(ws);
+                await harness.close();
+            }
+        }
+    } finally {
+        runtimeConfig.settings.discordBots = previousBots;
+        await fs.rm(root, { recursive: true, force: true });
     }
 });
 
