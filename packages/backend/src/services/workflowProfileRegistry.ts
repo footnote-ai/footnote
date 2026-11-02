@@ -155,7 +155,7 @@ const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
         maxWorkflowSteps: 7,
         maxPlanCycles: 1,
         maxReviewCycles: 1,
-        maxDeliberationCalls: 3,
+        maxDeliberationCalls: 4,
         maxSearchRecoveryCycles: 1,
     },
     grounded: {

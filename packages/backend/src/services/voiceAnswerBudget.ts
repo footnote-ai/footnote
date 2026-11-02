@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - The delivery ceiling must not rewrite reviewed answer text.
  */
 export type VoiceMode = 'standard' | 'live';
+export type VoiceAnswerTokenLimitSetting = number | 'auto';
 export type VoiceAnswerDeliveryPolicy = {
     mode: VoiceMode;
     maxAnswerTokens: number;
@@ -45,26 +46,28 @@ export const estimateVoiceAnswerTokens = (text: string): number => {
 
 export const resolveVoiceAnswerTokenLimit = (
     mode: VoiceMode,
-    configuredLimit: number
-): number =>
-    Math.min(
-        configuredLimit,
+    configuredLimit: VoiceAnswerTokenLimitSetting
+): number => {
+    const safeCapacity =
         mode === 'live'
             ? LIVE_COMMENTARY_LIMIT_TOKENS
-            : STANDARD_TTS_LIMIT_TOKENS
-    );
+            : STANDARD_TTS_LIMIT_TOKENS;
+    return configuredLimit === 'auto'
+        ? safeCapacity
+        : Math.min(configuredLimit, safeCapacity);
+};
 
 export const fitsVoiceAnswerDelivery = (
     text: string,
     mode: VoiceMode,
-    configuredLimit: number
+    configuredLimit: VoiceAnswerTokenLimitSetting
 ): boolean => measureVoiceAnswerDelivery(text, mode, configuredLimit).fits;
 
 /** Shares one measured result across admission, prompts, and content-free receipts. */
 export const measureVoiceAnswerDelivery = (
     text: string,
     mode: VoiceMode,
-    configuredLimit: number
+    configuredLimit: VoiceAnswerTokenLimitSetting
 ): VoiceAnswerMeasurement => {
     const estimatedTokens = estimateVoiceAnswerTokens(text);
     const tokenLimit = resolveVoiceAnswerTokenLimit(mode, configuredLimit);

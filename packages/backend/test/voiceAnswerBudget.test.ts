@@ -41,10 +41,28 @@ test('keeps realistic Unicode answers within a UTF-8 upper-bound estimate', () =
 });
 
 test('caps configured Voice answers below each provider limit', () => {
+    assert.equal(resolveVoiceAnswerTokenLimit('live', 'auto'), 400);
+    assert.equal(resolveVoiceAnswerTokenLimit('standard', 'auto'), 1_600);
     assert.equal(resolveVoiceAnswerTokenLimit('live', 1_000), 400);
     assert.equal(resolveVoiceAnswerTokenLimit('standard', 1_000), 1_000);
     assert.equal(resolveVoiceAnswerTokenLimit('standard', 2_000), 1_600);
     assert.equal(resolveVoiceAnswerTokenLimit('live', 100), 100);
+});
+
+test('automatic and explicit ceilings retain multilingual and character safeguards', () => {
+    assert.equal(
+        measureVoiceAnswerDelivery('あ'.repeat(134), 'live', 'auto').tokenLimit,
+        400
+    );
+    assert.equal(
+        measureVoiceAnswerDelivery('a'.repeat(3_687), 'standard', 'auto').fits,
+        false
+    );
+    assert.equal(
+        measureVoiceAnswerDelivery('Short, qualified answer.', 'standard', 12)
+            .tokenLimit,
+        12
+    );
 });
 
 test('uses one configured deliverable ceiling for Standard and Live', () => {

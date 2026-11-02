@@ -8,7 +8,7 @@
 import { envDefaultValues, envSpecByKey } from '@footnote/config-spec';
 import {
     parseOptionalTrimmedString,
-    parsePositiveIntEnv,
+    parsePositiveIntOrAutoEnv,
     parseStringUnionEnv,
 } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
@@ -30,7 +30,7 @@ export const buildVoiceSection = (
         VOICE_MODES,
         warn
     ),
-    maxAnswerTokens: parsePositiveIntEnv(
+    maxAnswerTokens: parsePositiveIntOrAutoEnv(
         env.VOICE_MAX_ANSWER_TOKENS,
         envDefaultValues.VOICE_MAX_ANSWER_TOKENS,
         'VOICE_MAX_ANSWER_TOKENS',

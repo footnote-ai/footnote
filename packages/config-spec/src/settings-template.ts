@@ -177,6 +177,8 @@ const normalizeEmptyDefault = (
         case 'integer':
         case 'number':
             return 0;
+        case 'integer_or_auto':
+            return 'auto';
         case 'csv':
             return [];
         case 'json':

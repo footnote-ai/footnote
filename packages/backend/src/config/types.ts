@@ -89,7 +89,7 @@ export type RuntimeConfig = {
     };
     voice: {
         defaultMode: 'standard' | 'live';
-        maxAnswerTokens: number;
+        maxAnswerTokens: number | 'auto';
         developerUserId: string | null;
     };
     imageDescription: {

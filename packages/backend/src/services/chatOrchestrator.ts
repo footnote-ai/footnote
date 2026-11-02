@@ -2171,15 +2171,18 @@ export const createChatOrchestrator = ({
                 snapshot.context.messages[turnIndex]?.content;
             if (latestUserInput === undefined)
                 throw new Error('Realtime initiating turn is unavailable.');
+            const voiceMode = context.voiceMode ?? 'standard';
             const voice: RealtimeWorkflowScope = {
                 sessionCorrelationId: snapshot.sessionCorrelationId,
                 turnId: snapshot.intent.turnId,
                 onRunStarted: context.onRunStarted,
                 deliveryPolicy: {
-                    mode: context.voiceMode ?? 'standard',
-                    maxAnswerTokens:
+                    mode: voiceMode,
+                    maxAnswerTokens: resolveVoiceAnswerTokenLimit(
+                        voiceMode,
                         context.maxAnswerTokens ??
-                        runtimeConfig.voice.maxAnswerTokens,
+                            runtimeConfig.voice.maxAnswerTokens
+                    ),
                 } satisfies VoiceAnswerDeliveryPolicy,
             };
             return withRealtimeWorkflowScope(voice, async () => {
@@ -2201,10 +2204,8 @@ export const createChatOrchestrator = ({
                         signal: context.signal,
                         realtimeContext: snapshot.context,
                         persona,
-                        voiceAnswerTokenLimit: resolveVoiceAnswerTokenLimit(
-                            voice.deliveryPolicy.mode,
-                            voice.deliveryPolicy.maxAnswerTokens
-                        ),
+                        voiceAnswerTokenLimit:
+                            voice.deliveryPolicy.maxAnswerTokens,
                     }
                 );
                 if (voice.recorded === undefined)

@@ -127,7 +127,7 @@ test('resolveWorkflowRuntimeConfig applies reviewed workflow defaults and review
     );
     assert.equal(
         balancedRuntimeConfig.workflowExecutionLimits.maxDeliberationCalls,
-        3
+        4
     );
     assert.equal(balancedRuntimeConfig.maxSearchRecoveryCycles, 1);
     assert.equal(
@@ -180,7 +180,7 @@ test('resolveWorkflowRuntimeConfig applies a bounded deployment token override w
     assert.equal(config.modeId, 'balanced');
     assert.equal(config.workflowExecutionLimits.maxTokensTotal, 512_000);
     assert.equal(config.workflowExecutionLimits.maxWorkflowSteps, 4);
-    assert.equal(config.workflowExecutionLimits.maxDeliberationCalls, 3);
+    assert.equal(config.workflowExecutionLimits.maxDeliberationCalls, 4);
 });
 
 test('resolveWorkflowRuntimeConfig carries bounded deployment allowances into the existing runtime contract', () => {
@@ -481,7 +481,7 @@ test('resolveWorkflowRuntimeConfig gives Balanced one recovery within the contra
     assert.equal(balanced.workflowExecutionLimits.maxWorkflowSteps, 7);
     assert.equal(balanced.workflowExecutionLimits.maxToolCalls, 2);
     assert.equal(balanced.workflowExecutionLimits.maxReviewCycles, 2);
-    assert.equal(balanced.workflowExecutionLimits.maxDeliberationCalls, 3);
+    assert.equal(balanced.workflowExecutionLimits.maxDeliberationCalls, 4);
     assert.equal(balanced.maxSearchRecoveryCycles, 1);
     assert.equal(balanced.modeDecision.behavior.maxReviewCycles, 1);
 });

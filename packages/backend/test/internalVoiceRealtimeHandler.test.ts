@@ -176,7 +176,7 @@ const createRealtimeHandlerHarness = async (
         workflowRunner?: RealtimeWorkflowRunner | null;
         developerUserId?: string | null;
         defaultMode?: 'standard' | 'live';
-        maxAnswerTokens?: number;
+        maxAnswerTokens?: number | 'auto';
         openAiLiveVoiceSessionFactory?: OpenAiLiveVoiceSessionFactory | null;
     } = {}
 ): Promise<RealtimeHandlerHarness> => {
@@ -223,7 +223,7 @@ const createRealtimeHandlerHarness = async (
         typeof createInternalVoiceRealtimeHandler
     >[0] = {
         defaultMode: overrides.defaultMode ?? 'live',
-        maxAnswerTokens: overrides.maxAnswerTokens ?? 160,
+        maxAnswerTokens: overrides.maxAnswerTokens ?? 'auto',
         openAiLiveVoiceSessionFactory: liveFactory
             ? async (request) => {
                   const created = await liveFactory(request);
@@ -751,7 +751,7 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
         workflowRunner: {
             async runRealtimeConversation(snapshot, context) {
                 assert.equal(context.voiceMode, 'standard');
-                assert.equal(context.maxAnswerTokens, 160);
+                assert.equal(context.maxAnswerTokens, 1_600);
                 assert.equal(context.persona?.profile.id, 'custom');
                 assert.equal(
                     context.persona?.profile.promptOverlay.text,
@@ -979,7 +979,7 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
         workflowRunner: {
             async runRealtimeConversation(snapshot, context) {
                 assert.equal(context.voiceMode, 'live');
-                assert.equal(context.maxAnswerTokens, 160);
+                assert.equal(context.maxAnswerTokens, 400);
                 assert.equal(context.persona?.profile.id, 'winter');
                 assert.match(
                     context.persona?.profile.promptOverlay.text ?? '',

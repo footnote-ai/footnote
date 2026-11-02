@@ -36,7 +36,10 @@ import type {
     OpenAiLiveVoiceSessionFactory,
 } from '../services/openAiLiveVoice.js';
 import { resolveSpeechSelection } from '../services/speechPresentation.js';
-import { fitsVoiceAnswerDelivery } from '../services/voiceAnswerBudget.js';
+import {
+    fitsVoiceAnswerDelivery,
+    resolveVoiceAnswerTokenLimit,
+} from '../services/voiceAnswerBudget.js';
 import { buildRealtimeInstructions } from '../services/prompts/realtimePromptComposer.js';
 import { logger } from '../utils/logger.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
@@ -66,7 +69,7 @@ let activeVoiceCall: symbol | undefined;
 
 type CreateInternalVoiceRealtimeHandlerOptions = {
     defaultMode?: 'standard' | 'live';
-    maxAnswerTokens: number;
+    maxAnswerTokens: number | 'auto';
     openAiLiveVoiceSessionFactory?: OpenAiLiveVoiceSessionFactory | null;
     openRouterVoiceService?: OpenRouterVoiceService | null;
     workflowRunner?: RealtimeWorkflowRunner | null;
@@ -146,6 +149,10 @@ export const createInternalVoiceRealtimeHandler = ({
     setTimer = setTimeout,
     clearTimer = clearTimeout,
 }: CreateInternalVoiceRealtimeHandlerOptions) => {
+    const deliveryTokenLimits = {
+        standard: resolveVoiceAnswerTokenLimit('standard', maxAnswerTokens),
+        live: resolveVoiceAnswerTokenLimit('live', maxAnswerTokens),
+    };
     const wss = new WebSocketServer({ noServer: true });
 
     wss.on('connection', (ws) => {
@@ -239,7 +246,8 @@ export const createInternalVoiceRealtimeHandler = ({
                                   {
                                       ...context,
                                       voiceMode: mode,
-                                      maxAnswerTokens,
+                                      maxAnswerTokens:
+                                          deliveryTokenLimits[mode],
                                       persona,
                                   }
                               );
@@ -259,7 +267,7 @@ export const createInternalVoiceRealtimeHandler = ({
                                   !fitsVoiceAnswerDelivery(
                                       answer.text,
                                       mode,
-                                      maxAnswerTokens
+                                      deliveryTokenLimits[mode]
                                   ));
                           if (!tooLong) return result;
                           if (!context.signal.aborted) reportAnswerTooLong();
@@ -314,7 +322,7 @@ export const createInternalVoiceRealtimeHandler = ({
                 !fitsVoiceAnswerDelivery(
                     delivery.text,
                     'standard',
-                    maxAnswerTokens
+                    deliveryTokenLimits.standard
                 )
             ) {
                 state.reportPlayback(delivery.deliveryId, 'failed');
@@ -590,7 +598,11 @@ export const createInternalVoiceRealtimeHandler = ({
             const delivery = state.startDelivery(request.deliveryId);
             if (!delivery) return;
             if (
-                !fitsVoiceAnswerDelivery(delivery.text, 'live', maxAnswerTokens)
+                !fitsVoiceAnswerDelivery(
+                    delivery.text,
+                    'live',
+                    deliveryTokenLimits.live
+                )
             ) {
                 state.reportPlayback(delivery.deliveryId, 'failed');
                 reportAnswerTooLong();

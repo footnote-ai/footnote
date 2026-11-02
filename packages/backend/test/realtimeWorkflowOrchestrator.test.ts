@@ -7,8 +7,10 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { performance } from 'node:perf_hooks';
 import {
     createVoltAgentRuntime,
+    GenerationRuntimeError,
     type GenerationRuntime,
 } from '@footnote/agent-runtime';
 import { createBoundedOllamaGenerationRuntime } from '../src/services/boundedOllamaRuntime.js';
@@ -478,60 +480,74 @@ test('only the selected, assessed final answer is returned for voice staging', a
     const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
     runtimeConfig.chatWorkflow.modeId = 'grounded';
     runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
-    let calls = 0;
-    let stored: ResponseMetadata | undefined;
-    const generationInputs: string[] = [];
     try {
-        const orchestrator = createChatOrchestrator({
-            generationRuntime: {
-                kind: 'synthetic',
-                generate: async (request) => {
-                    generationInputs.push(
-                        request.messages
-                            .map((message) => message.content)
-                            .join('\n')
-                    );
-                    return {
-                        model: request.model,
-                        text:
-                            [
-                                JSON.stringify(answerPlan()),
-                                'The reviewed answer.',
-                                JSON.stringify({
-                                    reviewDecision: 'finalize',
-                                    reviewReason: 'Sufficient evidence.',
-                                }),
-                            ][calls++] ?? '',
-                    };
+        for (const voiceMode of ['standard', 'live'] as const) {
+            let calls = 0;
+            let stored: ResponseMetadata | undefined;
+            const generationInputs: string[] = [];
+            const orchestrator = createChatOrchestrator({
+                generationRuntime: {
+                    kind: 'synthetic',
+                    generate: async (request) => {
+                        generationInputs.push(
+                            request.messages
+                                .map((message) => message.content)
+                                .join('\n')
+                        );
+                        return {
+                            model: request.model,
+                            text:
+                                [
+                                    JSON.stringify(answerPlan()),
+                                    'The reviewed answer.',
+                                    JSON.stringify({
+                                        reviewDecision: 'finalize',
+                                        reviewReason: 'Sufficient evidence.',
+                                    }),
+                                ][calls++] ?? '',
+                        };
+                    },
                 },
-            },
-            storeTrace: async (metadata, candidates, publication, debug) => {
-                stored = metadata;
-                assert.equal(candidates, undefined);
-                assert.equal(publication, undefined);
-                assert.equal(debug, undefined);
-            },
-            buildResponseMetadata,
-            defaultModel: 'gpt-5-mini',
-            recordUsage: () => undefined,
-        });
-        const result = await orchestrator.runRealtimeConversation(snapshot(), {
-            signal: new AbortController().signal,
-            onRunStarted: () => undefined,
-        });
-        assert.ok(result.finalResponse?.disposition === 'approved');
-        assert.equal(result.finalResponse?.text, 'The reviewed answer.');
-        assert.equal(result.finalResponse?.responseId, stored?.responseId);
-        assert.doesNotMatch(JSON.stringify(stored), /The reviewed answer/);
-        assert.equal(calls, 3);
-        assert.match(
-            generationInputs.join('\n'),
-            /maximum of approximately 160 estimated tokens/
-        );
-        assert.match(
-            generationInputs.join('\n'),
-            /without automatically raising Tightness or forcing brevity/
-        );
+                storeTrace: async (
+                    metadata,
+                    candidates,
+                    publication,
+                    debug
+                ) => {
+                    stored = metadata;
+                    assert.equal(candidates, undefined);
+                    assert.equal(publication, undefined);
+                    assert.equal(debug, undefined);
+                },
+                buildResponseMetadata,
+                defaultModel: 'gpt-5-mini',
+                recordUsage: () => undefined,
+            });
+            const result = await orchestrator.runRealtimeConversation(
+                snapshot(),
+                {
+                    signal: new AbortController().signal,
+                    onRunStarted: () => undefined,
+                    voiceMode,
+                }
+            );
+            assert.ok(result.finalResponse?.disposition === 'approved');
+            assert.equal(result.finalResponse?.text, 'The reviewed answer.');
+            assert.equal(result.finalResponse?.responseId, stored?.responseId);
+            assert.doesNotMatch(JSON.stringify(stored), /The reviewed answer/);
+            assert.equal(calls, 3);
+            assert.match(
+                generationInputs.join('\n'),
+                new RegExp(
+                    `maximum of approximately ${voiceMode === 'live' ? 400 : 1_600} estimated tokens`,
+                    'u'
+                )
+            );
+            assert.match(
+                generationInputs.join('\n'),
+                /without automatically raising Tightness or forcing brevity/
+            );
+        }
     } finally {
         runtimeConfig.chatWorkflow.modeId = previousMode;
         runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
@@ -1191,6 +1207,464 @@ test('caller cancellation during condensation or reassessment cannot approve a l
     } finally {
         runtimeConfig.chatWorkflow.modeId = previousMode;
         runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+    }
+});
+
+test('default Balanced and Grounded Voice budgets can complete one condensation and reassessment', async () => {
+    const previous = {
+        modeId: runtimeConfig.chatWorkflow.modeId,
+        maxWorkflowStepsOverride:
+            runtimeConfig.chatWorkflow.maxWorkflowStepsOverride,
+        maxToolCallsOverride: runtimeConfig.chatWorkflow.maxToolCallsOverride,
+        maxDeliberationCallsOverride:
+            runtimeConfig.chatWorkflow.maxDeliberationCallsOverride,
+        maxSearchRecoveryCycles:
+            runtimeConfig.chatWorkflow.maxSearchRecoveryCycles,
+        maxTokensTotalOverride:
+            runtimeConfig.chatWorkflow.maxTokensTotalOverride,
+        maxDurationMsOverride: runtimeConfig.chatWorkflow.maxDurationMsOverride,
+    };
+    const observations: Array<Record<string, unknown>> = [];
+    const originalAnswer = '答'.repeat(600);
+
+    try {
+        for (const modeId of ['balanced', 'grounded'] as const) {
+            runtimeConfig.chatWorkflow.modeId = modeId;
+            runtimeConfig.chatWorkflow.maxWorkflowStepsOverride = undefined;
+            runtimeConfig.chatWorkflow.maxToolCallsOverride = undefined;
+            runtimeConfig.chatWorkflow.maxDeliberationCallsOverride = undefined;
+            runtimeConfig.chatWorkflow.maxSearchRecoveryCycles = undefined;
+            runtimeConfig.chatWorkflow.maxTokensTotalOverride = undefined;
+            runtimeConfig.chatWorkflow.maxDurationMsOverride = undefined;
+
+            for (const voiceMode of ['standard', 'live'] as const) {
+                let calls = 0;
+                let stored: ResponseMetadata | undefined;
+                const outputs = [
+                    JSON.stringify(answerPlan()),
+                    originalAnswer,
+                    JSON.stringify({
+                        reviewDecision: 'finalize',
+                        reviewReason: 'The synthetic answer is complete.',
+                    }),
+                    '証拠は限られています。',
+                    JSON.stringify({
+                        reviewDecision: 'finalize',
+                        reviewReason: 'The qualification remains clear.',
+                    }),
+                ];
+                const orchestrator = createChatOrchestrator({
+                    generationRuntime: {
+                        kind: 'synthetic',
+                        generate: async (request) => {
+                            const call = calls++;
+                            return {
+                                model: request.model,
+                                text: outputs[call] ?? '',
+                                usage: {
+                                    promptTokens: 20,
+                                    completionTokens: 10,
+                                    totalTokens: 30,
+                                },
+                            };
+                        },
+                    },
+                    storeTrace: async (metadata) => {
+                        stored = metadata;
+                    },
+                    buildResponseMetadata,
+                    defaultModel: 'gpt-5-mini',
+                    recordUsage: () => undefined,
+                });
+
+                const startedAt = Date.now();
+                const result = await orchestrator.runRealtimeConversation(
+                    snapshot(),
+                    {
+                        signal: new AbortController().signal,
+                        onRunStarted: () => undefined,
+                        voiceMode,
+                    }
+                );
+                const workflow = stored?.workflow;
+                observations.push({
+                    modeId,
+                    voiceMode,
+                    disposition: result.finalResponse?.disposition,
+                    ...(result.finalResponse?.disposition ===
+                    'workflow_limit_reached'
+                        ? { limitReason: result.finalResponse.limitReason }
+                        : {}),
+                    terminationReason: workflow?.terminationReason,
+                    stepCount: workflow?.stepCount,
+                    maxSteps: workflow?.maxSteps,
+                    effectiveLimits: workflow?.effectiveLimits,
+                    limitStop: workflow?.limitStop,
+                    calls,
+                    providerReportedTokens: workflow?.steps
+                        .flatMap((step) => step.attempts ?? [])
+                        .reduce(
+                            (total, attempt) =>
+                                total + (attempt.usage?.totalTokens ?? 0),
+                            0
+                        ),
+                    elapsedMs: Date.now() - startedAt,
+                });
+            }
+        }
+
+        assert.ok(
+            observations.every(
+                (observation) => observation.disposition === 'approved'
+            ),
+            JSON.stringify(observations)
+        );
+        assert.ok(
+            observations.every((observation) => observation.calls === 5),
+            JSON.stringify(observations)
+        );
+    } finally {
+        Object.assign(runtimeConfig.chatWorkflow, previous);
+    }
+});
+
+test('Balanced Voice recovery reserves its assessment after a planner route retry', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    const originalProfiles = runtimeConfig.modelProfiles;
+    const mutable = runtimeConfig as unknown as {
+        modelProfiles: typeof originalProfiles;
+    };
+    const baseProfile = originalProfiles.catalog.find(
+        (profile) => profile.id === 'openai-text-fast'
+    );
+    assert.ok(baseProfile);
+    const profiles = ['voice-retry-primary', 'voice-retry-backup'].map(
+        (id) => ({
+            ...baseProfile,
+            id,
+            enabled: true,
+            providerRouting: undefined,
+            promptCaching: undefined,
+        })
+    );
+    mutable.modelProfiles = {
+        ...originalProfiles,
+        plannerProfileId: profiles[0]!.id,
+        catalog: [...originalProfiles.catalog, ...profiles],
+        stepRoutingChains: Object.fromEntries(
+            Object.entries(originalProfiles.stepRoutingChains).map(
+                ([mode, chains]) => [
+                    mode,
+                    { ...chains, planner: profiles.map(({ id }) => id) },
+                ]
+            )
+        ) as typeof originalProfiles.stepRoutingChains,
+    };
+    runtimeConfig.chatWorkflow.modeId = 'balanced';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    let calls = 0;
+    let stored: ResponseMetadata | undefined;
+    try {
+        const outputs = [
+            '',
+            JSON.stringify(answerPlan()),
+            'This synthetic original answer exceeds the configured Voice delivery ceiling by a wide margin.',
+            JSON.stringify({
+                reviewDecision: 'finalize',
+                reviewReason: 'The original is supported.',
+            }),
+            '未確認。',
+            JSON.stringify({
+                reviewDecision: 'finalize',
+                reviewReason: 'The qualification remains clear.',
+            }),
+        ];
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: {
+                kind: 'synthetic',
+                generate: async (request) => {
+                    const call = calls++;
+                    if (call === 0) {
+                        throw new GenerationRuntimeError(
+                            'Synthetic transient planner failure.',
+                            { classification: 'transient' },
+                            {
+                                model: request.model,
+                                usage: {
+                                    promptTokens: 20,
+                                    completionTokens: 10,
+                                    totalTokens: 30,
+                                },
+                            }
+                        );
+                    }
+                    return {
+                        model: request.model,
+                        text: outputs[call] ?? '',
+                        usage: {
+                            promptTokens: 20,
+                            completionTokens: 10,
+                            totalTokens: 30,
+                        },
+                    };
+                },
+            },
+            storeTrace: async (metadata) => {
+                stored = metadata;
+            },
+            buildResponseMetadata,
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+        });
+        const result = await orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: () => undefined,
+            voiceMode: 'live',
+            maxAnswerTokens: 12,
+        });
+        assert.equal(result.finalResponse?.disposition, 'approved');
+        if (result.finalResponse?.disposition !== 'approved') return;
+        assert.equal(result.finalResponse.text, '未確認。');
+        assert.equal(calls, 6);
+
+        const workflow = stored?.workflow;
+        const planner = workflow?.steps.find(
+            (step) => step.stepKind === 'plan'
+        );
+        const routingAttempts =
+            planner?.attempts?.flatMap(
+                (attempt) => attempt.routingAttempts ?? []
+            ) ?? [];
+        assert.deepEqual(
+            routingAttempts.map(({ status }) => status),
+            ['failed_transient_advanced', 'executed']
+        );
+        assert.equal(
+            workflow?.steps.filter((step) => step.stepKind === 'assess').length,
+            2
+        );
+        assert.ok(workflow?.steps.some((step) => step.stepKind === 'condense'));
+        assert.equal(
+            workflow?.effectiveLimits?.find(
+                ({ key }) => key === 'maxDeliberationCalls'
+            )?.value,
+            4
+        );
+        assert.equal(
+            workflow?.steps.reduce(
+                (total, step) => total + (step.usage?.totalTokens ?? 0),
+                0
+            ),
+            180
+        );
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+        mutable.modelProfiles = originalProfiles;
+    }
+});
+
+test('six-case synthetic Voice condensation evaluation records recovery metrics', async () => {
+    type FixtureCase = {
+        id: string;
+        deliveryCeilingTokens: number;
+        question: string;
+        conversationContext: string;
+        retrievalEvidence: Array<{ source: string; content: string }>;
+        originalAnswer: string;
+        assessmentConcerns: string[];
+        preserve: string[];
+        trace: {
+            tightness: number;
+            rationale: number;
+            attribution: number;
+            caution: number;
+            extent: number;
+        };
+    };
+    const fixture = JSON.parse(
+        await fs.readFile(
+            new URL(
+                './fixtures/voiceCondensationEvaluation.json',
+                import.meta.url
+            ),
+            'utf8'
+        )
+    ) as { cases: FixtureCase[] };
+    const previous = {
+        modeId: runtimeConfig.chatWorkflow.modeId,
+        reviewLoopEnabled: runtimeConfig.chatWorkflow.reviewLoopEnabled,
+        maxWorkflowStepsOverride:
+            runtimeConfig.chatWorkflow.maxWorkflowStepsOverride,
+        maxToolCallsOverride: runtimeConfig.chatWorkflow.maxToolCallsOverride,
+        maxDeliberationCallsOverride:
+            runtimeConfig.chatWorkflow.maxDeliberationCallsOverride,
+        maxSearchRecoveryCycles:
+            runtimeConfig.chatWorkflow.maxSearchRecoveryCycles,
+        maxTokensTotalOverride:
+            runtimeConfig.chatWorkflow.maxTokensTotalOverride,
+        maxDurationMsOverride: runtimeConfig.chatWorkflow.maxDurationMsOverride,
+    };
+    const observations: Array<Record<string, unknown>> = [];
+    try {
+        runtimeConfig.chatWorkflow.modeId = 'balanced';
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+        runtimeConfig.chatWorkflow.maxWorkflowStepsOverride = undefined;
+        runtimeConfig.chatWorkflow.maxToolCallsOverride = undefined;
+        runtimeConfig.chatWorkflow.maxDeliberationCallsOverride = undefined;
+        runtimeConfig.chatWorkflow.maxSearchRecoveryCycles = undefined;
+        runtimeConfig.chatWorkflow.maxTokensTotalOverride = undefined;
+        runtimeConfig.chatWorkflow.maxDurationMsOverride = undefined;
+
+        for (const fixtureCase of fixture.cases) {
+            let calls = 0;
+            let recoveryStartedAt: number | undefined;
+            let stored: ResponseMetadata | undefined;
+            const condensedAnswer = fixtureCase.preserve.join('; ');
+            const outputs = [
+                JSON.stringify(answerPlan({ temperament: fixtureCase.trace })),
+                fixtureCase.originalAnswer,
+                JSON.stringify({
+                    reviewDecision: 'finalize',
+                    reviewReason:
+                        fixtureCase.assessmentConcerns.join(' ') ||
+                        'The answer is supported.',
+                }),
+                condensedAnswer,
+                JSON.stringify({
+                    reviewDecision: 'finalize',
+                    reviewReason:
+                        fixtureCase.assessmentConcerns.join(' ') ||
+                        'The condensed answer is supported.',
+                }),
+            ];
+            const orchestrator = createChatOrchestrator({
+                generationRuntime: {
+                    kind: 'synthetic',
+                    generate: async (request) => {
+                        const call = calls++;
+                        if (call === 3) recoveryStartedAt = performance.now();
+                        const text = outputs[call] ?? '';
+                        const promptTokens = Math.max(
+                            1,
+                            Math.ceil(
+                                Buffer.byteLength(
+                                    JSON.stringify(request.messages)
+                                ) / 4
+                            )
+                        );
+                        const completionTokens = Math.max(
+                            1,
+                            Math.ceil(Buffer.byteLength(text) / 4)
+                        );
+                        return {
+                            model: request.model,
+                            text,
+                            usage: {
+                                promptTokens,
+                                completionTokens,
+                                totalTokens: promptTokens + completionTokens,
+                            },
+                        };
+                    },
+                },
+                storeTrace: async (metadata) => {
+                    stored = metadata;
+                },
+                buildResponseMetadata,
+                defaultModel: 'gpt-5-mini',
+                recordUsage: () => undefined,
+            });
+            const question = [
+                fixtureCase.question,
+                fixtureCase.conversationContext,
+                ...fixtureCase.retrievalEvidence.map(
+                    ({ source, content }) => `${source}: ${content}`
+                ),
+            ].join('\n\n');
+            const startedAt = performance.now();
+            const result = await orchestrator.runRealtimeConversation(
+                snapshot(question),
+                {
+                    signal: new AbortController().signal,
+                    onRunStarted: () => undefined,
+                    voiceMode: 'standard',
+                    maxAnswerTokens: fixtureCase.deliveryCeilingTokens,
+                }
+            );
+            const attempts =
+                stored?.workflow?.steps.flatMap(
+                    (step) => step.attempts ?? []
+                ) ?? [];
+            const condensation = stored?.workflow?.steps.find(
+                (step) => step.stepKind === 'condense'
+            );
+            const reassessment = stored?.workflow?.steps.findLast(
+                (step) => step.stepKind === 'assess'
+            );
+            assert.ok(condensation, fixtureCase.id);
+            assert.equal(
+                reassessment?.parentStepId,
+                condensation.stepId,
+                fixtureCase.id
+            );
+            assert.equal(
+                reassessment?.outcome.signals?.reviewDecision,
+                'finalize',
+                fixtureCase.id
+            );
+            observations.push({
+                caseId: fixtureCase.id,
+                recoveryOutcome:
+                    condensation?.outcome.signals?.condensationOutcome ??
+                    'not_attempted',
+                disposition: result.finalResponse?.disposition,
+                providerCalls: calls,
+                additionalCalls: calls - 3,
+                syntheticEstimatedTokens: attempts.reduce(
+                    (total, attempt) =>
+                        total + (attempt.usage?.totalTokens ?? 0),
+                    0
+                ),
+                recoveryPathLatencyMs:
+                    recoveryStartedAt === undefined
+                        ? 0
+                        : Math.round(
+                              (performance.now() - recoveryStartedAt) * 100
+                          ) / 100,
+                workflowLatencyMs:
+                    Math.round((performance.now() - startedAt) * 100) / 100,
+            });
+        }
+        assert.equal(observations.length, fixture.cases.length);
+        assert.ok(
+            observations.every(
+                (observation) =>
+                    observation.providerCalls === 5 &&
+                    observation.additionalCalls === 2 &&
+                    (observation.recoveryOutcome === 'completed' ||
+                        observation.recoveryOutcome === 'still_overlong')
+            ),
+            JSON.stringify(observations)
+        );
+        assert.equal(
+            observations.filter(
+                (observation) => observation.disposition === 'approved'
+            ).length,
+            1,
+            JSON.stringify(observations)
+        );
+        console.log(
+            `Synthetic Voice condensation evaluation: ${JSON.stringify({
+                cases: observations.length,
+                providerUsage:
+                    'synthetic UTF-8 byte estimate; not provider tokenization',
+                observations,
+            })}`
+        );
+    } finally {
+        Object.assign(runtimeConfig.chatWorkflow, previous);
     }
 });
 

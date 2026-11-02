@@ -34,6 +34,7 @@ import {
 import { createInMemoryAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 import type { OidcAccountClient } from '../src/services/oidcClient.js';
 import { ACCOUNT_SESSION_COOKIE_NAME } from '../src/http/authCookies.js';
+import { GetAdminSettingsSchemaResponseSchema } from '@footnote/contracts/web/schemas';
 
 type TestServer = {
     url: string;
@@ -498,13 +499,20 @@ test('admin settings schema returns editable settings metadata', async () => {
             }
         );
         assert.equal(response.status, 200);
-        const payload = (await response.json()) as {
-            ok: boolean;
-            fields: Array<{ envKey: string; path: string[] }>;
-        };
-        assert.equal(payload.ok, true);
-        assert.ok(payload.fields.length > 0);
-        assert.ok(payload.fields.some((field) => field.envKey === 'HOST'));
+        const payload = GetAdminSettingsSchemaResponseSchema.safeParse(
+            await response.json()
+        );
+        assert.ok(payload.success);
+        assert.ok(payload.data.fields.length > 0);
+        assert.ok(payload.data.fields.some((field) => field.envKey === 'HOST'));
+        assert.ok(
+            payload.data.fields.some(
+                (field) =>
+                    field.envKey === 'VOICE_MAX_ANSWER_TOKENS' &&
+                    field.kind === 'integer_or_auto' &&
+                    field.defaultValue === 'auto'
+            )
+        );
     } finally {
         await server.close();
         server.cleanup();

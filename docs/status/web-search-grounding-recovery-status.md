@@ -63,7 +63,7 @@ the failed search are unconfirmed.
 | Mode     | Default recovery cycles | Default Execution Contract limits                     |
 | -------- | ----------------------: | ----------------------------------------------------- |
 | Express  |                       0 | 3 workflow steps, 0 tool calls, 0 deliberation calls  |
-| Balanced |                       1 | 7 workflow steps, 2 tool calls, 3 deliberation calls  |
+| Balanced |                       1 | 7 workflow steps, 2 tool calls, 4 deliberation calls  |
 | Grounded |                       1 | 10 workflow steps, 3 tool calls, 4 deliberation calls |
 
 Set `chat-workflow.max-search-recovery-cycles` only in `footnote.yaml` to `0`,
