@@ -52,6 +52,7 @@ test('a different Discord identity uses its own file instead of the backend inli
             assert.equal(resolved.profile.promptOverlay.source, 'file');
             assert.equal(resolved.overlaySelection, 'configured');
         }
+        runtimeConfig.settings.discordBots[0]!.profile!.overlayPath = undefined;
         const matchingBackend = parseBotProfileConfig({
             profileId: 'danny',
             inlineOverlayText: 'DANNY_INLINE_OVERRIDE',
@@ -64,6 +65,60 @@ test('a different Discord identity uses its own file instead of the backend inli
     } finally {
         runtimeConfig.settings.discordBots = previousBots;
         fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a configured bot overlay path takes precedence over matching backend inline overlays', () => {
+    const previousBots = runtimeConfig.settings.discordBots;
+    const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'persona-matching-overlay-')
+    );
+    const overlayPath = path.join(root, 'danny.md');
+    fs.writeFileSync(overlayPath, 'DANNY_OPERATOR_OVERLAY');
+    runtimeConfig.settings.discordBots = [
+        {
+            id: 'danny-bot',
+            profile: { id: 'danny', displayName: 'Danny bot', overlayPath },
+        },
+    ];
+    try {
+        for (const maxOverlayLength of [8000, 2]) {
+            const backend = parseBotProfileConfig({
+                profileId: 'danny',
+                inlineOverlayText: 'BACKEND_INLINE_OVERLAY',
+                maxOverlayLength,
+            });
+            const resolved = resolveVoicePersona(backend, logger, {
+                discordNodeId: 'danny-bot',
+                botPersonaId: 'danny',
+            });
+            assert.equal(
+                resolved.profile.promptOverlay.text,
+                'DANNY_OPERATOR_OVERLAY'
+            );
+            assert.equal(resolved.profile.promptOverlay.source, 'file');
+        }
+    } finally {
+        runtimeConfig.settings.discordBots = previousBots;
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('an invalid unique configured chat profile falls through to the catalog', () => {
+    const previousBots = runtimeConfig.settings.discordBots;
+    runtimeConfig.settings.discordBots = [
+        { id: 'danny-bot', profile: { id: 'danny', displayName: '' } },
+    ];
+    try {
+        const profile = resolveChatPersonaProfile(
+            { surface: 'discord', botPersonaId: 'danny' },
+            logger
+        );
+        assert.equal(profile.id, 'danny');
+        assert.equal(profile.displayName, 'Danny');
+        assert.ok(profile.promptOverlay.text);
+    } finally {
+        runtimeConfig.settings.discordBots = previousBots;
     }
 });
 

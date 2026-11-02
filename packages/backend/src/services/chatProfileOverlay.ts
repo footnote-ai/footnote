@@ -31,6 +31,7 @@ type ChatProfileOverlayLogger = {
             requestedPersonaId?: string;
             resolvedPersonaId?: string;
             overlayPath?: string;
+            error?: string;
         }
     ) => void;
 };
@@ -232,14 +233,29 @@ export const resolveChatPersonaProfile = (
                     bot.profile.id === requestedPersonaId
             ) ?? [];
         // Ordinary chat has no node identity; ambiguous configurations retain catalog routing.
-        const configured =
-            matches.length === 1
-                ? resolveInvokingBotProfile(runtimeConfig.profile, {
-                      botPersonaId: requestedPersonaId,
-                  })
-                : requestedPersonaId === runtimeConfig.profile.id
-                  ? runtimeConfig.profile
-                  : null;
+        let configured: BotProfileConfig | null = null;
+        if (matches.length === 1) {
+            try {
+                configured = resolveInvokingBotProfile(runtimeConfig.profile, {
+                    botPersonaId: requestedPersonaId,
+                });
+            } catch (error) {
+                logger.warn(
+                    'chat persona configuration is invalid; retaining catalog routing',
+                    {
+                        runtimeProfileId: runtimeConfig.profile.id,
+                        surface: request.surface,
+                        requestedPersonaId,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
+            }
+        } else if (requestedPersonaId === runtimeConfig.profile.id) {
+            configured = runtimeConfig.profile;
+        }
         if (matches.length > 1)
             logger.warn(
                 'chat persona configuration is ambiguous; retaining fallback routing',
@@ -324,6 +340,7 @@ const resolveInvokingBotProfile = (
                 BOT_PROFILE_MENTION_ALIASES: selected.mentionAliases?.join(','),
                 BOT_PROFILE_PROMPT_OVERLAY:
                     selected.id === fallback.id &&
+                    !selected.overlayPath &&
                     fallback.promptOverlay.source === 'inline'
                         ? (fallback.promptOverlay.text ?? undefined)
                         : undefined,
@@ -335,7 +352,11 @@ const resolveInvokingBotProfile = (
             warn: () => undefined,
         });
         // Overlay precedence applies within an identity, never across different bots.
-        if (selected.id === fallback.id && fallback.promptOverlay.unavailable)
+        if (
+            selected.id === fallback.id &&
+            !selected.overlayPath &&
+            fallback.promptOverlay.unavailable
+        )
             profile.promptOverlay = { ...fallback.promptOverlay };
         return profile;
     }

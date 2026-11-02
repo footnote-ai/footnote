@@ -1264,7 +1264,16 @@ export const createInternalVoiceRealtimeHandler = ({
                         realtimeLogger,
                         event
                     );
-                } catch {
+                } catch (error) {
+                    realtimeLogger.warn(
+                        'Configured Voice persona could not be resolved.',
+                        {
+                            cause:
+                                error instanceof Error
+                                    ? (error.stack ?? error.message)
+                                    : String(error),
+                        }
+                    );
                     sendServerEvent(ws, {
                         type: 'error',
                         message:
