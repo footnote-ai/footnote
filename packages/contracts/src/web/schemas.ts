@@ -2847,6 +2847,7 @@ export const ResponseCandidateSchema = z
         stage: z.enum([
             'initial_generation',
             'revision',
+            'condensation',
             'presentation_draft',
             'presentation_finalization',
             'presentation_repair',

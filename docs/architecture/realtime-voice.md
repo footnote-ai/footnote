@@ -105,23 +105,40 @@ Generation still follows TRACE. The limit does not raise Tightness or remove
 needed reasoning, attribution or qualifications.
 
 The backend estimates answer tokens because the available providers do not
-share a tokenizer. The estimate counts ASCII letters and spaces in groups of
-three, counts ASCII punctuation and digits once each, and counts each non-ASCII
-code point twice. It does not split on English spaces and is deliberately
-upper-biased, but it is not an exact provider token count. Live uses the lower of
-the configured ceiling and 400 estimated tokens, leaving 20% below the GPT-Live
+share a tokenizer. It estimates ASCII letters and spaces in groups of three,
+counts other ASCII characters once, and weights each non-ASCII code point by
+the greater of two or its UTF-8 byte length. It does not split on English
+spaces, but it is not an exact provider token count. Live uses the lower of the
+configured ceiling and 400 estimated tokens, leaving 20% below the GPT-Live
 500-token commentary-event maximum. Standard uses the lower of the configured
 ceiling and 1,600 estimated tokens, plus a 3,686-code-point cap below the TTS
 provider's 2,000-token and 4,096-character input limits. These provider limits
 are internal safeguards, not additional settings. ([Live commentary limit](https://developers.openai.com/api/reference/resources/live/sideband-websocket),
 [speech input limits](https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create))
 
-The completed answer is checked before Voice marks it approved for delivery,
-and both provider adapters check again before handoff. Over-limit answers return
-`answer_too_long`; they are not truncated, condensed or sent for speech. The
-conditional Workflow condensation step belongs to
-[#968](https://github.com/footnote-ai/footnote/issues/968), is deliberately
-deferred, and is not a prerequisite for #965.
+If an answer passes ordinary assessment but exceeds the delivery limit,
+Workflow can run one `condense` Step. The Step uses the approved draft, permitted
+context and evidence, review findings, TRACE settings, and the measured overage.
+Its output is a separate Result that must pass assessment again. Answers that
+already fit do not make this extra model call.
+
+If condensation fails, remains too long, or fails reassessment, the Workflow
+answer is not handed off for speech. It does not start another recovery pass or
+increase the configured limits to force an answer through. Live can still
+speak independently. The backend checks length again before approval, and both
+provider adapters enforce their own transport limits. Standard sends the exact
+approved text to TTS; GPT-Live may paraphrase approved commentary, so its
+handoff is not evidence of exact-text playback.
+
+Canonical Voice receipts include only content-free length measurements,
+outcomes, Result/candidate references, timing, usage, and cost. They do not
+retain prompts, questions, conversations, retrieval bodies, assessment text,
+or answer drafts. The [Workflow documentation](./workflow.md#voice-answer-condensation)
+explains the Step's lineage, limits, and failure behavior.
+
+A [six-case synthetic evaluation fixture](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json)
+is available, but no provider comparison has been run. Condensation accuracy,
+TRACE fidelity, latency, tokens, and cost remain unverified with real models.
 
 Provider failures close the selected mode; they do not switch to another
 provider or mode. Realtime call state and transcript content are transient.
@@ -338,13 +355,14 @@ assessment. `chatService.ts` passes along the selected text before dropping
 candidate bodies, and `chatOrchestrator.ts` checks that it matches `runChat`'s
 response. Text chat is unaffected.
 
-Footnote issues a receipt only after storing the execution metadata. Before
-approving speech, it checks that exactly one candidate was selected from a
-Generate or revision Step, that the text matches, and that the candidate links
-to the produced `draft` Result. The final successful Assess Step must consume
-that draft, produce a `review` Result and return `finalize`. Both the Run and
-Workflow must finish successfully with `goal_satisfied`. Approval means the
-review accepted this answer, not that the answer is necessarily true or private.
+Footnote issues a receipt only after storing execution metadata. Before
+approving speech, it checks that exactly one answer candidate was selected and
+that its text matches the output. An initial or revised candidate comes from
+`generate`; a condensed candidate comes from `condense` and must link to the
+previous approved draft. The final `assess` Step must review the selected
+`draft` Result, produce a `review` Result, and return `finalize`. Both the Run
+and Workflow must finish with `goal_satisfied`. Approval means the answer
+passed review, not that it is necessarily true or private.
 
 | Observed evidence                                              | Voice disposition        |
 | -------------------------------------------------------------- | ------------------------ |
@@ -357,9 +375,12 @@ review accepted this answer, not that the answer is necessarily true or private.
 | Finalized draft but Run/Workflow did not complete successfully | `workflow_not_completed` |
 | Non-answer, terminal action or unsupported candidate stage     | `unsupported_response`   |
 | Selected answer exceeds its Voice delivery limit               | `answer_too_long`        |
+| Condensation or reassessment exceeds Workflow limits           | `workflow_limit_reached` |
 
-Only `approved` carries text. These dispositions do not replace Run status or
-Workflow termination reasons. A revision needs its own final assessment; an
+Only `approved` carries text. For `workflow_limit_reached`, `limitReason`
+identifies `budget_exhausted_steps`, `budget_exhausted_tokens`,
+`budget_exhausted_time`, or `max_deliberation_calls_reached`.
+These dispositions do not replace Run status or Workflow termination reasons. A revision needs its own final assessment; an
 earlier accepted draft cannot approve later text. Budget-limited, failed and
 fail-open paths retain their actual evidence and cannot authorize an answer.
 Tool clarification and status copy do not enter this reviewed-answer slot.

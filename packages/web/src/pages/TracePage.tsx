@@ -108,12 +108,19 @@ const formatPresentationRouting = (
     return parts.length > 0 ? parts.join(' · ') : 'Unavailable';
 };
 
-const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
+const resolveTraceModelLabel = (
+    traceData: ServerMetadata,
+    selectedCandidate?: ResponseCandidate
+): string => {
+    const selectedStepModel = traceData.workflow?.steps.find(
+        (step) => step.stepId === selectedCandidate?.workflowStepId
+    )?.model;
     const generationStepModel = traceData.workflow?.steps
         .slice()
         .reverse()
         .find((step) => step.stepKind === 'generate')?.model;
     return (
+        selectedStepModel ||
         generationStepModel ||
         traceData.model ||
         traceData.modelVersion ||
@@ -139,6 +146,7 @@ const RESPONSE_CANDIDATE_STAGE_LABELS: Record<
 > = {
     initial_generation: 'Initial answer',
     revision: 'Revised answer',
+    condensation: 'Condensed answer',
     presentation_draft: 'Presentation candidate (expression only)',
     presentation_finalization: 'Finalized answer',
     presentation_repair: 'Repaired final answer',
@@ -617,7 +625,6 @@ const TracePage = (): JSX.Element => {
         : 'unknown';
     const provenance =
         traceData?.provenance || traceData?.reasoningEffort || 'Unknown';
-    const model = resolveTraceModelLabel(traceData);
     const executionSummary = resolveExecutionSummary(traceData);
     const sanitizedTraceData = buildDisplayTrace(traceData);
     const safetyLabel = rawSafetyTier ?? 'Unspecified';
@@ -641,6 +648,13 @@ const TracePage = (): JSX.Element => {
     const runOutcomeSummary = traceRunOutcomeSummary;
     const presentation = sanitizedTraceData.presentation;
     const userMemorySummary = sanitizedTraceData.workflow?.userMemory;
+    const selectedCandidates =
+        responseCandidates?.filter(
+            (candidate) => candidate.state === 'selected'
+        ) ?? [];
+    const selectedCandidate =
+        selectedCandidates.length === 1 ? selectedCandidates[0] : undefined;
+    const model = resolveTraceModelLabel(traceData, selectedCandidate);
     const selectedCandidateIndex =
         responseCandidates?.findIndex(
             (candidate) => candidate.state === 'selected'

@@ -2546,8 +2546,17 @@ test('response-version schemas serialize ordered candidate history and stale env
                 workflowStepId: 'step_2',
                 sequence: 1,
                 stage: 'revision',
+                state: 'superseded',
+                text: 'Revised answer.',
+            },
+            {
+                id: 'candidate_3',
+                parentCandidateId: 'candidate_2',
+                workflowStepId: 'step_3',
+                sequence: 2,
+                stage: 'condensation',
                 state: 'selected',
-                text: 'Final answer.',
+                text: 'Condensed final answer.',
             },
         ],
     };

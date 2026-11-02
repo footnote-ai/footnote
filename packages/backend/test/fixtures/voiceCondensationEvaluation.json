@@ -1,0 +1,208 @@
+{
+    "fixtureVersion": 1,
+    "notice": "Synthetic evaluation cases only. These are not user conversations, and no provider outputs or measurements are recorded here.",
+    "comparisonFields": [
+        "factual_and_semantic_fidelity",
+        "important_claims",
+        "qualifications_and_uncertainty",
+        "source_attribution",
+        "trace_alignment_all_five_axes",
+        "measured_delivery_length",
+        "additional_latency",
+        "input_output_tokens_and_cost",
+        "whether_condensation_was_necessary"
+    ],
+    "cases": [
+        {
+            "id": "simple-factual",
+            "kind": "straightforward factual answer",
+            "deliveryCeilingTokens": 20,
+            "question": "How many minutes are in two hours?",
+            "conversationContext": "No earlier turns.",
+            "retrievalEvidence": [],
+            "originalAnswer": "Two hours contain 120 minutes because one hour is 60 minutes and two groups of 60 minutes total 120. You can also count 60 minutes in the first hour and another 60 minutes in the second hour, which gives the same total of 120 minutes.",
+            "assessmentConcerns": [],
+            "trace": {
+                "tightness": 3,
+                "rationale": 2,
+                "attribution": 1,
+                "caution": 1,
+                "extent": 2
+            },
+            "preserve": ["two hours equals 120 minutes", "60 minutes per hour"],
+            "trimFirst": ["repeated arithmetic", "duplicate restatement"]
+        },
+        {
+            "id": "evidence-limits",
+            "kind": "citation and evidence limitation",
+            "deliveryCeilingTokens": 30,
+            "question": "What does the synthetic field report establish about the test result?",
+            "conversationContext": "The user asks for the report's conclusion, not an outside estimate.",
+            "retrievalEvidence": [
+                {
+                    "source": "Synthetic Field Report A",
+                    "content": "The recorded sensor reading was 18 units at noon. The report contains no readings for other times and no calibration result."
+                }
+            ],
+            "originalAnswer": "Synthetic Field Report A says that the sensor recorded 18 units at noon. That is the result this report establishes. It does not establish what the reading was at other times, and the report does not include a calibration result, so it cannot show whether the sensor was calibrated or whether the value represents the wider period.",
+            "assessmentConcerns": [
+                "Keep the named source and the limits on time coverage and calibration."
+            ],
+            "trace": {
+                "tightness": 3,
+                "rationale": 2,
+                "attribution": 5,
+                "caution": 4,
+                "extent": 3
+            },
+            "preserve": [
+                "18 units at noon",
+                "attribution to Synthetic Field Report A",
+                "no other times reported",
+                "calibration is not established"
+            ],
+            "trimFirst": [
+                "repeat of the source conclusion",
+                "lower-priority explanation"
+            ]
+        },
+        {
+            "id": "meaningful-uncertainty",
+            "kind": "uncertainty and conflicting evidence",
+            "deliveryCeilingTokens": 32,
+            "question": "Has the sample project definitely launched?",
+            "conversationContext": "The user wants a direct answer from the supplied status notes.",
+            "retrievalEvidence": [
+                {
+                    "source": "Synthetic Status Note A",
+                    "content": "A launch is planned for Friday, subject to approval."
+                },
+                {
+                    "source": "Synthetic Status Note B",
+                    "content": "Approval is still pending; no launch confirmation is recorded."
+                }
+            ],
+            "originalAnswer": "The supplied notes do not establish that the project has launched. Synthetic Status Note A says Friday is planned, conditional on approval, while Synthetic Status Note B says approval is still pending and records no launch confirmation. The available evidence therefore supports a planned launch, not a confirmed one.",
+            "assessmentConcerns": [
+                "Do not convert a planned date into a completed event."
+            ],
+            "trace": {
+                "tightness": 3,
+                "rationale": 3,
+                "attribution": 5,
+                "caution": 5,
+                "extent": 3
+            },
+            "preserve": [
+                "launch is unconfirmed",
+                "Friday is conditional",
+                "approval remains pending",
+                "source distinction"
+            ],
+            "trimFirst": ["repeated qualification", "restated conclusion"]
+        },
+        {
+            "id": "caution-tradeoff",
+            "kind": "caution and substantive trade-off",
+            "deliveryCeilingTokens": 34,
+            "question": "Should we deploy the sample service before adding a backup?",
+            "conversationContext": "The user values availability but has not described a recovery objective.",
+            "retrievalEvidence": [
+                {
+                    "source": "Synthetic Operations Note",
+                    "content": "The service has one production instance and no tested backup restore. A backup adds operational cost but can reduce recovery time after instance loss."
+                }
+            ],
+            "originalAnswer": "I would not recommend deploying it for availability-sensitive use before a backup restore is tested. The Synthetic Operations Note says there is one production instance and no tested restore, so instance loss could leave the service unavailable. Adding and testing a backup costs time and operational effort, but reduces recovery risk. If this is only a disposable demonstration, that trade-off may be acceptable; otherwise agree on a recovery objective and test restoration first.",
+            "assessmentConcerns": [
+                "Retain the conditional recommendation and the cost-versus-recovery trade-off."
+            ],
+            "trace": {
+                "tightness": 3,
+                "rationale": 4,
+                "attribution": 3,
+                "caution": 5,
+                "extent": 4
+            },
+            "preserve": [
+                "one production instance",
+                "no tested restore",
+                "conditional recommendation",
+                "backup trade-off",
+                "disposable-demo caveat"
+            ],
+            "trimFirst": [
+                "repeated risk framing",
+                "secondary operational detail"
+            ]
+        },
+        {
+            "id": "rationale-extent",
+            "kind": "long rationale where TRACE extent matters",
+            "deliveryCeilingTokens": 38,
+            "question": "Why does the synthetic workflow reserve capacity before starting a follow-up step?",
+            "conversationContext": "The user asks for the reason and the practical consequence.",
+            "retrievalEvidence": [
+                {
+                    "source": "Synthetic Workflow Note",
+                    "content": "A follow-up generation requires a later assessment. The shared run has fixed step, token, review, and time limits."
+                }
+            ],
+            "originalAnswer": "The workflow reserves capacity first because a follow-up generation is useful only if its result can still be assessed under the same run. Without that reservation, generation could consume the remaining tokens or steps, leaving a new answer that cannot be reviewed. The workflow uses the same fixed step, token, review, and time limits for the initial work and recovery. If the remaining capacity cannot cover both generation and assessment, it stops before starting and keeps the result ineligible for delivery. This costs some available capacity up front, but prevents unreviewed output from being treated as approved.",
+            "assessmentConcerns": [
+                "Preserve the generation-to-assessment dependency and the fail-closed consequence."
+            ],
+            "trace": {
+                "tightness": 3,
+                "rationale": 5,
+                "attribution": 3,
+                "caution": 4,
+                "extent": 4
+            },
+            "preserve": [
+                "assessment must follow generation",
+                "shared fixed limits",
+                "stop before an unassessable result",
+                "no approval without review"
+            ],
+            "trimFirst": [
+                "repeated explanation of the same dependency",
+                "secondary trade-off wording"
+            ]
+        },
+        {
+            "id": "japanese-mixed-script",
+            "kind": "Japanese without spaces and mixed-script attribution",
+            "deliveryCeilingTokens": 32,
+            "question": "合成メモによると、更新は完了していますか？",
+            "conversationContext": "ユーザーは提供されたメモの範囲で回答を求めています。",
+            "retrievalEvidence": [
+                {
+                    "source": "Synthetic Update Note（合成更新メモ）",
+                    "content": "The migration finished on Tuesday. Verification is still pending."
+                }
+            ],
+            "originalAnswer": "Synthetic Update Note（合成更新メモ）によると、移行作業は火曜日に完了しました。ただし、検証はまだ保留中です。そのため、作業の完了は確認できますが、更新全体が検証済みだとは言えません。The source confirms migration completion, but not verification.",
+            "assessmentConcerns": [
+                "Keep the attribution and distinguish completed migration from pending verification."
+            ],
+            "trace": {
+                "tightness": 3,
+                "rationale": 2,
+                "attribution": 5,
+                "caution": 4,
+                "extent": 3
+            },
+            "preserve": [
+                "火曜日に移行が完了",
+                "検証は保留中",
+                "作業完了と検証済みを区別",
+                "source attribution"
+            ],
+            "trimFirst": [
+                "duplicated English/Japanese conclusion",
+                "repeated framing"
+            ]
+        }
+    ]
+}

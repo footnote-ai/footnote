@@ -16,7 +16,12 @@ export interface PromptCachePolicy {
     stablePrefixMessages: number;
     ttlSeconds?: number;
     purpose:
-        'planner' | 'generation' | 'assessment' | 'revision' | 'presentation';
+        | 'planner'
+        | 'generation'
+        | 'assessment'
+        | 'revision'
+        | 'condensation'
+        | 'presentation';
     surface: 'web' | 'discord' | 'unknown';
 }
 
@@ -36,6 +41,7 @@ export const PromptCacheReceiptSchema = z
             'generation',
             'assessment',
             'revision',
+            'condensation',
             'presentation',
         ]),
         surface: z.enum(['web', 'discord', 'unknown']),
@@ -62,6 +68,7 @@ export const PromptCacheSummarySchema = z
             'generation',
             'assessment',
             'revision',
+            'condensation',
             'presentation',
             'unknown',
         ]),

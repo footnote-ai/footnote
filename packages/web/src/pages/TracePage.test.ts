@@ -49,6 +49,23 @@ test('trace response versions load final-first with controls, warnings, and unav
     );
 });
 
+test('trace page resolves the model from the selected candidate producer', async () => {
+    const source = await readFile(tracePagePath, 'utf8');
+
+    assert.match(
+        source,
+        /resolveTraceModelLabel\(traceData, selectedCandidate\)/u
+    );
+    assert.match(
+        source,
+        /responseCandidates\?\.filter\(\s*\(candidate\) => candidate\.state === 'selected'\s*\)/u
+    );
+    assert.match(
+        source,
+        /workflow\?\.steps\.find\(\s*\(step\) => step\.stepId === selectedCandidate\?\.workflowStepId\s*\)\?\.model/u
+    );
+});
+
 test('trace page makes partial provenance explicit', async () => {
     const source = await readFile(tracePagePath, 'utf8');
 

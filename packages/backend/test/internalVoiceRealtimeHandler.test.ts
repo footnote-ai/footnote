@@ -794,113 +794,138 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
     }
 });
 
-test('over-limit approved answers never reach Standard TTS or Live commentary', async () => {
+test('over-limit answers and Workflow limits never reach Standard TTS or Live commentary', async () => {
     const inputAudio = Buffer.from([0, 0, 1, 0]);
     const answer = '答'.repeat(100);
     for (const mode of ['standard', 'live'] as const) {
-        const synthesized: string[] = [];
-        const liveSession = new StubOpenAiLiveVoiceSession();
-        let workflowCalls = 0;
-        const harness = await createRealtimeHandlerHarness({
-            defaultMode: mode,
-            maxAnswerTokens: 4,
-            openAiLiveVoiceSessionFactory: async () => liveSession,
-            openRouterVoiceService:
-                mode === 'standard'
-                    ? {
-                          async transcribe() {
-                              return { text: 'What is the answer?' };
-                          },
-                          async synthesize(text) {
-                              synthesized.push(text);
-                              return { audio: Buffer.from([0, 0]) };
-                          },
-                      }
-                    : undefined,
-            workflowRunner: {
-                async runRealtimeConversation(_snapshot, context) {
-                    workflowCalls += 1;
-                    context.onRunStarted('workflow-run');
-                    return {
-                        responseId: 'response',
-                        runId: 'workflow-run',
-                        status: 'completed',
-                        finalResponse: {
-                            disposition: 'approved',
+        for (const failureKind of [
+            'answer_too_long',
+            'workflow_limit_reached',
+        ] as const) {
+            const synthesized: string[] = [];
+            const liveSession = new StubOpenAiLiveVoiceSession();
+            let workflowCalls = 0;
+            const harness = await createRealtimeHandlerHarness({
+                defaultMode: mode,
+                maxAnswerTokens: 4,
+                openAiLiveVoiceSessionFactory: async () => liveSession,
+                openRouterVoiceService:
+                    mode === 'standard'
+                        ? {
+                              async transcribe() {
+                                  return { text: 'What is the answer?' };
+                              },
+                              async synthesize(text) {
+                                  synthesized.push(text);
+                                  return { audio: Buffer.from([0, 0]) };
+                              },
+                          }
+                        : undefined,
+                workflowRunner: {
+                    async runRealtimeConversation(_snapshot, context) {
+                        workflowCalls += 1;
+                        context.onRunStarted('workflow-run');
+                        return {
                             responseId: 'response',
                             runId: 'workflow-run',
-                            candidateId: 'candidate',
-                            generationStepId: 'answer',
-                            assessmentStepId: 'review',
-                            text: answer,
-                        },
-                    };
-                },
-            },
-        });
-        let ws: WebSocket | undefined;
-        try {
-            ws = await harness.connect();
-            ws.send(
-                JSON.stringify({
-                    type: 'session.start',
-                    mode,
-                    initiatorId: 'user-1',
-                    context: {
-                        participants: [
-                            {
-                                id: 'user-1',
-                                displayName: 'Alice',
-                                isBot: false,
+                            status: 'completed',
+                            finalResponse: {
+                                ...(failureKind === 'answer_too_long'
+                                    ? {
+                                          disposition: 'approved',
+                                          responseId: 'response',
+                                          runId: 'workflow-run',
+                                          candidateId: 'candidate',
+                                          generationStepId: 'answer',
+                                          assessmentStepId: 'review',
+                                          text: answer,
+                                      }
+                                    : {
+                                          disposition: 'workflow_limit_reached',
+                                          limitReason: 'budget_exhausted_steps',
+                                      }),
                             },
-                        ],
+                        };
                     },
-                })
-            );
-            assert.equal((await waitForJsonMessage(ws)).type, 'session.ready');
-            const failurePromise = waitForJsonMessage(ws, 3_000);
-            ws.send(
-                JSON.stringify({
-                    type: 'input_audio.append',
-                    audioBase64: inputAudio.toString('base64'),
-                    speakerLabel: 'Alice',
-                    speakerId: 'user-1',
-                })
-            );
-            ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+                },
+            });
+            let ws: WebSocket | undefined;
+            try {
+                ws = await harness.connect();
+                ws.send(
+                    JSON.stringify({
+                        type: 'session.start',
+                        mode,
+                        initiatorId: 'user-1',
+                        context: {
+                            participants: [
+                                {
+                                    id: 'user-1',
+                                    displayName: 'Alice',
+                                    isBot: false,
+                                },
+                            ],
+                        },
+                    })
+                );
+                assert.equal(
+                    (await waitForJsonMessage(ws)).type,
+                    'session.ready'
+                );
+                const failurePromise = waitForJsonMessage(ws, 3_000);
+                ws.send(
+                    JSON.stringify({
+                        type: 'input_audio.append',
+                        audioBase64: inputAudio.toString('base64'),
+                        speakerLabel: 'Alice',
+                        speakerId: 'user-1',
+                    })
+                );
+                ws.send(JSON.stringify({ type: 'input_audio.commit' }));
 
-            if (mode === 'live') {
-                const session = await waitForLiveSession(harness);
-                await new Promise((resolve) => setTimeout(resolve, 600));
-                session.emit({
-                    type: 'session.input_transcript.delta',
-                    event_id: 'transcript-1',
-                    delta: 'What is the answer?',
-                    start_ms: 0,
-                    end_ms: 500,
-                });
-                session.emit({
-                    type: 'session.delegation.created',
-                    event_id: 'delegation-1',
-                    offset_ms: 600,
-                    delegation: {
-                        id: 'delegation-1',
-                        target: 'client',
-                        type: 'delegation',
-                    },
-                });
-                await new Promise((resolve) => setTimeout(resolve, 600));
-                assert.deepEqual(session.commentary, []);
+                if (mode === 'live') {
+                    const session = await waitForLiveSession(harness);
+                    await new Promise((resolve) => setTimeout(resolve, 600));
+                    session.emit({
+                        type: 'session.input_transcript.delta',
+                        event_id: 'transcript-1',
+                        delta: 'What is the answer?',
+                        start_ms: 0,
+                        end_ms: 500,
+                    });
+                    session.emit({
+                        type: 'session.delegation.created',
+                        event_id: 'delegation-1',
+                        offset_ms: 600,
+                        delegation: {
+                            id: 'delegation-1',
+                            target: 'client',
+                            type: 'delegation',
+                        },
+                    });
+                    await new Promise((resolve) => setTimeout(resolve, 600));
+                    assert.deepEqual(session.commentary, []);
+                }
+
+                const failure = await failurePromise;
+                assert.equal(failure.type, 'error');
+                assert.equal(
+                    failure.code,
+                    failureKind === 'answer_too_long'
+                        ? 'answer_too_long'
+                        : 'workflow_limit_reached'
+                );
+                if (failureKind === 'workflow_limit_reached')
+                    assert.equal(
+                        failure.message,
+                        'The Voice answer could not be safely prepared within the Workflow step limit.'
+                    );
+                assert.equal(workflowCalls, 1);
+                assert.deepEqual(synthesized, []);
+            } finally {
+                if (ws) await closeWebSocket(ws);
+                await harness.close();
             }
-
-            const failure = await failurePromise;
-            assert.equal(failure.type, 'error');
-            assert.equal(failure.code, 'answer_too_long');
-            assert.equal(workflowCalls, 1);
-            assert.deepEqual(synthesized, []);
-        } finally {
-            if (ws) await closeWebSocket(ws);
-            await harness.close();
         }
     }
 });

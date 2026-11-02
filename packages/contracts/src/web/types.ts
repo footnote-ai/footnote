@@ -1180,6 +1180,7 @@ export type GetTraceStaleResponse = {
 export type ResponseCandidateStage =
     | 'initial_generation'
     | 'revision'
+    | 'condensation'
     | 'presentation_draft'
     | 'presentation_finalization'
     | 'presentation_repair'

@@ -1,8 +1,7 @@
 # Workflows
 
-A workflow is the path Footnote uses to answer a chat request. It covers the
-selected mode, planning, optional context, generation, review, fallback
-behavior, and the metadata saved for trace and provenance.
+A Workflow defines how Footnote handles a chat request: which Steps can run, how
+it responds to failures, and what it records for trace and provenance.
 
 The current chat path supports three public modes: `express`, `balanced`, and
 `grounded`.
@@ -10,7 +9,7 @@ The current chat path supports three public modes: `express`, `balanced`, and
 All three map to the reviewed workflow profile, but they run with different
 contract presets, limits, model routing, and evidence posture.
 
-## Stable design vocabulary and boundaries
+## Terms and boundaries
 
 Use the following small vocabulary when extending workflows:
 
@@ -57,7 +56,7 @@ or export references, not replacements for Footnote's everyday domain names.
 The shared workflow core is the only live workflow engine. Extend it rather
 than adding a second one.
 
-## Workflow core foundation
+## Workflow core
 
 `@footnote/contracts` defines portable Workflow topology. `packages/backend/src/services/workflowCore/`
 contains the backend-only execution foundation and the live reviewed-chat definition. The shared
@@ -98,14 +97,6 @@ backend workflow runtime.
 6. Response metadata records the mode outcome, planner influence, workflow
    lineage, cost, trace fields, and provenance fields.
 
-The main runtime pieces are:
-
-- the Execution Contract, which sets the run rules and limits
-- the mode, which selects the run posture
-- the workflow shape, which defines the step pattern
-- the planner, which can suggest how to handle the request within the run rules
-- workflow metadata, which records what happened
-
 Workflow logic is split across backend layers:
 
 - Workflow core handles declared outcomes, bounded Attempts, named Results, and
@@ -134,19 +125,22 @@ Mode ids are user-facing enough to appear in product copy with normal casing:
 `Express`, `Balanced`, and `Grounded`. Internal profile ids are not useful as
 primary labels under an answer.
 
-All three modes use the reviewed workflow shape:
+All three modes use the `reviewed` Workflow. Its possible paths are shown below;
+the actual path depends on policy, the request, and the outcome of each Step.
 
-| Workflow shape | Purpose                     | Main steps                                                                                                 |
-| -------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `reviewed`     | reviewed message generation | `plan? -> retrieve? -> presentation? -> generate -> assess? -> [replan? -> generate -> assess?] -> finish` |
+```text
+plan? -> retrieve? -> presentation? -> generate -> assess?
+    -> [replan? -> generate -> assess?]
+    -> [condense -> assess]
+    -> finish
+```
 
-The live conditional topology is `plan? -> retrieve? -> presentation? -> generate
--> assess? -> [replan? -> generate -> assess?] -> finish`. A `?` step runs only
-when the active policy and dependencies enable it. When assessment requests a
-revision, `replan` returns to `generate`, which may enter `assess` again before
-`finish`. Assessment can also request a bounded search; that transition reuses
-the same `retrieve` Step and then returns to generation and assessment. Search
-is an assessment decision, not a new Workflow Step.
+A `?` marks an optional Step, while brackets show conditional branches rather
+than Steps that always run. An assessment may request a revision or a bounded
+search; search reuses `retrieve` before returning to generation and assessment.
+Only Voice can take the `condense -> assess` branch, and only after assessment
+finalizes a draft that exceeds its delivery limit. Reassessment after
+condensation is required, not optional.
 
 Mode details:
 
@@ -242,21 +236,18 @@ bounded context to generation.
 
 ### Review loop
 
-The reviewed workflow declares this bounded path:
-
-```text
-plan(defaultPlan on failure) -> retrieve(fail-open) -> presentation(optional) -> generate -> assess
-  -> replan(optional) -> generate -> assess ... -> finish
-```
+The reviewed workflow follows the conditional path shown above. A revision
+returns to `generate` through `replan` when enabled, while a search returns
+through `retrieve`. Both paths use the existing Workflow and its limits.
 
 The exact start and optional Steps are selected by backend policy before the
 Run begins. Each Step declares its accepted outcomes, named Result output, and
 next Step. `presentation` is an optional candidate: an unavailable candidate
 routes to authoritative generation and does not consume a workflow-step
 allowance. `generate` is the authoritative writer, and `assess` can emit
-`done`, `revise`, `search`, or `limit`. A revision uses `replan` when configured and
-otherwise follows the declared direct-generation route. `finish` emits no
-Result and is not counted as a semantic workflow Step.
+`done`, `condense`, `revise`, `search`, or `limit`. A revision uses `replan` when
+configured and otherwise follows the declared direct-generation route.
+`finish` emits no Result and is not counted as a semantic workflow Step.
 
 `generate` produces the current draft. `assess` returns `reviewDecision` and
 `reviewReason`. It can finalize, request a bounded revision, or request another
@@ -278,6 +269,43 @@ assessment decisions remain advisory: the backend checks policy, query
 repetition, provider availability, and all existing limits before retrieval.
 When the decision is `revise`, `assess` may also return
 `revisionInstruction`, which guides the follow-up `generate` step.
+
+#### Voice answer condensation
+
+Voice uses `condense` when assessment has finalized an answer that exceeds the
+backend's delivery limit. Ordinary revision or search recovery happens first.
+Text chat and Voice answers that already fit skip this Step.
+
+The condenser receives the approved draft, relevant request and conversation
+context, retrieval evidence, review findings, TRACE settings, and the measured
+length and overage. The draft and retrieved material remain data, not
+instructions. `condense` uses the configured generation route and can run only
+once. It cannot execute tools or terminal actions.
+
+The shortened answer becomes a new `draft` Result and a `condensation` candidate
+linked to the original candidate. `assess` then reviews that exact draft. Before
+handoff, Voice checks the original approval, both Results and their Step
+references, the new assessment, candidate identity, persistence, freshness,
+consent, and length. Standard sends the approved text unchanged to TTS. Live
+passes it to GPT-Live as commentary, which may paraphrase it; a handoff is not
+proof of the words that were spoken.
+
+`revise` addresses quality concerns raised by assessment; `condense` addresses
+the delivery-length limit. If condensation fails, remains too long, or fails
+reassessment, the Workflow answer is not handed off. The Workflow does not
+attempt another revision or search after condensation, although Live can still
+speak independently.
+
+Before starting condensation, Workflow checks the remaining Step, review, token,
+and time allowances for both condensation and reassessment. The Execution
+Contract, cancellation, and deadline continue to apply while they run. If
+capacity runs out, the Run records the relevant limit and the earlier overlong
+draft remains ineligible for speech.
+
+Canonical Voice records keep content-free length measurements, outcomes,
+Result/candidate references, timing, usage, and cost. They do not persist
+questions, answer drafts, prompts, retrieval bodies, or free-form assessment text.
+Public Trace also excludes that private content.
 
 Assessment receives the bounded retrieval outcome, query, provider status,
 returned source titles and URLs, and the answer's own citations. Retrieved text
@@ -369,7 +397,8 @@ chain before execution:
 This hint routing is internal and does not add required public API schema
 fields.
 
-The loop stops when it reaches a final answer, hits a limit, or fails open.
+The review loop ends on a final decision, a limit, or fail-open recovery. Voice
+may then condense an approved answer if it exceeds the delivery limit.
 
 ## Model routing
 
@@ -380,6 +409,8 @@ packages/backend/src/config/model-profiles.defaults.yaml
 ```
 
 Each mode resolves independent chains for `planner`, `generate`, and `assess`.
+Voice condensation uses the configured `generate` chain but remains a separate
+Workflow Step with its own Attempt and usage records.
 Chain entries can be direct profile ids or `chooseOne` pools. `chooseOne`
 selection is deterministic for the request seed and step, so the choice is
 reproducible while spreading traffic across the pool.
@@ -400,16 +431,16 @@ Routing is fail-open where possible:
 - transient provider or upstream failures advance to the next chain entry
 - non-transient errors stop chain advancement for that step
 
-Routing-chain exhaustion is expected workflow data. Review and initial
-generation paths carry the exhausted reason code and attempts directly instead
-of converting those outcomes through exception-message control flow.
+Routing-chain exhaustion is recorded as a Workflow outcome. Review and initial
+generation retain the reason code and Attempt evidence directly, rather than
+relying on exception messages to choose the next path.
 
 Execution metadata and step signals record selected profile lineage, fallback
 attempts, and routing reason codes for trace inspection.
 
 ## What gets recorded
 
-Workflow output is spread across a few metadata surfaces:
+Workflow results appear in several metadata fields:
 
 - `metadata.workflow` records workflow lineage
 - `metadata.execution[]` records execution events, including planner influence
@@ -424,8 +455,8 @@ presented, not why a routing chain was selected.
 Each `StepRecord` includes an outcome with `status`, `summary`, `artifacts`,
 `signals`, and optional `recommendations`.
 
-`signals` are machine-readable control indicators used by transition logic.
-They are not general telemetry.
+`signals` hold machine-readable values used by Workflow transitions. They are
+not a place for unrestricted telemetry.
 
 For `assess` steps, use `reviewDecision` and `reviewReason`. When
 `reviewDecision` is `revise`, `signals` may also include
@@ -472,9 +503,9 @@ Example assess signals:
 `recommendations` are guidance only. Backend legality checks decide which
 transitions can run.
 
-Step records need to stay serializable, bounded, and safe to expose in trace or
-provenance contexts. They should not include raw prompts, raw model output,
-full planner payloads, or unbounded tool results.
+Step records must be serializable and bounded. They should not contain raw
+prompts, model output, full planner payloads, or unbounded tool results. Voice
+also excludes draft and assessment text from canonical records.
 
 ### Workflow metadata
 
@@ -574,7 +605,7 @@ Use this split when ownership is unclear:
 | Step legality       | handles the legality check before execution                                                       | declares intended flow and policy toggles                               | supplies policy and uses engine legality results           |
 | Limits              | `workflowCore` invokes admission; `workflowEngine/limits.ts` owns hard-stop checks and accounting | declares default budgets within the shared limits model                 | passes config and surfaces the final result                |
 | Workflow state      | tracks step count, token totals, current step, and lineage progression                            | declares expected step shape                                            | treats engine-produced workflow state as the runtime state |
-| Step execution      | runs concrete steps today (`generate`, `assess`, refinement `generate`) and records step outcomes | defines step-specific behavior such as review parsing                   | builds requests and calls runtimes or providers            |
+| Step execution      | executes declared Steps, including Voice condensation, and records outcomes                       | defines step-specific behavior such as review parsing                   | builds requests and calls runtimes or providers            |
 | Termination reasons | `workflowCore` assigns workflow reasons; `workflowEngine/limits.ts` maps exhausted limits         | can request stop using shared reason handling                           | persists and returns engine-assigned reasons unchanged     |
 | Fail-open behavior  | handles degraded fail-open workflow behavior                                                      | can define recoverable profile behavior within shared fail-open meaning | keeps telemetry or persistence failures out of user blocks |
 
@@ -638,8 +669,8 @@ stops a run, the workflow record includes that stop reason.
 `workflow.limitStop.stoppedBeforeStepKind` records the next step that the
 exhausted limit prevented. This keeps a pre-generation stop distinct from a
 run that generated an answer and then lacked budget for assessment or
-revision. Token accounting includes planner, generation, assessment, and
-revision model calls when provider usage is available. Before a counted model
+revision. Token accounting includes planner, generation, assessment, revision, and Voice
+condensation calls when provider usage is available. Before a counted model
 step, the engine makes a conservative provider-neutral estimate from the
 request messages and reserves the remaining output allowance against the
 cumulative budget. Requests without an explicit output limit receive the
@@ -713,8 +744,9 @@ outcomes, enforces iteration and Attempt bounds, validates serializable named
 Results, and records the Run. `workflowEngine/limits.ts` remains the one
 Execution Contract admission and accounting authority.
 
-The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
-and `finalize`.
+The shared Step vocabulary includes `plan`, `tool`, `presentation`, `generate`,
+`condense`, `assess`, and `finalize`. The `revise` and `search` values are
+assessment outcomes, not separate Step types.
 
 Current implementation responsibilities:
 
@@ -726,7 +758,7 @@ Current implementation responsibilities:
 | `chatOrchestrator`      | Resolves mode/profile/contract, applies planner policy, and builds tool intent.                                  |
 | `chatService`           | Invokes the reviewed Workflow and handles context-step short-circuit responses such as clarification or failure. |
 
-Current first-slice review module posture:
+Current review modules:
 
 - Supported modules are exactly `natural_human_style` and `concise_answer`.
 - Module wording comes from shared prompts YAML fragments.
@@ -745,8 +777,8 @@ engine for this boundary.
 
 ## Future work
 
-Future workflow work may add first-class tool steps, replanning, broader
-workflow diagrams, and user-facing workflow controls.
+Future workflow work may extend tool and replanning behavior, add broader
+workflow diagrams, and expose selected controls to users.
 
 TODO(workflow-search-profile-split): Define and implement explicit split-model
 execution for retrieval vs final generation. Current routing resolves one
