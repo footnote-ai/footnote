@@ -151,11 +151,14 @@ Mode details:
 | `grounded` | `quality-grounded` | `reviewed`     | reviewed generation | yes    | stricter         |
 
 Default Execution Contract allowances are 3 workflow steps, 0 tool calls, and
-0 deliberation calls for Express; 7 steps, 2 tool calls, and 3 deliberation
+0 deliberation calls for Express; 7 steps, 2 tool calls, and 4 deliberation
 calls for Balanced; and 10 steps, 3 tool calls, and 4 deliberation calls for
 Grounded. Balanced and Grounded default to one search-recovery cycle; Express
 defaults to zero. These counts include the run's initial work, not just
 recovery. Explicit operator limits and resolved contract limits remain binding.
+The Balanced deliberation allowance is shared by text and Voice workflows; it
+adds one possible model call when a run needs another assessed transition.
+Step, tool, review-cycle, token, and elapsed-time caps are unchanged.
 
 `Grounded` and `reviewed` describe the path Footnote took. They are not claims
 that the answer is true.

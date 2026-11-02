@@ -660,3 +660,28 @@ test('rendered canonical template parses through backend settings validator', ()
         settingsSpecEntries.length
     );
 });
+
+test('Voice answer ceiling setting accepts auto and numeric YAML values', () => {
+    const template = renderSettingsTemplateYaml({
+        target: 'local',
+        env: {},
+        lineEnding: '\n',
+    });
+    assert.match(template, /max-answer-tokens: 'auto'/u);
+
+    const auto = parseServerSettingsYaml({
+        rawText: template,
+        settingsPath: withSettingsFile(template),
+    });
+    assert.equal(auto.yamlEnv.VOICE_MAX_ANSWER_TOKENS, 'auto');
+
+    const numericTemplate = template.replace(
+        "max-answer-tokens: 'auto'",
+        'max-answer-tokens: 240'
+    );
+    const numeric = parseServerSettingsYaml({
+        rawText: numericTemplate,
+        settingsPath: withSettingsFile(numericTemplate),
+    });
+    assert.equal(numeric.yamlEnv.VOICE_MAX_ANSWER_TOKENS, '240');
+});

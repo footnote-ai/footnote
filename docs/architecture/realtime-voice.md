@@ -99,10 +99,12 @@ Live audio therefore carries no exact-text approval or playback receipt.
 
 ### Answer length
 
-`voice.max-answer-tokens` defaults to 160. It caps the text delivered to
-speech, not the model's generation budget, and it is not a target length.
-Generation still follows TRACE. The limit does not raise Tightness or remove
-needed reasoning, attribution or qualifications.
+`voice.max-answer-tokens` defaults to `auto`: Live uses up to 400 estimated
+tokens, and Standard uses up to 1,600 estimated tokens plus the character cap.
+A positive numeric setting lowers that ceiling. The setting caps text delivered
+to speech; it does not change the model's generation budget or target length.
+Generation still follows TRACE and keeps needed reasoning, attribution, and
+qualifications.
 
 The backend estimates answer tokens because the available providers do not
 share a tokenizer. It estimates ASCII letters and spaces in groups of three,
@@ -137,8 +139,14 @@ or answer drafts. The [Workflow documentation](./workflow.md#voice-answer-conden
 explains the Step's lineage, limits, and failure behavior.
 
 A [six-case synthetic evaluation fixture](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json)
-is available, but no provider comparison has been run. Condensation accuracy,
-TRACE fidelity, latency, tokens, and cost remain unverified with real models.
+runs through the real Workflow in
+`packages/backend/test/realtimeWorkflowOrchestrator.test.ts` under the default
+Balanced Standard path. It reports recovery outcomes, added calls, synthetic
+UTF-8 byte-based token estimates, and local workflow timing. Separate default
+path coverage exercises both transports under Balanced and Grounded. These
+figures are harness measurements, not provider tokenization or latency. No
+provider comparison has been run; condensation accuracy, TRACE fidelity,
+provider usage, latency, and cost remain unverified with real models.
 
 Provider failures close the selected mode; they do not switch to another
 provider or mode. Realtime call state and transcript content are transient.

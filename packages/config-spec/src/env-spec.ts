@@ -1898,10 +1898,11 @@ export const envEntries = [
         section: 'voice',
         required: false,
         secret: false,
-        kind: 'integer',
+        kind: 'integer_or_auto',
         description:
-            'Maximum estimated tokens in a delivered Voice answer. This is a ceiling, not a target.',
-        defaultValue: literal(160),
+            'Maximum estimated tokens in a delivered Voice answer, or auto to use the selected transport capacity. This is a ceiling, not a target.',
+        defaultValue: literal('auto'),
+        allowedValues: ['auto'],
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({

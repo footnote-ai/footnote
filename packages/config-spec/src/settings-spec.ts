@@ -10,7 +10,14 @@ import { envConfigSourceByKey, envEntries } from './env-spec.js';
 import type { EnvLiteralValue } from './types.js';
 
 export type SettingsValueKind =
-    'string' | 'boolean' | 'integer' | 'number' | 'csv' | 'enum' | 'json';
+    | 'string'
+    | 'boolean'
+    | 'integer'
+    | 'integer_or_auto'
+    | 'number'
+    | 'csv'
+    | 'enum'
+    | 'json';
 
 export type SettingsDefaultValue =
     string | number | boolean | readonly string[];

@@ -129,7 +129,7 @@ export const EXECUTION_CONTRACT_LIMIT_PRESETS: Readonly<
     balanced: {
         maxWorkflowSteps: 7,
         maxToolCalls: 2,
-        maxDeliberationCalls: 3,
+        maxDeliberationCalls: 4,
         maxTokensTotal: 48_000,
         maxDurationMs: 90_000,
     },

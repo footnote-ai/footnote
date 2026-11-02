@@ -167,6 +167,20 @@ const validateSettingValue = (
                 });
             }
             return value;
+        case 'integer_or_auto':
+            if (
+                value !== 'auto' &&
+                (typeof value !== 'number' ||
+                    Number.isNaN(value) ||
+                    !Number.isInteger(value))
+            ) {
+                throw new ServerSettingsValidationError({
+                    message: `${keyPath} must be "auto" or an integer.`,
+                    category: 'type_mismatch',
+                    pointer: keyPath,
+                });
+            }
+            return value;
         case 'number':
             if (typeof value !== 'number' || Number.isNaN(value)) {
                 throw new ServerSettingsValidationError({

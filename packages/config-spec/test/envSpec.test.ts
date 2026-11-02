@@ -97,14 +97,20 @@ test('voice default mode is editable in setup YAML and defaults to Standard', ()
     );
 });
 
-test('Voice answer token ceiling is editable in setup YAML and defaults to 160', () => {
-    assert.equal(envDefaultValues.VOICE_MAX_ANSWER_TOKENS, 160);
+test('Voice answer token ceiling is editable in setup YAML and defaults to auto', () => {
+    assert.equal(envDefaultValues.VOICE_MAX_ANSWER_TOKENS, 'auto');
     assert.equal(envConfigSourceByKey.VOICE_MAX_ANSWER_TOKENS, 'settings_yaml');
     assert.deepEqual(
         settingsSpecEntries.find(
             (entry) => entry.envKey === 'VOICE_MAX_ANSWER_TOKENS'
         )?.path,
         ['voice', 'max-answer-tokens']
+    );
+    assert.equal(
+        settingsSpecEntries.find(
+            (entry) => entry.envKey === 'VOICE_MAX_ANSWER_TOKENS'
+        )?.kind,
+        'integer_or_auto'
     );
 });
 

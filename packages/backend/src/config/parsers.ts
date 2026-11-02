@@ -152,6 +152,28 @@ export const parsePositiveIntEnv = (
     return fallback;
 };
 
+/** Parses a positive integer or the transport-aware `auto` Voice setting. */
+export const parsePositiveIntOrAutoEnv = (
+    value: string | undefined,
+    fallback: number | 'auto',
+    key: string,
+    warn: WarningSink
+): number | 'auto' => {
+    if (value === undefined) return fallback;
+    const trimmedValue = value.trim();
+    if (trimmedValue === 'auto') return 'auto';
+
+    const parsed = /^[+-]?\d+$/.test(trimmedValue)
+        ? Number(trimmedValue)
+        : Number.NaN;
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+
+    warn(
+        `Ignoring invalid positive integer or "auto" for ${key}: "${value}". Using default (${fallback}).`
+    );
+    return fallback;
+};
+
 /**
  * Parses non-negative integer env values used for counters where zero is
  * meaningful (for example disabling bounded retries).

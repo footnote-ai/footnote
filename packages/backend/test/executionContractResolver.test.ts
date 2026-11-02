@@ -99,7 +99,7 @@ test('resolveExecutionContract sanitizes unsafe numeric overrides and keeps hard
     assert.equal(resolved.policyContract.evidence.maxEscalationRounds, 1);
     assert.equal(resolved.policyContract.limits.maxWorkflowSteps, 7);
     assert.equal(resolved.policyContract.limits.maxToolCalls, 2);
-    assert.equal(resolved.policyContract.limits.maxDeliberationCalls, 3);
+    assert.equal(resolved.policyContract.limits.maxDeliberationCalls, 4);
     assert.equal(resolved.policyContract.limits.maxTokensTotal, 48_000);
     assert.equal(resolved.policyContract.limits.maxDurationMs, 90_000);
     assert.equal(resolved.policyContract.failOpen.authority, 'backend');

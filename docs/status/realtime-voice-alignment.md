@@ -234,19 +234,33 @@ initiating human's audio is forwarded; the call ends if another human joins
 or the caller mutes, deafens or leaves. The legacy Realtime adapter remains
 available for package tests but is not a fallback for either mode.
 
-`voice.max-answer-tokens` defaults to 160 and limits text handed to
-speech, independently of the generation budget. Both modes share this setting.
-The Unicode-aware estimate does not depend on English word boundaries or claim
-to match a provider's tokenizer. Internal limits cap Live at 400 estimated
-tokens and Standard at 1,600 estimated tokens and 3,686 code points.
+`voice.max-answer-tokens` defaults to `auto` and limits text handed to speech,
+independently of the generation budget. Both modes share this setting. A
+positive numeric value lowers the selected transport's ceiling. The
+Unicode-aware estimate does not depend on English word boundaries or claim to
+match a provider's tokenizer. Internal limits cap Live at 400 estimated tokens
+and Standard at 1,600 estimated tokens and 3,686 code points.
 
 When an approved draft exceeds the delivery limit, a single `condense` Step
 may shorten it before another assessment. Voice withholds the Workflow answer
 if there is too little capacity, the call is cancelled, reassessment fails,
 or the result is still too long. Live may still speak independently. TRACE
-continues to guide the answer's style and substance. A six-case synthetic
-evaluation fixture exists, but real-model quality, latency, usage, and cost
-have not been evaluated.
+continues to guide the answer's style and substance. The six-case fixture runs
+through the real Workflow under the default Balanced Standard path; a separate
+default-path regression covers both transports and modes. Its synthetic
+byte-based token estimates and local timing are not provider measurements.
+Real-model quality, latency, usage, and cost have not been evaluated.
+
+Before the default budget change, the real Workflow stopped Balanced Standard
+and Live runs after the initial three provider calls, at four of seven steps,
+with `max_deliberation_calls_reached`. The synthetic provider reported 90
+tokens; only the deliberation-call reservation blocked condensation. Raising
+only the test's Balanced deliberation override to six allowed recovery to
+finish in five calls and six steps. Grounded already finished that path under
+its default four-call allowance in five calls and six of ten steps. Step,
+review-cycle, token, and deadline capacity were not the limiting factor. The
+Balanced default now permits four deliberation calls; this shared allowance
+also applies to text workflows, while its other limits remain unchanged.
 
 All results so far are synthetic. We have not verified provider retention,
 transcript timing, latency, voice quality, complete usage/cost or playback
