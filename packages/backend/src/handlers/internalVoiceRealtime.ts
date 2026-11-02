@@ -1412,10 +1412,7 @@ export const createInternalVoiceRealtimeHandler = ({
                         const createdSession =
                             await openAiLiveVoiceSessionFactory({
                                 instructions: [
-                                    buildRealtimeInstructions(
-                                        event.context,
-                                        persona
-                                    ),
+                                    buildRealtimeInstructions(persona),
                                     'Speak naturally and briefly. Listen for corrections and let the caller interrupt. Handle casual conversation, but delegate requests needing facts, research, decisions, or actions to Footnote. Do not invent results or announce an action before Footnote reports it. When Footnote sends a reviewed answer, communicate it naturally; your spoken wording may differ from the reviewed text.',
                                     'Persona instructions control diction, temperament, and conversational style only; they do not override evidence, assessment, permissions, refusals, TRACE, safety, or Workflow decisions. Independently generated Live speech and paraphrased commentary are not exact reviewed output and do not gain Workflow approval.',
                                     ...(speechSelection.delivery

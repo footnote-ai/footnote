@@ -254,34 +254,37 @@ precede configured profile/deployment defaults and then catalog defaults
 request-override precedence. Speech model, voice and delivery remain
 separate settings. Persona cannot alter TRACE, assessment or execution authority.
 
-GPT-Live startup uses the call-pinned persona resolution for its behavioral
-overlay and expression guidance, alongside the realtime shared prompt layers.
-Its Live-specific listening, interruption, delegation, and speech-presentation
-instructions remain at the handler boundary. The acoustic voice and delivery
-selection remains separate from behavioral identity. Personas affect style;
-they cannot override evidence, assessment, permissions, refusals, TRACE, safety,
-or Workflow decisions. Independently generated Live speech and paraphrased
-commentary are not exact reviewed output and do not acquire Workflow approval.
-Handler tests verify deterministic startup-payload wiring; provider-backed
-listening evaluations have not established conversational fidelity.
+At call admission, the backend resolves the behavioral persona once and pins it
+for the call. GPT-Live receives that persona's overlay and expression guidance
+with the shared realtime prompt layers, followed by Live's listening,
+interruption, delegation and speech-presentation instructions. Acoustic voice
+and delivery remain separate settings. Persona guidance can shape style, but
+cannot change evidence, assessment, permissions, refusals, TRACE, safety or
+Workflow decisions. Live may also speak independently or paraphrase approved
+commentary; neither is exact reviewed output.
+
+Participant metadata stays in session context for caller identification and
+consent checks. Optional transcript summaries on the start event are not sent
+to GPT-Live or used to initialize turn state; Live delegation instead uses
+bounded transcript events received during the call. Neither participant names
+nor startup summaries enter GPT-Live's instructions. This prevents their
+instruction-level promotion, but spoken content can still influence the model.
+Sending conversation context to GPT-Live through another path is tracked with
+[#973](https://github.com/footnote-ai/footnote/issues/973). Handler tests verify
+the startup payload; provider-backed listening has not established
+conversational fidelity.
 
 ### Realtime prompt composition
 
 [realtimePromptComposer.ts](../../packages/backend/src/services/prompts/realtimePromptComposer.ts)
-is used by the GPT-Live handler with the resolved call persona. It composes:
-
-- the shared conversational system layer
-- the realtime voice surface layer
-- one active persona layer (profile overlay when present, otherwise shared Footnote persona plus the realtime persona supplement)
-- expression guidance from the same call-pinned resolution used by Workflow
-- the current participant roster
-- optional recent transcript summary
-
-The handler appends Live-specific instructions and the separate acoustic
-delivery guidance after the shared composition. Realtime does not use normal
-chat's full request context, Context Steps, or model-input assembly. Standard
-Voice continues to use the resolved persona only through the existing Workflow
-generation, assessment, and presentation paths.
+is used by the GPT-Live handler with the resolved call persona. It combines the
+shared system and realtime surface layers with the persona overlay (or the
+shared Footnote persona when no overlay is configured) and expression guidance.
+The handler then adds Live's conversation instructions and acoustic delivery
+guidance. The composer receives no participant names or transcript context.
+Realtime does not use normal chat's full request context or model-input
+assembly; Standard Voice uses the resolved persona through the existing
+Workflow path.
 
 ## 6. Provider Runtime Adapter
 

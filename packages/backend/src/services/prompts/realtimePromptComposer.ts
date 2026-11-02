@@ -5,51 +5,9 @@
  * @footnote-risk: high - Incorrect prompt composition can degrade realtime responses or misapply profile overlays.
  * @footnote-ethics: high - Realtime prompt text shapes live voice behavior and user expectations.
  */
-import type { InternalVoiceSessionContext } from '@footnote/contracts/voice';
 import { renderConversationPromptLayers } from './conversationPromptLayers.js';
 import { buildProfileOverlaySystemMessage } from './profilePromptOverlay.js';
 import type { ResolvedVoicePersona } from '../chatProfileOverlay.js';
-
-const WHITESPACE_REGEX = /\s+/g;
-const MAX_PARTICIPANT_LABEL_LENGTH = 128;
-const MAX_TRANSCRIPT_LINE_LENGTH = 240;
-
-const normalizeControlChars = (value: string): string => {
-    let result = '';
-    for (const char of value) {
-        const code = char.charCodeAt(0);
-        if (code < 32 || code === 127) {
-            result += ' ';
-        } else {
-            result += char;
-        }
-    }
-    return result;
-};
-
-const sanitizePromptLine = (
-    value: string | undefined,
-    maxLength: number,
-    fallback: string
-): string => {
-    if (!value) {
-        return fallback;
-    }
-
-    const normalized = normalizeControlChars(value)
-        .replace(WHITESPACE_REGEX, ' ')
-        .trim();
-    if (!normalized) {
-        return fallback;
-    }
-
-    if (normalized.length <= maxLength) {
-        return normalized;
-    }
-
-    const trimLength = Math.max(1, maxLength - 3);
-    return `${normalized.slice(0, trimLength)}...`;
-};
 
 const buildRealtimePersonaLayer = (persona: ResolvedVoicePersona): string => {
     const overlayMessage = buildProfileOverlaySystemMessage(
@@ -66,56 +24,18 @@ const buildRealtimePersonaLayer = (persona: ResolvedVoicePersona): string => {
     }).personaPrompt;
 };
 
-const formatParticipantRoster = (
-    participants: InternalVoiceSessionContext['participants']
-): string => {
-    if (!participants || participants.length === 0) {
-        return '- (no other participants currently detected)';
-    }
-
-    return participants
-        .map((participant) => {
-            const label = sanitizePromptLine(
-                participant.displayName,
-                MAX_PARTICIPANT_LABEL_LENGTH,
-                'Unknown participant'
-            );
-            return `- ${label}${participant.isBot ? ' (bot)' : ''}`;
-        })
-        .join('\n');
-};
-
-const formatTranscriptBlock = (transcripts?: string[]): string => {
-    if (!transcripts || transcripts.length === 0) {
-        return '';
-    }
-
-    return `\nRecent conversation summary:\n${transcripts
-        .map(
-            (line) =>
-                `- ${sanitizePromptLine(
-                    line,
-                    MAX_TRANSCRIPT_LINE_LENGTH,
-                    '(redacted)'
-                )}`
-        )
-        .join('\n')}`;
-};
-
 /**
  * Builds the full instructions string that the realtime runtime passes to the
- * provider session.
+ * provider session. Discord participant data and transcript content stay in
+ * session context and are not promoted into startup instructions.
  */
 export const buildRealtimeInstructions = (
-    context: InternalVoiceSessionContext,
     persona: ResolvedVoicePersona
 ): string => {
     const promptLayers = renderConversationPromptLayers('discord-realtime', {
         botProfileDisplayName: persona.profile.displayName,
     });
     const personaLayer = buildRealtimePersonaLayer(persona);
-    const roster = formatParticipantRoster(context.participants);
-    const transcriptBlock = formatTranscriptBlock(context.transcripts);
 
-    return `${promptLayers.systemPrompt.trimEnd()}\n\n${personaLayer}\n\n${persona.expression.guidance}\n\nParticipants currently in the voice channel:\n${roster}${transcriptBlock}`.trim();
+    return `${promptLayers.systemPrompt.trimEnd()}\n\n${personaLayer}\n\n${persona.expression.guidance}`.trim();
 };
