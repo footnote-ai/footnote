@@ -10,6 +10,7 @@ import test from 'node:test';
 import { performance } from 'node:perf_hooks';
 import {
     createVoltAgentRuntime,
+    GenerationRuntimeError,
     type GenerationRuntime,
 } from '@footnote/agent-runtime';
 import { createBoundedOllamaGenerationRuntime } from '../src/services/boundedOllamaRuntime.js';
@@ -1324,6 +1325,143 @@ test('default Balanced and Grounded Voice budgets can complete one condensation 
         );
     } finally {
         Object.assign(runtimeConfig.chatWorkflow, previous);
+    }
+});
+
+test('Balanced Voice recovery reserves its assessment after a planner route retry', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    const originalProfiles = runtimeConfig.modelProfiles;
+    const mutable = runtimeConfig as unknown as {
+        modelProfiles: typeof originalProfiles;
+    };
+    const baseProfile = originalProfiles.catalog.find(
+        (profile) => profile.id === 'openai-text-fast'
+    );
+    assert.ok(baseProfile);
+    const profiles = ['voice-retry-primary', 'voice-retry-backup'].map(
+        (id) => ({
+            ...baseProfile,
+            id,
+            enabled: true,
+            providerRouting: undefined,
+            promptCaching: undefined,
+        })
+    );
+    mutable.modelProfiles = {
+        ...originalProfiles,
+        plannerProfileId: profiles[0]!.id,
+        catalog: [...originalProfiles.catalog, ...profiles],
+        stepRoutingChains: Object.fromEntries(
+            Object.entries(originalProfiles.stepRoutingChains).map(
+                ([mode, chains]) => [
+                    mode,
+                    { ...chains, planner: profiles.map(({ id }) => id) },
+                ]
+            )
+        ) as typeof originalProfiles.stepRoutingChains,
+    };
+    runtimeConfig.chatWorkflow.modeId = 'balanced';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    let calls = 0;
+    let stored: ResponseMetadata | undefined;
+    try {
+        const outputs = [
+            '',
+            JSON.stringify(answerPlan()),
+            'This synthetic original answer exceeds the configured Voice delivery ceiling by a wide margin.',
+            JSON.stringify({
+                reviewDecision: 'finalize',
+                reviewReason: 'The original is supported.',
+            }),
+            '未確認。',
+            JSON.stringify({
+                reviewDecision: 'finalize',
+                reviewReason: 'The qualification remains clear.',
+            }),
+        ];
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: {
+                kind: 'synthetic',
+                generate: async (request) => {
+                    const call = calls++;
+                    if (call === 0) {
+                        throw new GenerationRuntimeError(
+                            'Synthetic transient planner failure.',
+                            { classification: 'transient' },
+                            {
+                                model: request.model,
+                                usage: {
+                                    promptTokens: 20,
+                                    completionTokens: 10,
+                                    totalTokens: 30,
+                                },
+                            }
+                        );
+                    }
+                    return {
+                        model: request.model,
+                        text: outputs[call] ?? '',
+                        usage: {
+                            promptTokens: 20,
+                            completionTokens: 10,
+                            totalTokens: 30,
+                        },
+                    };
+                },
+            },
+            storeTrace: async (metadata) => {
+                stored = metadata;
+            },
+            buildResponseMetadata,
+            defaultModel: 'gpt-5-mini',
+            recordUsage: () => undefined,
+        });
+        const result = await orchestrator.runRealtimeConversation(snapshot(), {
+            signal: new AbortController().signal,
+            onRunStarted: () => undefined,
+            voiceMode: 'live',
+            maxAnswerTokens: 12,
+        });
+        assert.equal(result.finalResponse?.disposition, 'approved');
+        if (result.finalResponse?.disposition !== 'approved') return;
+        assert.equal(result.finalResponse.text, '未確認。');
+        assert.equal(calls, 6);
+
+        const workflow = stored?.workflow;
+        const planner = workflow?.steps.find(
+            (step) => step.stepKind === 'plan'
+        );
+        const routingAttempts =
+            planner?.attempts?.flatMap(
+                (attempt) => attempt.routingAttempts ?? []
+            ) ?? [];
+        assert.deepEqual(
+            routingAttempts.map(({ status }) => status),
+            ['failed_transient_advanced', 'executed']
+        );
+        assert.equal(
+            workflow?.steps.filter((step) => step.stepKind === 'assess').length,
+            2
+        );
+        assert.ok(workflow?.steps.some((step) => step.stepKind === 'condense'));
+        assert.equal(
+            workflow?.effectiveLimits?.find(
+                ({ key }) => key === 'maxDeliberationCalls'
+            )?.value,
+            4
+        );
+        assert.equal(
+            workflow?.steps.reduce(
+                (total, step) => total + (step.usage?.totalTokens ?? 0),
+                0
+            ),
+            180
+        );
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+        mutable.modelProfiles = originalProfiles;
     }
 });
 

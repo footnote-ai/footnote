@@ -2645,6 +2645,14 @@ test('admin settings schemas validate contract payloads', () => {
                     description: 'Public web API rate limit per IP.',
                     defaultValue: 3,
                 },
+                {
+                    envKey: 'VOICE_MAX_ANSWER_TOKENS',
+                    section: 'voice',
+                    path: ['voice', 'max-answer-tokens'],
+                    kind: 'integer_or_auto',
+                    description: 'Maximum estimated answer tokens for Voice.',
+                    defaultValue: 'auto',
+                },
             ],
         }).success,
         true

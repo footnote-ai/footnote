@@ -1362,7 +1362,15 @@ export type AdminSettingsSchemaField = {
     envKey: string;
     section: string;
     path: string[];
-    kind: 'string' | 'boolean' | 'integer' | 'number' | 'csv' | 'enum' | 'json';
+    kind:
+        | 'string'
+        | 'boolean'
+        | 'integer'
+        | 'integer_or_auto'
+        | 'number'
+        | 'csv'
+        | 'enum'
+        | 'json';
     description: string;
     defaultValue?: string | number | boolean | readonly string[];
     allowedValues?: readonly string[];

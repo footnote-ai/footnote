@@ -3151,6 +3151,7 @@ export const GetAdminSettingsSchemaResponseSchema = z
                         'string',
                         'boolean',
                         'integer',
+                        'integer_or_auto',
                         'number',
                         'csv',
                         'enum',
