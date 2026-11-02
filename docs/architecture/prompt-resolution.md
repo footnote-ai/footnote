@@ -30,6 +30,8 @@ This is the canonical order Footnote uses to build runtime prompt text.
 For Discord chat, a persona ID matching an existing configured bot uses that
 operator profile and overlay before the bundled catalog. Other known IDs still
 use the catalog; unknown ordinary-chat IDs retain the warned Footnote fallback.
+Duplicate configured persona IDs retain ordinary chat's warned fallback routing;
+Voice disambiguates them with the configured Discord node ID.
 Voice resolves the configured profile once at admission and pins its expression
 strength and overlay for Standard and Live Workflow. Unavailable required
 overlays reject admission instead of invoking that chat fallback. Custom IDs

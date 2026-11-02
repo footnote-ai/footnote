@@ -222,22 +222,35 @@ export const resolveChatPersonaProfile = (
     request: Pick<PostChatRequest, 'surface' | 'botPersonaId'>,
     logger: ChatProfileOverlayLogger
 ): BotProfileConfig => {
-    if (
-        request.surface === 'discord' &&
-        (request.botPersonaId?.trim().toLowerCase() ===
-            runtimeConfig.profile.id ||
-            runtimeConfig.settings.discordBots?.some(
+    if (request.surface === 'discord') {
+        const requestedPersonaId = request.botPersonaId?.trim().toLowerCase();
+        const matches =
+            runtimeConfig.settings.discordBots?.filter(
                 (bot) =>
                     bot.enabled !== false &&
-                    bot.profile?.id === request.botPersonaId
-            ))
-    ) {
-        return resolveConfiguredPersonaProfile(
-            resolveInvokingBotProfile(runtimeConfig.profile, {
-                botPersonaId: request.botPersonaId,
-            }),
-            logger
-        );
+                    bot.profile?.id !== undefined &&
+                    bot.profile.id === requestedPersonaId
+            ) ?? [];
+        // Ordinary chat has no node identity; ambiguous configurations retain catalog routing.
+        const configured =
+            matches.length === 1
+                ? resolveInvokingBotProfile(runtimeConfig.profile, {
+                      botPersonaId: requestedPersonaId,
+                  })
+                : requestedPersonaId === runtimeConfig.profile.id
+                  ? runtimeConfig.profile
+                  : null;
+        if (matches.length > 1)
+            logger.warn(
+                'chat persona configuration is ambiguous; retaining fallback routing',
+                {
+                    runtimeProfileId: runtimeConfig.profile.id,
+                    surface: request.surface,
+                    requestedPersonaId,
+                }
+            );
+        if (configured)
+            return resolveConfiguredPersonaProfile(configured, logger);
     }
     return buildPersonaProfileConfig(
         resolvePersonaEntry(request, logger),

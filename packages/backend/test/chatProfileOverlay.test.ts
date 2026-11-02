@@ -151,6 +151,38 @@ test('matching Discord identity preserves the operator profile and overlay', () 
     }
 });
 
+test('duplicate configured persona IDs preserve ordinary chat fallback while Voice requires a node identity', () => {
+    const previous = runtimeConfig.settings.discordBots;
+    runtimeConfig.settings.discordBots = [
+        { id: 'one', profile: { id: 'danny', displayName: 'First Danny' } },
+        { id: 'two', profile: { id: 'danny', displayName: 'Second Danny' } },
+    ];
+    try {
+        assert.equal(
+            resolveChatPersonaProfile(
+                { surface: 'discord', botPersonaId: 'danny' },
+                logger
+            ).displayName,
+            'Danny'
+        );
+        const backend = parseBotProfileConfig({ profileId: 'footnote' });
+        assert.throws(
+            () =>
+                resolveVoicePersona(backend, logger, { botPersonaId: 'danny' }),
+            /Configured Voice persona identity/
+        );
+        assert.equal(
+            resolveVoicePersona(backend, logger, {
+                botPersonaId: 'danny',
+                discordNodeId: 'two',
+            }).profile.displayName,
+            'Second Danny'
+        );
+    } finally {
+        runtimeConfig.settings.discordBots = previous;
+    }
+});
+
 test('Voice preserves custom and built-in operator overlays and expression overrides', () => {
     for (const id of ['operator', 'footnote', 'danny', 'myuri', 'winter']) {
         const configured = parseBotProfileConfig({
