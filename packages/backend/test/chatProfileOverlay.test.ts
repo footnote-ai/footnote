@@ -48,6 +48,82 @@ test('Voice admission pins bundled identity and expression defaults without acou
     }
 });
 
+test('Voice selects the invoking Discord node from existing server configuration', () => {
+    const previous = runtimeConfig.settings.discordBots;
+    runtimeConfig.settings.discordBots = [
+        {
+            id: 'danny-bot',
+            profile: {
+                id: 'danny',
+                displayName: 'Danny bot',
+                personaExpressionStrength: 'subtle',
+            },
+        },
+        {
+            id: 'winter-bot',
+            profile: { id: 'winter', displayName: 'Winter bot' },
+        },
+    ];
+    try {
+        const backend = parseBotProfileConfig({ profileId: 'footnote' });
+        const danny = resolveVoicePersona(backend, logger, {
+            discordNodeId: 'danny-bot',
+            botPersonaId: 'danny',
+        });
+        const winter = resolveVoicePersona(backend, logger, {
+            discordNodeId: 'winter-bot',
+            botPersonaId: 'winter',
+        });
+        assert.equal(danny.profile.id, 'danny');
+        assert.equal(danny.profile.displayName, 'Danny bot');
+        assert.equal(danny.expression.strength, 'subtle');
+        assert.equal(winter.profile.id, 'winter');
+        assert.equal(winter.expression.strength, 'strong');
+        assert.equal(
+            resolveVoicePersona(backend, logger, {
+                discordNodeId: 'winter-bot',
+                botPersonaId: 'winter',
+                personaExpressionProfileStrength: 'balanced',
+            }).expression.strength,
+            'balanced'
+        );
+        const chatProfile = resolveChatPersonaProfile(
+            { surface: 'discord', botPersonaId: 'danny' },
+            logger
+        );
+        assert.equal(chatProfile.displayName, 'Danny bot');
+        assert.equal(
+            resolvePersonaExpression({}, chatProfile).strength,
+            'subtle'
+        );
+        assert.throws(
+            () =>
+                resolveVoicePersona(backend, logger, {
+                    discordNodeId: 'unknown',
+                    botPersonaId: 'winter',
+                }),
+            /Configured Voice persona/
+        );
+        assert.throws(
+            () =>
+                resolveVoicePersona(backend, logger, {
+                    discordNodeId: 'danny-bot',
+                    botPersonaId: 'winter',
+                }),
+            /Configured Voice persona/
+        );
+        assert.throws(
+            () =>
+                resolveVoicePersona(backend, logger, {
+                    botPersonaId: 'unregistered-custom',
+                }),
+            /Configured Voice persona/
+        );
+    } finally {
+        runtimeConfig.settings.discordBots = previous;
+    }
+});
+
 test('matching Discord identity preserves the operator profile and overlay', () => {
     const previous = { ...runtimeConfig.profile };
     try {

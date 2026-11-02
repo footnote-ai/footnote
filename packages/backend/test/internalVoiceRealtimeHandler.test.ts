@@ -8,6 +8,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { once } from 'node:events';
+import { runtimeConfig } from '../src/config.js';
+import { parseBotProfileConfig } from '../src/config/profile.js';
 import { Duplex } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import WebSocket from 'ws';
@@ -154,6 +160,7 @@ class StubOpenAiLiveVoiceSession implements OpenAiLiveVoiceSession {
 }
 
 type RealtimeHandlerHarness = {
+    baseUrl: string;
     close: () => Promise<void>;
     connect: (headers?: Record<string, string>) => Promise<WebSocket>;
     lastLiveSession: () => StubOpenAiLiveVoiceSession | null;
@@ -259,6 +266,7 @@ const createRealtimeHandlerHarness = async (
     assert.ok(address && typeof address === 'object');
 
     return {
+        baseUrl: `http://127.0.0.1:${address.port}`,
         close: () =>
             new Promise((resolve, reject) => {
                 server.close((error) => {
@@ -1132,6 +1140,144 @@ for (const mode of ['standard', 'live'] as const) {
         }
     });
 }
+
+test('real Discord adapters select their configured personas against a shared Footnote backend', async () => {
+    const envKeys = [
+        'DISCORD_TOKEN',
+        'DISCORD_CLIENT_ID',
+        'DISCORD_USER_ID',
+        'DISCORD_GUILD_IDS',
+        'INCIDENT_PSEUDONYMIZATION_SECRET',
+        'LOCAL_DISCORD_NODE_ID',
+    ] as const;
+    const previousEnv = envKeys.map((key) => [key, process.env[key]] as const);
+    for (const key of envKeys) process.env[key] = 'synthetic-only';
+    const previousBots = runtimeConfig.settings.discordBots;
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'voice-persona-'));
+    const overlayPath = path.join(root, 'operator.md');
+    await fs.writeFile(overlayPath, 'PRIVATE_NODE_OVERLAY');
+    const { RealtimeSession } =
+        await import('../../discord-bot/src/utils/realtimeService.js');
+    const { runtimeConfig: botConfig } =
+        await import('../../discord-bot/src/config.js');
+    const previousBotConfig = { ...botConfig };
+    runtimeConfig.settings.discordBots = [
+        {
+            id: 'danny-node',
+            profile: {
+                id: 'danny',
+                displayName: 'Danny',
+                personaExpressionStrength: 'subtle',
+            },
+        },
+        { id: 'winter-node', profile: { id: 'winter', displayName: 'Winter' } },
+        {
+            id: 'custom-node',
+            profile: { id: 'custom', displayName: 'Custom', overlayPath },
+        },
+    ];
+    try {
+        for (const id of ['danny', 'winter', 'custom']) {
+            let received: Parameters<
+                RealtimeWorkflowRunner['runRealtimeConversation']
+            >[1]['persona'];
+            const harness = await createRealtimeHandlerHarness({
+                profile: parseBotProfileConfig({
+                    profileId: 'footnote',
+                    profileDisplayName: 'Footnote',
+                }),
+                defaultMode: 'standard',
+                openRouterVoiceService: {
+                    async transcribe() {
+                        return { text: 'Question for the invoking bot' };
+                    },
+                    async synthesize() {
+                        return { audio: Buffer.from([0, 0]) };
+                    },
+                },
+                workflowRunner: {
+                    async runRealtimeConversation(_snapshot, context) {
+                        received = context.persona;
+                        context.onRunStarted('run');
+                        return {
+                            responseId: 'response',
+                            runId: 'run',
+                            status: 'completed',
+                            finalResponse: {
+                                disposition: 'approved',
+                                responseId: 'response',
+                                runId: 'run',
+                                candidateId: 'candidate',
+                                generationStepId: 'answer',
+                                assessmentStepId: 'review',
+                                text: 'Approved answer.',
+                            },
+                        };
+                    },
+                },
+            });
+            Object.assign(botConfig, {
+                backendBaseUrl: harness.baseUrl,
+                serviceToken: 'service-token',
+                traceApiToken: 'trace-token',
+                profile: parseBotProfileConfig({
+                    profileId: id,
+                    personaExpressionStrength:
+                        id === 'danny' ? 'subtle' : undefined,
+                }),
+            });
+            process.env.LOCAL_DISCORD_NODE_ID = `${id}-node`;
+            const session = new RealtimeSession({
+                mode: 'standard',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
+            });
+            session.on('error', () => undefined);
+            try {
+                await session.connect();
+                const delivered = once(session, 'audio', {
+                    signal: AbortSignal.timeout(2000),
+                });
+                await session.sendAudio(
+                    Buffer.from([0, 0, 1, 0]),
+                    'Alice',
+                    'user-1'
+                );
+                await session.commitAudio();
+                await delivered;
+                assert.equal(received?.profile.id, id);
+                assert.equal(
+                    received?.expression.strength,
+                    id === 'danny'
+                        ? 'subtle'
+                        : id === 'winter'
+                          ? 'strong'
+                          : 'balanced'
+                );
+                if (id === 'custom')
+                    assert.equal(
+                        received?.profile.promptOverlay.text,
+                        'PRIVATE_NODE_OVERLAY'
+                    );
+            } finally {
+                session.disconnect();
+                await harness.close();
+            }
+        }
+    } finally {
+        runtimeConfig.settings.discordBots = previousBots;
+        Object.assign(botConfig, previousBotConfig);
+        for (const [key, value] of previousEnv) {
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+        }
+        await fs.rm(root, { recursive: true, force: true });
+    }
+});
 
 test('Live closes when audio comes from anyone except the consenting initiator', async () => {
     const stubLiveSession = new StubOpenAiLiveVoiceSession();

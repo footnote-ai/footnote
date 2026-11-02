@@ -27,7 +27,7 @@ This is the canonical order Footnote uses to build runtime prompt text.
 
 ## Operator Notes
 
-For Discord chat, a persona ID matching the backend's configured bot uses that
+For Discord chat, a persona ID matching an existing configured bot uses that
 operator profile and overlay before the bundled catalog. Other known IDs still
 use the catalog; unknown ordinary-chat IDs retain the warned Footnote fallback.
 Voice resolves the configured profile once at admission and pins its expression

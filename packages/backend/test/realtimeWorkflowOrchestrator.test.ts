@@ -176,6 +176,8 @@ for (const mode of ['standard', 'live'] as const) {
                 runtimeConfig.chatWorkflow.modeId = previousMode;
                 runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
                 Object.assign(runtimeConfig.profile, previousProfile);
+                runtimeConfig.profile.personaExpressionStrength =
+                    previousProfile.personaExpressionStrength;
             }
         });
     }

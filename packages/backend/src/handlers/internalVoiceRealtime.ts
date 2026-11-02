@@ -1259,12 +1259,16 @@ export const createInternalVoiceRealtimeHandler = ({
                     return;
                 }
                 try {
-                    persona = resolveVoicePersona(profile, realtimeLogger);
+                    persona = resolveVoicePersona(
+                        profile,
+                        realtimeLogger,
+                        event
+                    );
                 } catch {
                     sendServerEvent(ws, {
                         type: 'error',
                         message:
-                            'Configured Voice persona overlay is unavailable. Check the bot profile configuration.',
+                            'Configured Voice persona is unavailable. Check the bot identity and overlay configuration.',
                         code: 'voice_persona_unavailable',
                     });
                     return;
@@ -1286,7 +1290,7 @@ export const createInternalVoiceRealtimeHandler = ({
                 setupTimeout.unref?.();
                 realtimeLogger.info('Internal voice session starting.', {
                     mode,
-                    profileId: profile.id,
+                    profileId: persona.profile.id,
                 });
                 if (mode === 'standard') {
                     speechSelection = resolveSpeechSelection({

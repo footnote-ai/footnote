@@ -234,13 +234,24 @@ require an overlay. Missing, empty or rejected required overlays return
 `voice_persona_unavailable` before provider startup rather than substituting
 Footnote. There is no `/call` persona selector.
 
+The authenticated Discord adapter sends its configured persona ID and, when
+supervised, `LOCAL_DISCORD_NODE_ID` as internal session metadata. The backend
+selects that node's profile from the existing `discord-bots` settings, reads its
+configured overlay through the shared profile parser, and checks that the
+adapter identity agrees. Overlay text and file paths never come from the
+session request. This supports several differently configured bots sharing one
+backend. Standalone adapters use the matching backend profile or bundled
+catalog; custom standalone profiles must also be configured on the backend.
+Legacy clients without identity metadata retain the backend profile default.
+
 Standard and Live delegation carry this call-scoped resolution through the
 existing `RealtimeWorkflowRunner` context into normal chat prompt assembly,
 generation, assessment and presentation. The private persona data stays outside
 the conversation snapshot and metadata-only Voice receipts. Corrections and
-interruptions do not re-resolve identity. Profile expression overrides precede
-catalog defaults (`strong` for Winter, `balanced` otherwise); ordinary chat
-retains its request-override precedence. Speech model, voice and delivery remain
+interruptions do not re-resolve identity. Adapter profile expression preferences
+precede configured profile/deployment defaults and then catalog defaults
+(`strong` for Winter, `balanced` otherwise); ordinary chat retains its
+request-override precedence. Speech model, voice and delivery remain
 separate settings. Persona cannot alter TRACE, assessment or execution authority.
 
 GPT-Live startup currently receives the pinned display name, generic listening

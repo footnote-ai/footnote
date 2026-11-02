@@ -9,7 +9,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import type { BotProfileConfig } from '../config/profile.js';
-import { parsePersonaExpressionStrength } from '../config/profile.js';
+import {
+    parsePersonaExpressionStrength,
+    readBotProfileConfig,
+} from '../config/profile.js';
+import type { InternalVoiceRealtimeClientEvent } from '@footnote/contracts/voice';
 import { buildProfileOverlaySystemMessage } from './prompts/profilePromptOverlay.js';
 import {
     buildPersonaExpressionGuidance,
@@ -186,9 +190,10 @@ export const resolvePersonaExpression = (
         PostChatRequest,
         'personaExpressionProfileStrength' | 'personaExpressionStrength'
     >,
-    persona: Pick<PersonaCatalogEntry, 'id'>,
-    configuredProfileStrength: string | undefined = runtimeConfig.profile
-        .personaExpressionStrength
+    persona: Pick<BotProfileConfig, 'id' | 'personaExpressionStrength'>,
+    configuredProfileStrength:
+        string | undefined = persona.personaExpressionStrength ??
+        runtimeConfig.profile.personaExpressionStrength
 ): PersonaExpressionResolution => {
     const requestStrength = parsePersonaExpressionStrength(
         request.personaExpressionStrength
@@ -219,9 +224,20 @@ export const resolveChatPersonaProfile = (
 ): BotProfileConfig => {
     if (
         request.surface === 'discord' &&
-        request.botPersonaId?.trim().toLowerCase() === runtimeConfig.profile.id
+        (request.botPersonaId?.trim().toLowerCase() ===
+            runtimeConfig.profile.id ||
+            runtimeConfig.settings.discordBots?.some(
+                (bot) =>
+                    bot.enabled !== false &&
+                    bot.profile?.id === request.botPersonaId
+            ))
     ) {
-        return resolveConfiguredPersonaProfile(runtimeConfig.profile, logger);
+        return resolveConfiguredPersonaProfile(
+            resolveInvokingBotProfile(runtimeConfig.profile, {
+                botPersonaId: request.botPersonaId,
+            }),
+            logger
+        );
     }
     return buildPersonaProfileConfig(
         resolvePersonaEntry(request, logger),
@@ -257,11 +273,79 @@ export type ResolvedVoicePersona = Readonly<{
     overlaySelection: 'configured' | 'catalog' | 'default';
 }>;
 
+type VoicePersonaIdentity = Pick<
+    Extract<InternalVoiceRealtimeClientEvent, { type: 'session.start' }>,
+    'botPersonaId' | 'discordNodeId' | 'personaExpressionProfileStrength'
+>;
+
+/** Looks up existing operator-owned bot configuration; adapter data never supplies overlay text or a path. */
+const resolveInvokingBotProfile = (
+    fallback: BotProfileConfig,
+    identity: VoicePersonaIdentity
+): BotProfileConfig => {
+    if (!identity.botPersonaId && !identity.discordNodeId) return fallback;
+    const bots = runtimeConfig.settings.discordBots ?? [];
+    const matches = bots.filter(
+        (bot) =>
+            bot.enabled !== false &&
+            (identity.discordNodeId
+                ? bot.id === identity.discordNodeId
+                : bot.profile?.id === identity.botPersonaId)
+    );
+    if (matches.length > 1 || (identity.discordNodeId && matches.length !== 1))
+        throw new Error('Configured Voice persona identity is unavailable.');
+    const selected = matches[0]?.profile;
+    if (selected) {
+        if (
+            !selected.id ||
+            !selected.displayName ||
+            (identity.botPersonaId && selected.id !== identity.botPersonaId)
+        )
+            throw new Error(
+                'Configured Voice persona identity is unavailable.'
+            );
+        const profile = readBotProfileConfig({
+            env: {
+                BOT_PROFILE_ID: selected.id,
+                BOT_PROFILE_DISPLAY_NAME: selected.displayName,
+                BOT_PROFILE_MENTION_ALIASES: selected.mentionAliases?.join(','),
+                BOT_PROFILE_PROMPT_OVERLAY:
+                    fallback.promptOverlay.source === 'inline'
+                        ? (fallback.promptOverlay.text ?? undefined)
+                        : undefined,
+                BOT_PROFILE_PROMPT_OVERLAY_PATH: selected.overlayPath,
+                BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH:
+                    selected.personaExpressionStrength,
+            },
+            projectRoot: runtimeConfig.runtime.projectRoot,
+            warn: () => undefined,
+        });
+        // A rejected inherited inline overlay still outranks a node's file overlay.
+        if (fallback.promptOverlay.unavailable)
+            profile.promptOverlay = { ...fallback.promptOverlay };
+        return profile;
+    }
+    if (identity.discordNodeId)
+        throw new Error('Configured Voice persona identity is unavailable.');
+    if (identity.botPersonaId === fallback.id) return fallback;
+    const persona = PERSONA_CATALOG[identity.botPersonaId ?? ''];
+    if (!persona)
+        throw new Error('Configured Voice persona identity is unavailable.');
+    return {
+        id: persona.id,
+        displayName: persona.displayName,
+        mentionAliases: [],
+        promptOverlay: { source: 'none', text: null, path: null, length: 0 },
+    };
+};
+
 /** Pins backend-owned persona data once per call, separately from speech selection. */
 export const resolveVoicePersona = (
     configuredProfile: BotProfileConfig,
-    logger: ChatProfileOverlayLogger
+    logger: ChatProfileOverlayLogger,
+    identity: VoicePersonaIdentity = {}
 ): ResolvedVoicePersona => {
+    configuredProfile = resolveInvokingBotProfile(configuredProfile, identity);
     const effective = resolveConfiguredPersonaProfile(
         configuredProfile,
         logger
@@ -282,9 +366,14 @@ export const resolveVoicePersona = (
         personaExpressionStrength: effective.personaExpressionStrength,
     };
     const expression = resolvePersonaExpression(
-        {},
+        {
+            personaExpressionProfileStrength:
+                identity.personaExpressionProfileStrength,
+        },
         profile,
-        profile.personaExpressionStrength ?? ''
+        profile.personaExpressionStrength ??
+            runtimeConfig.profile.personaExpressionStrength ??
+            ''
     );
     Object.freeze(profile.mentionAliases);
     Object.freeze(profile.promptOverlay);

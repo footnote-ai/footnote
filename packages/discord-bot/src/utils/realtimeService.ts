@@ -212,6 +212,16 @@ export class RealtimeSession extends EventEmitter {
         this.sendClientEvent({
             type: 'session.start',
             context: this.sessionContext,
+            botPersonaId: runtimeConfig.profile.id,
+            ...(process.env.LOCAL_DISCORD_NODE_ID?.trim()
+                ? { discordNodeId: process.env.LOCAL_DISCORD_NODE_ID.trim() }
+                : {}),
+            ...(runtimeConfig.profile.personaExpressionStrength
+                ? {
+                      personaExpressionProfileStrength:
+                          runtimeConfig.profile.personaExpressionStrength,
+                  }
+                : {}),
             mode: this.mode,
             ...(this.initiatorId ? { initiatorId: this.initiatorId } : {}),
             ...(this.requestExtendedDuration
