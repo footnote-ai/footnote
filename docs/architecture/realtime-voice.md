@@ -7,13 +7,13 @@ bot handles Discord audio; the backend handles providers, Workflow and usage
 records. Discord connects to `/api/internal/voice/realtime`, not directly to
 OpenAI.
 
-PR #965 adds two modes. **Standard** uses OpenRouter to transcribe speech and
-synthesize the Workflow-approved answer. **Live** uses GPT-Live for conversation
-and delegates substantive requests to the same Workflow. GPT-Live can also speak
-on its own or paraphrase approved commentary. The
-[alignment tracker](../status/realtime-voice-alignment.md) lists the tests and
-remaining gaps. Neither mode has been tested with paid providers or a real
-Discord call.
+Voice has two modes. **Standard** uses OpenRouter to transcribe speech and
+synthesize Workflow-approved answers. **Live** uses GPT-Live for conversation
+and delegates substantive requests to the same Workflow, though it may speak
+independently or paraphrase approved commentary. The
+[alignment tracker](../status/realtime-voice-alignment.md) records what's been
+tested and what remains uncertain. Neither mode has been tested with paid
+providers or in a real Discord call.
 
 ## High-Level Flow
 
@@ -226,53 +226,64 @@ Discord uses this handler for realtime voice rather than opening its own provide
 
 ### Current Standard and Live calls
 
-At call admission, the backend resolves and freezes the configured bot persona:
-ID, display name, aliases, overlay and expression strength. An operator overlay
-wins over the bundled catalog; without one, Danny, Myuri and Winter use their
-bundled overlays, and Footnote uses its default persona layer. Custom identities
-require an overlay. Missing, empty or rejected required overlays return
-`voice_persona_unavailable` before provider startup rather than substituting
-Footnote. There is no `/call` persona selector.
+A `/call` uses the persona configured for the bot that received it; callers
+do not select a different one. When the call starts, the backend resolves the
+persona's ID, display name, aliases, behavioral overlay and expression strength.
+That selection stays fixed through corrections and interruptions.
 
-The authenticated Discord adapter sends its configured persona ID and, when
-supervised, `LOCAL_DISCORD_NODE_ID` as internal session metadata. The backend
-selects that node's profile from the existing `discord-bots` settings, reads its
-configured overlay through the shared profile parser, and checks that the
-adapter identity agrees. Overlay text and file paths never come from the
-session request. This supports several differently configured bots sharing one
-backend. Standalone adapters use the matching backend profile or bundled
-catalog; custom standalone profiles must also be configured on the backend.
-Legacy clients without identity metadata retain the backend profile default.
+An operator overlay takes precedence over a bundled persona. Without one,
+Danny, Myuri and Winter use their bundled overlays, while Footnote uses its
+default persona layer. Custom personas require an overlay. If a required
+overlay is missing, empty or rejected, admission fails with
+`voice_persona_unavailable` rather than silently switching to Footnote.
 
-Standard and Live delegation carry this call-scoped resolution through the
-existing `RealtimeWorkflowRunner` context into normal chat prompt assembly,
-generation, assessment and presentation. The private persona data stays outside
-the conversation snapshot and metadata-only Voice receipts. Corrections and
-interruptions do not re-resolve identity. Adapter profile expression preferences
-precede configured profile/deployment defaults and then catalog defaults
-(`strong` for Winter, `balanced` otherwise); ordinary chat retains its
-request-override precedence. Speech model, voice and delivery remain
-separate settings. Persona cannot alter TRACE, assessment or execution authority.
+For supervised bots, the authenticated Discord adapter sends its configured
+persona ID and `LOCAL_DISCORD_NODE_ID`. The backend finds the corresponding
+profile in `discord-bots`, loads its overlay through the shared parser and
+checks that the identities agree. The session request cannot supply overlay
+text or file paths. This allows several bots with different personas to share
+a backend. Standalone adapters use a matching backend profile or bundled
+persona; custom standalone profiles must be configured on the backend too.
+Older clients that send no identity metadata use the backend's default profile.
 
-GPT-Live startup currently receives the pinned display name, generic listening
-and delegation instructions, and acoustic delivery guidance. It does **not** yet
-receive the resolved behavioral overlay or expression guidance. Startup parity
-and listening evaluations are subsequent slices of #974; independently spoken
-or paraphrased Live output is not Workflow-approved speech.
+Standard Voice and delegated Live requests pass this resolved persona to the
+existing `RealtimeWorkflowRunner`. Generation, assessment and presentation
+therefore use the same identity without loading it again for each turn.
+Private persona data stays out of conversation snapshots and metadata-only
+Voice receipts. The adapter's expression preference takes precedence over
+configured profile and deployment defaults, followed by catalog defaults
+(`strong` for Winter, `balanced` otherwise). Ordinary text chat keeps its
+own request-override rules.
 
-### Legacy realtime composer
+### GPT-Live startup instructions
 
+GPT-Live uses the same pinned persona for its own conversation.
 [realtimePromptComposer.ts](../../packages/backend/src/services/prompts/realtimePromptComposer.ts)
-is not used by the current Standard or GPT-Live handler. It builds legacy
-Realtime instructions using:
+combines the shared conversational and realtime instructions with that
+persona's overlay (or Footnote's default layer) and expression guidance. The
+handler adds the rules for listening, interruptions and delegation, plus speech
+delivery guidance. Voice and delivery settings remain separate from behavioral
+identity.
 
-- the shared conversational system layer
-- the realtime voice surface layer
-- one active persona layer (profile overlay when present, otherwise shared Footnote persona plus the realtime persona supplement)
-- the current participant roster
-- optional recent transcript summary
+A persona can affect wording, temperament and conversational style. It cannot
+override evidence, assessment, permissions, refusals, TRACE, safety or Workflow
+decisions. Standard Voice synthesizes the approved answer text; GPT-Live can
+also speak independently or paraphrase approved commentary. Those Live
+utterances are not exact, Workflow-approved renditions of the answer.
 
-Realtime reuses the shared prompt-layer renderer and profile-overlay formatter, but it does not use normal chat's full request context, Context Steps, or model-input assembly. Its active profile is the backend's configured bot profile for the session.
+The startup instructions contain no Discord participant names or supplied
+transcript summaries. Participant metadata remains in session context for
+caller identification and consent checks. Optional summaries sent at startup
+are not used to initialize turn state; Live delegation uses bounded transcript
+events received during the call. Keeping names and summaries out of provider
+instructions prevents them from being treated as behavioral authority, though
+spoken input can still influence GPT-Live. Further context updates belong to
+[#973](https://github.com/footnote-ai/footnote/issues/973).
+
+Tests check the instructions sent to the provider session factory and their
+consistency with delegated Workflow. They do not show how faithfully GPT-Live
+will follow the persona in a real conversation. Live also does not use normal
+text chat's full request context or model-input assembly.
 
 ## 6. Provider Runtime Adapter
 

@@ -1,43 +1,50 @@
 # Realtime Voice alignment
 
-Updated: 2026-11-01. Owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
+Updated: 2026-11-02. Owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
 
-PR #965 connects Discord's Standard and Live modes to the existing Workflow
-and answer-approval path. The adapters and call lifecycle have synthetic tests.
-Paid-provider behavior and real Discord playback are still unverified.
+[PR #965](https://github.com/footnote-ai/footnote/pull/965) connected
+Standard and Live Voice to Footnote's existing Workflow. Standard speaks the
+approved answer through TTS. Live handles conversation through GPT-Live and
+delegates substantive requests to Workflow, but may also speak on its own or
+paraphrase approved commentary.
 
-The first #974 slice pins backend persona resolution at call admission and
-propagates it to Standard and Live Workflow, including configured/custom overlays
-and expression strength. Resolver, handler and real Workflow tests use synthetic
-providers for Footnote, Danny, Myuri, Winter and a custom identity; private overlay
-text remains outside persisted Voice records. Required overlays that cannot be
-resolved reject admission. GPT-Live receives the pinned display name, but its
-behavioral overlay/expression startup parity and listening evaluations remain
-unimplemented. `realtimePromptComposer.ts` does not supply its current startup
-payload.
+Voice now uses the invoking bot's persona across both modes. At call admission,
+the backend selects and pins the identity, behavioral overlay and expression
+strength. Workflow receives that selection, and GPT-Live receives the same
+behavioral guidance at startup. If a required overlay is unavailable, the call
+does not start under a substitute persona.
 
-The [architecture guide](../architecture/realtime-voice.md) describes the
+Discord participant names and optional startup transcript summaries stay out
+of GPT-Live's instructions. Participant metadata is still available for caller
+and consent checks, while Live delegation uses transcript events received
+during the call. This keeps user-controlled startup text from becoming
+instructions; it does not prevent spoken input from influencing the model.
+Private overlay text is not written to Voice receipts or diagnostic metadata.
+
+Tests cover the actual startup payload, delegated Workflow and call boundaries
+with synthetic providers. We have not yet evaluated persona fidelity, provider
+behavior or playback in a real Discord call. Independent Live speech and
+paraphrased commentary cannot be treated as the exact reviewed answer.
+
+The [architecture guide](../architecture/realtime-voice.md) explains the
 implementation. The [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
-covers the remaining work and consent decisions.
+covers the remaining design work and consent decisions.
 
 ## Alignment matrix
 
-| Area                      | Current implementation in PR #965                                                                                                                                                                                                            | Evidence / remaining limit                                                                                                                           |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Standard                  | OpenRouter transcription → existing Workflow → approved exact-text synthesis; Discord streams PCM and reports local playback state.                                                                                                          | Backend adapter/handler and Discord synthetic tests. Paid provider behavior, usage completeness and human audibility are unverified.                 |
-| Live                      | Backend-owned GPT-Live session accepts only the initiating caller's audio. Client delegation is matched to bounded transcript context and current turn before starting the same Workflow; only an approved result is appended as commentary. | Synthetic WebSocket and handler tests. Transcript timing, independent model speech, paraphrase, provider retention, cost and latency are unverified. |
-| Selection and limits      | `/call mode` selects standard/live; `VOICE_DEFAULT_MODE` supplies the default. Calls are 60 seconds; configured developer may request five minutes. One human is admitted.                                                                   | Config, command and handler tests. Deployment configuration and real Discord participant events remain unverified.                                   |
-| Interruption and playback | Caller audio interrupts local playback; disconnect, caller mute/deafen/leave, or another human joining closes the call. Standard reports local start/end/failure; Live audio has no reviewed-text delivery receipt.                          | Discord synthetic tests. Local playback state cannot prove a listener heard audio or remote generation stopped.                                      |
-| Privacy and capacity      | Transcript and audio remain transient; call closes clear state and cancel/revoke local work. Process-local Workflow capacity remains occupied until work settles. Provider failure does not switch modes.                                    | Backend privacy/cancellation tests. Provider retention and deployment recovery are unverified.                                                       |
+| Area            | Current behavior                                                                                                                                                      | What remains unverified                                                                                       |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Persona         | Standard, Live delegation and GPT-Live startup use the same call-pinned behavioral persona. Participant names and startup summaries are not included in instructions. | Tests confirm the wiring, not how consistently GPT-Live follows it.                                           |
+| Speech approval | Standard speaks approved Workflow text. Live may speak independently or paraphrase approved commentary.                                                               | Live audio cannot be verified as the exact reviewed wording; actual speech and audibility still need testing. |
+| Call handling   | One consenting caller is admitted. Live delegation is matched to the current turn, and interruption or closure revokes stale delivery.                                | Real Discord events, provider retention and recovery after deployment failure still need evaluation.          |
 
-The detailed matrix below records the pre-PR #965 baseline through #964. Its
-older `Gap` entries are historical and are superseded by the current matrix
-above; remaining work is listed after the foundation sections.
+The detailed matrix below preserves the baseline through #964. Its earlier
+`Gap` entries describe that period, not necessarily the current implementation.
+Remaining work is tracked in the sections that follow.
 
-Paths in the evidence column are relative to `packages/`.
-"Implemented" means present in code. Synthetic call-state tests exercise the new
-foundation without a provider; they do not establish live voice behavior.
-"Gap" means implementation is still required.
+Paths in the evidence column are relative to `packages/`. In the historical
+matrix, `Implemented` means code exists, not that it was exercised with a
+real provider. `Gap` marks work that had not yet been implemented.
 
 | Area                               | Ordinary chat baseline                                                                                                                                                                     | Realtime baseline / classification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Evidence                                                                                                                                                                                                                                                                                                                                                           | Owner / next work                                                                                                                                       |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
