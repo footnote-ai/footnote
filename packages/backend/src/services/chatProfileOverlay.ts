@@ -9,7 +9,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import type { BotProfileConfig } from '../config/profile.js';
-import { parsePersonaExpressionStrength } from '../config/profile.js';
+import {
+    parsePersonaExpressionStrength,
+    readBotProfileConfig,
+} from '../config/profile.js';
+import type { InternalVoiceRealtimeClientEvent } from '@footnote/contracts/voice';
 import { buildProfileOverlaySystemMessage } from './prompts/profilePromptOverlay.js';
 import {
     buildPersonaExpressionGuidance,
@@ -27,6 +31,7 @@ type ChatProfileOverlayLogger = {
             requestedPersonaId?: string;
             resolvedPersonaId?: string;
             overlayPath?: string;
+            error?: string;
         }
     ) => void;
 };
@@ -186,9 +191,10 @@ export const resolvePersonaExpression = (
         PostChatRequest,
         'personaExpressionProfileStrength' | 'personaExpressionStrength'
     >,
-    persona: Pick<PersonaCatalogEntry, 'id'>,
-    configuredProfileStrength: string | undefined = runtimeConfig.profile
-        .personaExpressionStrength
+    persona: Pick<BotProfileConfig, 'id' | 'personaExpressionStrength'>,
+    configuredProfileStrength:
+        string | undefined = persona.personaExpressionStrength ??
+        runtimeConfig.profile.personaExpressionStrength
 ): PersonaExpressionResolution => {
     const requestStrength = parsePersonaExpressionStrength(
         request.personaExpressionStrength
@@ -216,12 +222,208 @@ export const resolvePersonaExpression = (
 export const resolveChatPersonaProfile = (
     request: Pick<PostChatRequest, 'surface' | 'botPersonaId'>,
     logger: ChatProfileOverlayLogger
-): BotProfileConfig =>
-    buildPersonaProfileConfig(
+): BotProfileConfig => {
+    if (request.surface === 'discord') {
+        const requestedPersonaId = request.botPersonaId?.trim().toLowerCase();
+        const matches =
+            runtimeConfig.settings.discordBots?.filter(
+                (bot) =>
+                    bot.enabled !== false &&
+                    bot.profile?.id !== undefined &&
+                    bot.profile.id === requestedPersonaId
+            ) ?? [];
+        // Ordinary chat has no node identity; ambiguous configurations retain catalog routing.
+        let configured: BotProfileConfig | null = null;
+        if (matches.length === 1) {
+            try {
+                configured = resolveInvokingBotProfile(runtimeConfig.profile, {
+                    botPersonaId: requestedPersonaId,
+                });
+            } catch (error) {
+                logger.warn(
+                    'chat persona configuration is invalid; retaining catalog routing',
+                    {
+                        runtimeProfileId: runtimeConfig.profile.id,
+                        surface: request.surface,
+                        requestedPersonaId,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
+            }
+        } else if (requestedPersonaId === runtimeConfig.profile.id) {
+            configured = runtimeConfig.profile;
+        }
+        if (matches.length > 1)
+            logger.warn(
+                'chat persona configuration is ambiguous; retaining fallback routing',
+                {
+                    runtimeProfileId: runtimeConfig.profile.id,
+                    surface: request.surface,
+                    requestedPersonaId,
+                }
+            );
+        if (configured)
+            return resolveConfiguredPersonaProfile(configured, logger);
+    }
+    return buildPersonaProfileConfig(
         resolvePersonaEntry(request, logger),
         request,
         logger
     );
+};
+
+/** Operator identity and overlay take precedence over the bundled catalog. */
+const resolveConfiguredPersonaProfile = (
+    profile: BotProfileConfig,
+    logger: ChatProfileOverlayLogger
+): BotProfileConfig => {
+    if (
+        profile.promptOverlay.text?.trim() ||
+        profile.promptOverlay.path ||
+        profile.promptOverlay.unavailable
+    )
+        return profile;
+    const persona = PERSONA_CATALOG[profile.id];
+    if (!persona) return profile;
+    const bundled = buildPersonaProfileConfig(
+        persona,
+        { surface: 'discord', botPersonaId: profile.id },
+        logger
+    );
+    return { ...profile, promptOverlay: bundled.promptOverlay };
+};
+
+export type ResolvedVoicePersona = Readonly<{
+    profile: BotProfileConfig;
+    expression: PersonaExpressionResolution;
+    overlaySelection: 'configured' | 'catalog' | 'default';
+}>;
+
+type VoicePersonaIdentity = Pick<
+    Extract<InternalVoiceRealtimeClientEvent, { type: 'session.start' }>,
+    'botPersonaId' | 'discordNodeId' | 'personaExpressionProfileStrength'
+>;
+
+/** Looks up existing operator-owned bot configuration; adapter data never supplies overlay text or a path. */
+const resolveInvokingBotProfile = (
+    fallback: BotProfileConfig,
+    identity: VoicePersonaIdentity
+): BotProfileConfig => {
+    if (!identity.botPersonaId && !identity.discordNodeId) return fallback;
+    const bots = runtimeConfig.settings.discordBots ?? [];
+    const matches = bots.filter(
+        (bot) =>
+            bot.enabled !== false &&
+            (identity.discordNodeId
+                ? bot.id === identity.discordNodeId
+                : bot.profile?.id === identity.botPersonaId)
+    );
+    if (matches.length > 1 || (identity.discordNodeId && matches.length !== 1))
+        throw new Error('Configured Voice persona identity is unavailable.');
+    const selected = matches[0]?.profile;
+    if (selected) {
+        if (
+            !selected.id ||
+            !selected.displayName ||
+            (identity.botPersonaId && selected.id !== identity.botPersonaId)
+        )
+            throw new Error(
+                'Configured Voice persona identity is unavailable.'
+            );
+        const profile = readBotProfileConfig({
+            env: {
+                BOT_PROFILE_ID: selected.id,
+                BOT_PROFILE_DISPLAY_NAME: selected.displayName,
+                BOT_PROFILE_MENTION_ALIASES: selected.mentionAliases?.join(','),
+                BOT_PROFILE_PROMPT_OVERLAY:
+                    selected.id === fallback.id &&
+                    !selected.overlayPath &&
+                    fallback.promptOverlay.source === 'inline'
+                        ? (fallback.promptOverlay.text ?? undefined)
+                        : undefined,
+                BOT_PROFILE_PROMPT_OVERLAY_PATH: selected.overlayPath,
+                BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH:
+                    selected.personaExpressionStrength,
+            },
+            projectRoot: runtimeConfig.runtime.projectRoot,
+            warn: () => undefined,
+        });
+        // Overlay precedence applies within an identity, never across different bots.
+        if (
+            selected.id === fallback.id &&
+            !selected.overlayPath &&
+            fallback.promptOverlay.unavailable
+        )
+            profile.promptOverlay = { ...fallback.promptOverlay };
+        return profile;
+    }
+    if (identity.discordNodeId)
+        throw new Error('Configured Voice persona identity is unavailable.');
+    if (identity.botPersonaId === fallback.id) return fallback;
+    const persona = PERSONA_CATALOG[identity.botPersonaId ?? ''];
+    if (!persona)
+        throw new Error('Configured Voice persona identity is unavailable.');
+    return {
+        id: persona.id,
+        displayName: persona.displayName,
+        mentionAliases: [],
+        promptOverlay: { source: 'none', text: null, path: null, length: 0 },
+    };
+};
+
+/** Pins backend-owned persona data once per call, separately from speech selection. */
+export const resolveVoicePersona = (
+    configuredProfile: BotProfileConfig,
+    logger: ChatProfileOverlayLogger,
+    identity: VoicePersonaIdentity = {}
+): ResolvedVoicePersona => {
+    configuredProfile = resolveInvokingBotProfile(configuredProfile, identity);
+    const effective = resolveConfiguredPersonaProfile(
+        configuredProfile,
+        logger
+    );
+    if (
+        effective.promptOverlay.unavailable ||
+        (!effective.promptOverlay.text?.trim() &&
+            (effective.id !== DEFAULT_PERSONA_ID ||
+                effective.promptOverlay.path !== null ||
+                effective.promptOverlay.source !== 'none'))
+    )
+        throw new Error('Configured Voice persona overlay is unavailable.');
+    const profile: BotProfileConfig = {
+        id: effective.id,
+        displayName: effective.displayName,
+        mentionAliases: [...effective.mentionAliases],
+        promptOverlay: { ...effective.promptOverlay },
+        personaExpressionStrength: effective.personaExpressionStrength,
+    };
+    const expression = resolvePersonaExpression(
+        {
+            personaExpressionProfileStrength:
+                identity.personaExpressionProfileStrength,
+        },
+        profile,
+        profile.personaExpressionStrength ??
+            runtimeConfig.profile.personaExpressionStrength ??
+            ''
+    );
+    Object.freeze(profile.mentionAliases);
+    Object.freeze(profile.promptOverlay);
+    Object.freeze(profile);
+    Object.freeze(expression);
+    return Object.freeze({
+        profile,
+        expression,
+        overlaySelection: configuredProfile.promptOverlay.text?.trim()
+            ? 'configured'
+            : profile.promptOverlay.text
+              ? 'catalog'
+              : 'default',
+    });
+};
 
 /**
  * Uses the shared profile display-name env so non-overlay persona templates
