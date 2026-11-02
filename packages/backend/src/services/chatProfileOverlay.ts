@@ -307,6 +307,10 @@ type VoicePersonaIdentity = Pick<
     'botPersonaId' | 'discordNodeId' | 'personaExpressionProfileStrength'
 >;
 
+type ConfiguredDiscordBotProfile = NonNullable<
+    NonNullable<typeof runtimeConfig.settings.discordBots>[number]['profile']
+>;
+
 /** Looks up existing operator-owned bot configuration; adapter data never supplies overlay text or a path. */
 const resolveInvokingBotProfile = (
     fallback: BotProfileConfig,
@@ -324,42 +328,8 @@ const resolveInvokingBotProfile = (
     if (matches.length > 1 || (identity.discordNodeId && matches.length !== 1))
         throw new Error('Configured Voice persona identity is unavailable.');
     const selected = matches[0]?.profile;
-    if (selected) {
-        if (
-            !selected.id ||
-            !selected.displayName ||
-            (identity.botPersonaId && selected.id !== identity.botPersonaId)
-        )
-            throw new Error(
-                'Configured Voice persona identity is unavailable.'
-            );
-        const profile = readBotProfileConfig({
-            env: {
-                BOT_PROFILE_ID: selected.id,
-                BOT_PROFILE_DISPLAY_NAME: selected.displayName,
-                BOT_PROFILE_MENTION_ALIASES: selected.mentionAliases?.join(','),
-                BOT_PROFILE_PROMPT_OVERLAY:
-                    selected.id === fallback.id &&
-                    !selected.overlayPath &&
-                    fallback.promptOverlay.source === 'inline'
-                        ? (fallback.promptOverlay.text ?? undefined)
-                        : undefined,
-                BOT_PROFILE_PROMPT_OVERLAY_PATH: selected.overlayPath,
-                BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH:
-                    selected.personaExpressionStrength,
-            },
-            projectRoot: runtimeConfig.runtime.projectRoot,
-            warn: () => undefined,
-        });
-        // Overlay precedence applies within an identity, never across different bots.
-        if (
-            selected.id === fallback.id &&
-            !selected.overlayPath &&
-            fallback.promptOverlay.unavailable
-        )
-            profile.promptOverlay = { ...fallback.promptOverlay };
-        return profile;
-    }
+    if (selected)
+        return resolveConfiguredDiscordBotProfile(fallback, identity, selected);
     if (identity.discordNodeId)
         throw new Error('Configured Voice persona identity is unavailable.');
     if (identity.botPersonaId === fallback.id) return fallback;
@@ -372,6 +342,45 @@ const resolveInvokingBotProfile = (
         mentionAliases: [],
         promptOverlay: { source: 'none', text: null, path: null, length: 0 },
     };
+};
+
+const resolveConfiguredDiscordBotProfile = (
+    fallback: BotProfileConfig,
+    identity: VoicePersonaIdentity,
+    selected: ConfiguredDiscordBotProfile
+): BotProfileConfig => {
+    if (
+        !selected.id ||
+        !selected.displayName ||
+        (identity.botPersonaId && selected.id !== identity.botPersonaId)
+    )
+        throw new Error('Configured Voice persona identity is unavailable.');
+    const profile = readBotProfileConfig({
+        env: {
+            BOT_PROFILE_ID: selected.id,
+            BOT_PROFILE_DISPLAY_NAME: selected.displayName,
+            BOT_PROFILE_MENTION_ALIASES: selected.mentionAliases?.join(','),
+            BOT_PROFILE_PROMPT_OVERLAY:
+                selected.id === fallback.id &&
+                !selected.overlayPath &&
+                fallback.promptOverlay.source === 'inline'
+                    ? (fallback.promptOverlay.text ?? undefined)
+                    : undefined,
+            BOT_PROFILE_PROMPT_OVERLAY_PATH: selected.overlayPath,
+            BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH:
+                selected.personaExpressionStrength,
+        },
+        projectRoot: runtimeConfig.runtime.projectRoot,
+        warn: () => undefined,
+    });
+    // Overlay precedence applies within an identity, never across different bots.
+    if (
+        selected.id === fallback.id &&
+        !selected.overlayPath &&
+        fallback.promptOverlay.unavailable
+    )
+        profile.promptOverlay = { ...fallback.promptOverlay };
+    return profile;
 };
 
 /** Pins backend-owned persona data once per call, separately from speech selection. */
@@ -414,14 +423,18 @@ export const resolveVoicePersona = (
     Object.freeze(profile.promptOverlay);
     Object.freeze(profile);
     Object.freeze(expression);
+    let overlaySelection: ResolvedVoicePersona['overlaySelection'];
+    if (configuredProfile.promptOverlay.text?.trim()) {
+        overlaySelection = 'configured';
+    } else if (profile.promptOverlay.text) {
+        overlaySelection = 'catalog';
+    } else {
+        overlaySelection = 'default';
+    }
     return Object.freeze({
         profile,
         expression,
-        overlaySelection: configuredProfile.promptOverlay.text?.trim()
-            ? 'configured'
-            : profile.promptOverlay.text
-              ? 'catalog'
-              : 'default',
+        overlaySelection,
     });
 };
 
