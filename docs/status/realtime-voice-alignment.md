@@ -32,11 +32,11 @@ covers the remaining design work and consent decisions.
 
 ## Alignment matrix
 
-| Area | Current behavior | What remains unverified |
-| --- | --- | --- |
-| Persona | Standard, Live delegation and GPT-Live startup use the same call-pinned behavioral persona. Participant names and startup summaries are not included in instructions. | Tests confirm the wiring, not how consistently GPT-Live follows it. |
-| Speech approval | Standard speaks approved Workflow text. Live may speak independently or paraphrase approved commentary. | Live audio cannot be verified as the exact reviewed wording; actual speech and audibility still need testing. |
-| Call handling | One consenting caller is admitted. Live delegation is matched to the current turn, and interruption or closure revokes stale delivery. | Real Discord events, provider retention and recovery after deployment failure still need evaluation. |
+| Area            | Current behavior                                                                                                                                                      | What remains unverified                                                                                       |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Persona         | Standard, Live delegation and GPT-Live startup use the same call-pinned behavioral persona. Participant names and startup summaries are not included in instructions. | Tests confirm the wiring, not how consistently GPT-Live follows it.                                           |
+| Speech approval | Standard speaks approved Workflow text. Live may speak independently or paraphrase approved commentary.                                                               | Live audio cannot be verified as the exact reviewed wording; actual speech and audibility still need testing. |
+| Call handling   | One consenting caller is admitted. Live delegation is matched to the current turn, and interruption or closure revokes stale delivery.                                | Real Discord events, provider retention and recovery after deployment failure still need evaluation.          |
 
 The detailed matrix below preserves the baseline through #964. Its earlier
 `Gap` entries describe that period, not necessarily the current implementation.
