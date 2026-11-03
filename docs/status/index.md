@@ -8,6 +8,7 @@ work is done.
 
 - [Realtime Voice alignment](./realtime-voice-alignment.md) — current baseline
   and proposed background reasoning; #558 design review, #559 continuity policy
+- [Voice persona evaluation](./voice-persona-evaluation.md) — Discord pilot plan and remaining persona checks
 - [Prompt caching](./prompt-caching-status.md) — implemented locally; direct OpenAI
   and container verification remain pending
 

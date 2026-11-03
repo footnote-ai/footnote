@@ -2,18 +2,11 @@
 
 ## Summary
 
-Footnote's Discord bot receives speech and plays replies in a voice channel. The
-bot handles Discord audio; the backend handles providers, Workflow and usage
-records. Discord connects to `/api/internal/voice/realtime`, not directly to
-OpenAI.
+The Discord bot captures and plays audio. The backend handles speech providers and Workflow through `/api/internal/voice/realtime`.
 
-Voice has two modes. **Standard** uses OpenRouter to transcribe speech and
-synthesize Workflow-approved answers. **Live** uses GPT-Live for conversation
-and delegates substantive requests to the same Workflow, though it may speak
-independently or paraphrase approved commentary. The
-[alignment tracker](../status/realtime-voice-alignment.md) records what's been
-tested and what remains uncertain. Neither mode has been tested with paid
-providers or in a real Discord call.
+**Standard** uses OpenRouter to transcribe speech and synthesize approved Workflow answers. **Live** handles conversation through GPT-Live and delegates substantive questions to Workflow. Live can also speak independently or paraphrase approved commentary.
+
+The [alignment tracker](../status/realtime-voice-alignment.md) covers current behavior, and the [persona evaluation plan](../status/voice-persona-evaluation.md) outlines the first real Discord tests. Both modes have only been tested synthetically so far.
 
 ## High-Level Flow
 
@@ -132,11 +125,7 @@ provider adapters enforce their own transport limits. Standard sends the exact
 approved text to TTS; GPT-Live may paraphrase approved commentary, so its
 handoff is not evidence of exact-text playback.
 
-Canonical Voice receipts include only content-free length measurements,
-outcomes, Result/candidate references, timing, usage, and cost. They do not
-retain prompts, questions, conversations, retrieval bodies, assessment text,
-or answer drafts. The [Workflow documentation](./workflow.md#voice-answer-condensation)
-explains the Step's lineage, limits, and failure behavior.
+Voice receipts retain IDs, measurements, outcomes, timing and available usage/cost. They exclude conversation bodies and drafts. Complete Voice-provider costs are still unavailable: transcription usage is logged when supplied, Standard TTS reports no usage, and GPT-Live currently logs duration. See the [Workflow documentation](./workflow.md#voice-answer-condensation) for condensation lineage and limits.
 
 A [six-case synthetic evaluation fixture](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json)
 runs through the real Workflow in

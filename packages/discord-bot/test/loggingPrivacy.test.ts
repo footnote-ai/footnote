@@ -93,14 +93,21 @@ test('Realtime response and greeting text are not written to logs', async () => 
     try {
         const subsystem = new VoiceSubsystem({} as never);
         const subsystemAccess = subsystem as unknown as {
+            userVoiceStateHandler: {
+                registerInitiatingUser(guildId: string, userId: string): void;
+            };
             createRealtimeSession: (
                 guildId: string,
                 participants: RealtimeContextParticipant[]
             ) => Promise<RealtimeSession>;
         };
+        subsystemAccess.userVoiceStateHandler.registerInitiatingUser(
+            'test-guild',
+            'test-caller'
+        );
         const session = await subsystemAccess.createRealtimeSession(
             'test-guild',
-            []
+            [{ id: 'test-caller', displayName: 'Caller' }]
         );
         session.removeAllListeners();
 

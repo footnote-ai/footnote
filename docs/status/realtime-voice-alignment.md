@@ -1,42 +1,12 @@
 # Realtime Voice alignment
 
-Updated: 2026-11-02. Owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
+Updated: 2026-11-02 · [Issue #558](https://github.com/footnote-ai/footnote/issues/558)
 
-[PR #965](https://github.com/footnote-ai/footnote/pull/965) connected
-Standard and Live Voice to Footnote's existing Workflow. Standard speaks the
-approved answer through TTS. Live handles conversation through GPT-Live and
-delegates substantive requests to Workflow, but may also speak on its own or
-paraphrase approved commentary.
+Standard and Live use the existing Workflow for substantive answers. Standard speaks approved text through TTS. GPT-Live also handles conversation directly and can paraphrase approved commentary.
 
-Voice now uses the invoking bot's persona across both modes. At call admission,
-the backend selects and pins the identity, behavioral overlay and expression
-strength. Workflow receives that selection, and GPT-Live receives the same
-behavioral guidance at startup. If a required overlay is unavailable, the call
-does not start under a substitute persona.
-
-Discord participant names and optional startup transcript summaries stay out
-of GPT-Live's instructions. Participant metadata is still available for caller
-and consent checks, while Live delegation uses transcript events received
-during the call. This keeps user-controlled startup text from becoming
-instructions; it does not prevent spoken input from influencing the model.
-Private overlay text is not written to Voice receipts or diagnostic metadata.
-
-Tests cover the actual startup payload, delegated Workflow and call boundaries
-with synthetic providers. We have not yet evaluated persona fidelity, provider
-behavior or playback in a real Discord call. Independent Live speech and
-paraphrased commentary cannot be treated as the exact reviewed answer.
-
-The [architecture guide](../architecture/realtime-voice.md) explains the
-implementation. The [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
-covers the remaining design work and consent decisions.
+Both modes use the invoking bot's persona, fixed when the call starts. The startup instructions exclude participant names and optional transcript summaries. Synthetic tests cover the persona handoff, delegation and call controls. We still need to test real speech, cancellation and cost reporting in Discord; the [persona evaluation plan](./voice-persona-evaluation.md) covers that work.
 
 ## Alignment matrix
-
-| Area            | Current behavior                                                                                                                                                      | What remains unverified                                                                                       |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Persona         | Standard, Live delegation and GPT-Live startup use the same call-pinned behavioral persona. Participant names and startup summaries are not included in instructions. | Tests confirm the wiring, not how consistently GPT-Live follows it.                                           |
-| Speech approval | Standard speaks approved Workflow text. Live may speak independently or paraphrase approved commentary.                                                               | Live audio cannot be verified as the exact reviewed wording; actual speech and audibility still need testing. |
-| Call handling   | One consenting caller is admitted. Live delegation is matched to the current turn, and interruption or closure revokes stale delivery.                                | Real Discord events, provider retention and recovery after deployment failure still need evaluation.          |
 
 The detailed matrix below preserves the baseline through #964. Its earlier
 `Gap` entries describe that period, not necessarily the current implementation.

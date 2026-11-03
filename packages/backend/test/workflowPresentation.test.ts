@@ -110,6 +110,7 @@ const runScenario = async (
     ) => Promise<GenerationResult>,
     options?: {
         workflowPolicy?: typeof policy;
+        maxIterations?: number;
         maxWorkflowSteps?: number;
         maxTokensTotal?: number;
         handoffVariant?: 'preserve-candidate' | 'style-reference';
@@ -136,7 +137,7 @@ const runScenario = async (
         generationStartedAtMs: Date.now(),
         workflowConfig: {
             workflowName: 'test',
-            maxIterations: 1,
+            maxIterations: options?.maxIterations ?? 1,
             maxDurationMs: 1000,
             executionLimits: {
                 maxWorkflowSteps: options?.maxWorkflowSteps ?? 8,
@@ -437,12 +438,18 @@ test('records a provider overrun for an admitted presentation and stops later wo
 
 test('runs ordinary revision without carrying the raw presentation candidate', async () => {
     const candidate = 'A vivid candidate with a distinct cadence.';
-    const { calls, result } = await runScenario(async (_request, call) => {
-        if (call === 1) return generated(candidate);
-        if (call === 2) return generated('Authoritative reconciled answer.');
-        if (call === 3) return generated(reviewRevise);
-        return generated('Reviewed answer with preserved persona guidance.');
-    });
+    const { calls, result } = await runScenario(
+        async (_request, call) => {
+            if (call === 1) return generated(candidate);
+            if (call === 2)
+                return generated('Authoritative reconciled answer.');
+            if (call === 3) return generated(reviewRevise);
+            return generated(
+                'Reviewed answer with preserved persona guidance.'
+            );
+        },
+        { maxIterations: 2 }
+    );
 
     assert.equal(result.outcome, 'generated');
     if (result.outcome !== 'generated')
