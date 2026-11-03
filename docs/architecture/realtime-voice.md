@@ -90,22 +90,24 @@ closed. Only a persisted, approved Workflow answer is appended as commentary.
 GPT-Live may also speak without delegation and may paraphrase that commentary;
 Live audio therefore carries no exact-text approval or playback receipt.
 
-For each accepted, fresh caller request that fits the append limit, the backend
-appends a short, delegation-scoped working note through
-`session.thinking.append`. It is derived from the existing call-local turn,
-labels transcript text as caller-reported and fallible, and says the newest
-request replaces earlier ones. Corrections therefore update the active request
-without changing the persona instructions or Workflow authority. Thinking,
-instructions and commentary appends share a 500-estimated-token event limit;
-the answer delivery limit remains separate.
-Append acknowledgments identify provider timeline acceptance, not comprehension
-or audible delivery. Context-window usage ratio is logged only when a valid
-optional metric is supplied. Client delegation keeps GPT-Live's default
-immediate automatic acknowledgment request. A later thinking append can cancel
-an acknowledgment that is still pending; the current WebSocket events do not
-expose when an acknowledgment has finished. Synthetic coverage checks that
-already-emitted audio is forwarded and that the application adds no separate
-progress utterance. Pending-ack timing and real speech remain unverified.
+When a caller's request is accepted and matched to a Live delegation, the
+backend sends GPT-Live a short `session.thinking.append` note. It includes
+the latest request and whether Workflow could start. Corrections replace the
+previous request. The note comes from the existing call state, with transcript
+text identified as the caller's unverified words. Persona instructions and
+Workflow approval stay as they were.
+
+All three text append types (`thinking`, `instructions` and `commentary`)
+have a 500-estimated-token limit. The backend matches provider acknowledgments
+and errors to the original append and logs a valid context-window usage ratio
+when GPT-Live reports one. We haven't measured whether Live actually uses
+these notes in conversation.
+
+There is a possible timing issue: a thinking append can suppress a pending
+automatic spoken acknowledgment. Audio already emitted still reaches Discord,
+and Footnote adds no separate progress message. The provider doesn't report
+when an automatic acknowledgment finishes, so that interaction needs a real
+call to evaluate under [#974](https://github.com/footnote-ai/footnote/issues/974).
 
 ### Answer length
 
@@ -142,7 +144,12 @@ provider adapters enforce their own transport limits. Standard sends the exact
 approved text to TTS; GPT-Live may paraphrase approved commentary, so its
 handoff is not evidence of exact-text playback.
 
-Voice receipts retain IDs, measurements, outcomes, timing and available usage/cost. They exclude conversation bodies and drafts. Complete Voice-provider costs are still unavailable: transcription usage is logged when supplied, Standard TTS reports no usage, and GPT-Live reports duration plus context-window usage ratio when available. See the [Workflow documentation](./workflow.md#voice-answer-condensation) for condensation lineage and limits.
+Voice receipts retain IDs, outcomes, timing and available usage or cost.
+Conversation bodies and drafts stay out of those records. Provider costs
+remain incomplete: transcription usage is logged when supplied, Standard TTS
+reports no usage, and GPT-Live reports duration and context-window usage when
+available. See the [Workflow documentation](./workflow.md#voice-answer-condensation)
+for condensation lineage and limits.
 
 A [six-case synthetic evaluation fixture](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json)
 runs through the real Workflow in
