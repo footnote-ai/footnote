@@ -341,6 +341,7 @@ const resolveInvokingBotProfile = (
         displayName: persona.displayName,
         mentionAliases: [],
         promptOverlay: { source: 'none', text: null, path: null, length: 0 },
+        speechPresentation: fallback.speechPresentation,
     };
 };
 
@@ -373,6 +374,8 @@ const resolveConfiguredDiscordBotProfile = (
         projectRoot: runtimeConfig.runtime.projectRoot,
         warn: () => undefined,
     });
+    profile.speechPresentation =
+        selected.speechPresentation ?? fallback.speechPresentation;
     // Overlay precedence applies within an identity, never across different bots.
     if (
         selected.id === fallback.id &&
@@ -408,6 +411,13 @@ export const resolveVoicePersona = (
         mentionAliases: [...effective.mentionAliases],
         promptOverlay: { ...effective.promptOverlay },
         personaExpressionStrength: effective.personaExpressionStrength,
+        ...(effective.speechPresentation?.progressPhrases && {
+            speechPresentation: {
+                progressPhrases: [
+                    ...effective.speechPresentation.progressPhrases,
+                ],
+            },
+        }),
     };
     const expression = resolvePersonaExpression(
         {

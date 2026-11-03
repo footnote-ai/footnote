@@ -7,7 +7,10 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveSpeechSelection } from '../src/services/speechPresentation.js';
+import {
+    resolveSpeechSelection,
+    selectVoiceProgressPhrase,
+} from '../src/services/speechPresentation.js';
 
 const profile = {
     id: 'winter',
@@ -64,4 +67,84 @@ test('deployment fallback is retained when no profile override exists', () => {
     assert.equal(selection.model, 'gpt-realtime-mini');
     assert.equal(selection.selectionSource.model, 'deployment_fallback');
     assert.equal(selection.delivery, null);
+});
+
+test('voice progress phrase selection follows the pinned persona and expression strength', () => {
+    const selections = [
+        {
+            profileId: 'footnote',
+            expressionStrength: 'subtle' as const,
+            expected: 'I’ll take a moment with that.',
+        },
+        {
+            profileId: 'danny',
+            expressionStrength: 'balanced' as const,
+            expected: 'I’ll take a moment and work through this.',
+        },
+        {
+            profileId: 'myuri',
+            expressionStrength: 'strong' as const,
+            expected: 'A few threads to sort out—give me a moment.',
+        },
+        {
+            profileId: 'winter',
+            expressionStrength: 'strong' as const,
+            expected: 'I’ll think that through carefully.',
+        },
+    ];
+
+    for (const selection of selections) {
+        assert.equal(
+            selectVoiceProgressPhrase({
+                ...selection,
+                randomInt: () => 0,
+            }),
+            selection.expected
+        );
+    }
+
+    assert.notEqual(
+        selectVoiceProgressPhrase({
+            profileId: 'myuri',
+            expressionStrength: 'subtle',
+            randomInt: () => 0,
+        }),
+        selectVoiceProgressPhrase({
+            profileId: 'myuri',
+            expressionStrength: 'strong',
+            randomInt: () => 0,
+        })
+    );
+});
+
+test('custom profile names cannot resolve inherited phrase pools', () => {
+    const phrase = selectVoiceProgressPhrase({
+        profileId: 'constructor',
+        expressionStrength: 'balanced',
+        randomInt(max) {
+            assert.equal(max, 2);
+            return 0;
+        },
+    });
+
+    assert.equal(phrase, 'One moment while I work through that.');
+});
+
+test('voice progress phrase overrides, including custom profiles, remain application-selected', () => {
+    let requestedPoolSize = 0;
+    const phrase = selectVoiceProgressPhrase({
+        profileId: 'custom-profile',
+        expressionStrength: 'balanced',
+        operatorPhrases: [
+            'Please give me a moment.',
+            'I’m working through that now.',
+        ],
+        randomInt(max) {
+            requestedPoolSize = max;
+            return max - 1;
+        },
+    });
+
+    assert.equal(phrase, 'I’m working through that now.');
+    assert.equal(requestedPoolSize, 2);
 });

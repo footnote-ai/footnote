@@ -503,6 +503,33 @@ test('discord-bots entries allow omitted credentials/profile blocks', () => {
     );
 });
 
+test('discord-bot profiles accept per-persona Voice progress phrase overrides', () => {
+    const rawYaml = [
+        'version: 1',
+        'discord-bots:',
+        '  - id: myuri-bot',
+        '    profile:',
+        '      id: myuri',
+        '      display-name: Myuri',
+        '      speech-presentation:',
+        '        progress-phrases:',
+        '          - "Let me connect those pieces."',
+        '          - "Give me a moment to untangle that."',
+        '',
+    ].join('\n');
+
+    const parsed = parseServerSettingsYaml({
+        rawText: rawYaml,
+        settingsPath: 'footnote.yaml',
+    });
+
+    assert.deepEqual(
+        parsed.yamlSettings['discord-bots'][0]?.profile?.speechPresentation
+            ?.progressPhrases,
+        ['Let me connect those pieces.', 'Give me a moment to untangle that.']
+    );
+});
+
 test('parseServerSettingsYaml accepts deployment metadata without runtime env projection', () => {
     const rawYaml = [
         'version: 1',

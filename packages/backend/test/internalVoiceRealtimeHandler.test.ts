@@ -29,7 +29,10 @@ import type {
     OpenAiLiveVoiceSession,
     OpenAiLiveVoiceSessionFactory,
 } from '../src/services/openAiLiveVoice.js';
-import type { RealtimeWorkflowRunner } from '../src/services/realtimeConversationState.js';
+import type {
+    RealtimeWorkflowResult,
+    RealtimeWorkflowRunner,
+} from '../src/services/realtimeConversationState.js';
 
 import { createInternalVoiceRealtimeHandler } from '../src/handlers/internalVoiceRealtime.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
@@ -574,6 +577,36 @@ const waitForJsonMessage = async (
         ws.on('error', onError);
     });
 
+const startRealtimeVoiceSession = async (
+    ws: WebSocket,
+    mode: 'standard' | 'live',
+    initialAudio?: Buffer
+): Promise<void> => {
+    ws.send(
+        JSON.stringify({
+            type: 'session.start',
+            mode,
+            initiatorId: 'user-1',
+            context: {
+                participants: [
+                    { id: 'user-1', displayName: 'Alice', isBot: false },
+                ],
+            },
+        })
+    );
+    assert.equal((await waitForJsonMessage(ws, 1_000)).type, 'session.ready');
+    if (!initialAudio) return;
+    ws.send(
+        JSON.stringify({
+            type: 'input_audio.append',
+            audioBase64: initialAudio.toString('base64'),
+            speakerLabel: 'Alice',
+            speakerId: 'user-1',
+        })
+    );
+    ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+};
+
 const closeWebSocket = async (ws: WebSocket): Promise<void> =>
     new Promise((resolve) => {
         if (
@@ -743,6 +776,7 @@ test('internal realtime handler rejects invalid realtime payloads after websocke
 
 test('Standard transcribes one attributed utterance and synthesizes only the approved Workflow answer', async () => {
     const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const clock = createFakeClock();
     const synthesized: string[] = [];
     const snapshots: string[] = [];
     const profile: BotProfileConfig = {
@@ -760,6 +794,8 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
     const harness = await createRealtimeHandlerHarness({
         profile,
         defaultMode: 'standard',
+        setTimer: clock.setTimer,
+        clearTimer: clock.clearTimer,
         openRouterVoiceService: {
             async transcribe(audio) {
                 assert.deepEqual(audio, inputAudio);
@@ -808,19 +844,7 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
     let ws: WebSocket | undefined;
     try {
         ws = await harness.connect();
-        ws.send(
-            JSON.stringify({
-                type: 'session.start',
-                initiatorId: 'user-1',
-                context: {
-                    participants: [
-                        { id: 'user-1', displayName: 'Alice', isBot: false },
-                    ],
-                },
-            })
-        );
-        const ready = await waitForJsonMessage(ws, 1000);
-        assert.equal(ready.type, 'session.ready');
+        await startRealtimeVoiceSession(ws, 'standard');
         profile.id = 'changed-after-admission';
         profile.promptOverlay.text = 'changed-after-admission';
         profile.personaExpressionStrength = 'strong';
@@ -841,8 +865,349 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
         );
         assert.equal(typeof audio.deliveryId, 'string');
         assert.equal(synthesized[0], 'The reviewed answer.');
+        clock.tick(2_000);
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(synthesized, ['The reviewed answer.']);
         assert.equal(snapshots.length, 1);
         assert.match(snapshots[0], /What is the answer\?/);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard emits one persona-aware progress cue after the delay before the approved answer', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const clock = createFakeClock();
+    const synthesized: string[] = [];
+    let startWorkflow!: () => void;
+    let resolveWorkflow!: (result: RealtimeWorkflowResult) => void;
+    const workflowStarted = new Promise<void>((resolve) => {
+        startWorkflow = resolve;
+    });
+    const workflowResult = new Promise<RealtimeWorkflowResult>((resolve) => {
+        resolveWorkflow = resolve;
+    });
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'standard',
+        setTimer: clock.setTimer,
+        clearTimer: clock.clearTimer,
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'What is the answer?' };
+            },
+            async synthesize(text) {
+                synthesized.push(text);
+                return {
+                    audio: Buffer.from(
+                        text === 'The reviewed answer.' ? [3, 3] : [1, 1]
+                    ),
+                };
+            },
+        },
+        workflowRunner: {
+            async runRealtimeConversation(_snapshot, context) {
+                context.onRunStarted('workflow-run');
+                startWorkflow();
+                return workflowResult;
+            },
+        },
+    });
+
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'standard', inputAudio);
+        await workflowStarted;
+
+        clock.tick(1_999);
+        assert.deepEqual(synthesized, []);
+        clock.tick(1);
+        const cue = await waitForJsonMessage(ws, 1_000);
+        assert.equal(cue.type, 'output_audio.delta');
+        assert.equal(cue.deliveryId, undefined);
+        assert.equal(cue.audioBase64, Buffer.from([1, 1]).toString('base64'));
+        assert.equal(synthesized.length, 1);
+        assert.notEqual(synthesized[0], 'The reviewed answer.');
+        assert.doesNotMatch(
+            synthesized[0] ?? '',
+            /What is the answer|reviewed|retrieved|approved/iu
+        );
+
+        clock.tick(6_000);
+        assert.equal(synthesized.length, 1);
+        resolveWorkflow({
+            responseId: 'response',
+            runId: 'workflow-run',
+            status: 'completed',
+            finalResponse: {
+                disposition: 'approved',
+                responseId: 'response',
+                runId: 'workflow-run',
+                candidateId: 'candidate',
+                generationStepId: 'answer',
+                assessmentStepId: 'review',
+                text: 'The reviewed answer.',
+            },
+        });
+
+        const answer = await waitForJsonMessage(ws, 1_000);
+        assert.equal(answer.type, 'output_audio.delta');
+        assert.equal(typeof answer.deliveryId, 'string');
+        assert.equal(
+            answer.audioBase64,
+            Buffer.from([3, 3]).toString('base64')
+        );
+        assert.deepEqual(synthesized, [synthesized[0], 'The reviewed answer.']);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard cancels a pending cue when the caller corrects the request', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const clock = createFakeClock();
+    const synthesized: string[] = [];
+    let markWorkflowStarted!: () => void;
+    let markWorkflowInterrupted!: () => void;
+    const workflowStarted = new Promise<void>(
+        (resolve) => (markWorkflowStarted = resolve)
+    );
+    const workflowInterrupted = new Promise<void>(
+        (resolve) => (markWorkflowInterrupted = resolve)
+    );
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'standard',
+        setTimer: clock.setTimer,
+        clearTimer: clock.clearTimer,
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'Correction: Friday instead?' };
+            },
+            async synthesize(text) {
+                synthesized.push(text);
+                return { audio: Buffer.from([2, 2]) };
+            },
+        },
+        workflowRunner: {
+            runRealtimeConversation(_snapshot, context) {
+                context.onRunStarted('workflow-run');
+                markWorkflowStarted();
+                return new Promise((resolve) => {
+                    context.signal.addEventListener(
+                        'abort',
+                        () => {
+                            markWorkflowInterrupted();
+                            resolve({ status: 'failed' });
+                        },
+                        { once: true }
+                    );
+                });
+            },
+        },
+    });
+
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'standard', inputAudio);
+        await Promise.race([
+            workflowStarted,
+            new Promise<never>((_resolve, reject) =>
+                setTimeout(
+                    () => reject(new Error('Workflow did not start.')),
+                    1_000
+                )
+            ),
+        ]);
+        clock.tick(1_000);
+        ws.send(
+            JSON.stringify({
+                type: 'input_audio.append',
+                audioBase64: inputAudio.toString('base64'),
+                speakerLabel: 'Alice',
+                speakerId: 'user-1',
+            })
+        );
+        await new Promise((resolve) => setImmediate(resolve));
+        clock.tick(1_000);
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(synthesized, []);
+        ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+        await workflowInterrupted;
+        const correctionResult = await waitForJsonMessage(ws, 1_000);
+        assert.equal(correctionResult.type, 'error');
+        assert.equal(correctionResult.code, 'occupied');
+        assert.deepEqual(synthesized, []);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard suppresses a late cue after call end and reconnect', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const clock = createFakeClock();
+    let markWorkflowStarted!: () => void;
+    let markCueSynthesisStarted!: () => void;
+    let markWorkflowAborted!: () => void;
+    let resolveCueSynthesis!: (result: { audio: Buffer }) => void;
+    let cueSignal: AbortSignal | undefined;
+    const workflowStarted = new Promise<void>(
+        (resolve) => (markWorkflowStarted = resolve)
+    );
+    const cueSynthesisStarted = new Promise<void>(
+        (resolve) => (markCueSynthesisStarted = resolve)
+    );
+    const workflowAborted = new Promise<void>(
+        (resolve) => (markWorkflowAborted = resolve)
+    );
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'standard',
+        setTimer: clock.setTimer,
+        clearTimer: clock.clearTimer,
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'What is happening?' };
+            },
+            synthesize(_text, _options, signal) {
+                cueSignal = signal;
+                markCueSynthesisStarted();
+                return new Promise((resolve) => {
+                    resolveCueSynthesis = resolve;
+                });
+            },
+        },
+        workflowRunner: {
+            runRealtimeConversation(_snapshot, context) {
+                context.onRunStarted('workflow-run');
+                markWorkflowStarted();
+                return new Promise((resolve) => {
+                    context.signal.addEventListener(
+                        'abort',
+                        () => {
+                            markWorkflowAborted();
+                            resolve({ status: 'failed' });
+                        },
+                        { once: true }
+                    );
+                });
+            },
+        },
+    });
+
+    let ws: WebSocket | undefined;
+    let reconnected: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'standard', inputAudio);
+        await workflowStarted;
+        clock.tick(2_000);
+        await cueSynthesisStarted;
+
+        const closed = waitForJsonMessage(ws, 1_000);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        assert.equal((await closed).type, 'session.closed');
+        await closeWebSocket(ws);
+        await workflowAborted;
+        assert.equal(cueSignal?.aborted, true);
+
+        reconnected = await harness.connect();
+        await startRealtimeVoiceSession(reconnected, 'standard');
+        resolveCueSynthesis({ audio: Buffer.from([9, 9]) });
+        await assert.rejects(
+            waitForJsonMessage(reconnected, 50),
+            /Timed out waiting for a voice event/
+        );
+        reconnected.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(reconnected);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        if (reconnected) await closeWebSocket(reconnected);
+        await harness.close();
+    }
+});
+
+test('Standard cancels cue synthesis before the reviewed answer is handed off', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const clock = createFakeClock();
+    let markWorkflowStarted!: () => void;
+    let markCueSynthesisStarted!: () => void;
+    let resolveWorkflow!: (result: RealtimeWorkflowResult) => void;
+    let resolveCueSynthesis!: (result: { audio: Buffer }) => void;
+    let cueSignal: AbortSignal | undefined;
+    const workflowStarted = new Promise<void>(
+        (resolve) => (markWorkflowStarted = resolve)
+    );
+    const cueSynthesisStarted = new Promise<void>(
+        (resolve) => (markCueSynthesisStarted = resolve)
+    );
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'standard',
+        setTimer: clock.setTimer,
+        clearTimer: clock.clearTimer,
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'What is happening?' };
+            },
+            synthesize(text, _options, signal) {
+                if (text === 'The reviewed answer.')
+                    return Promise.resolve({ audio: Buffer.from([3, 3]) });
+                cueSignal = signal;
+                markCueSynthesisStarted();
+                return new Promise((resolve) => {
+                    resolveCueSynthesis = resolve;
+                });
+            },
+        },
+        workflowRunner: {
+            runRealtimeConversation(_snapshot, context) {
+                context.onRunStarted('workflow-run');
+                markWorkflowStarted();
+                return new Promise((resolve) => (resolveWorkflow = resolve));
+            },
+        },
+    });
+
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'standard', inputAudio);
+        await workflowStarted;
+        clock.tick(2_000);
+        await cueSynthesisStarted;
+
+        const answerEvent = waitForJsonMessage(ws, 1_000);
+        resolveWorkflow({
+            responseId: 'response',
+            runId: 'workflow-run',
+            status: 'completed',
+            finalResponse: {
+                disposition: 'approved',
+                responseId: 'response',
+                runId: 'workflow-run',
+                candidateId: 'candidate',
+                generationStepId: 'answer',
+                assessmentStepId: 'review',
+                text: 'The reviewed answer.',
+            },
+        });
+        const answer = await answerEvent;
+        assert.equal(answer.type, 'output_audio.delta');
+        assert.equal(typeof answer.deliveryId, 'string');
+        assert.equal(cueSignal?.aborted, true);
+        resolveCueSynthesis({ audio: Buffer.from([9, 9]) });
+        await assert.rejects(
+            waitForJsonMessage(ws, 50),
+            /Timed out waiting for a voice event/
+        );
         ws.send(JSON.stringify({ type: 'session.close' }));
         await closeWebSocket(ws);
     } finally {
@@ -1125,18 +1490,6 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
                 type: 'delegation',
             },
         });
-        const automaticAcknowledgmentAudio = Buffer.from([0, 0]).toString(
-            'base64'
-        );
-        stubLiveSession.emit({
-            type: 'session.output_audio.delta',
-            delta: automaticAcknowledgmentAudio,
-        });
-        assert.deepEqual(await waitForJsonMessage(ws), {
-            type: 'output_audio.delta',
-            audioBase64: automaticAcknowledgmentAudio,
-        });
-        assert.equal(stubLiveSession.thinking.length, 0);
         await new Promise((resolve) => setTimeout(resolve, 600));
 
         assert.equal(snapshots.length, 1);
@@ -1168,6 +1521,22 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
         );
 
         const contextAppendId = stubLiveSession.thinking[0]!.eventId;
+        stubLiveSession.emit({
+            type: 'session.thinking.appended',
+            event_id: 'thinking-append-receipt',
+            client_event_id: contextAppendId,
+        });
+        const providerAudioAfterThinkingAppend = Buffer.from([0, 0]).toString(
+            'base64'
+        );
+        stubLiveSession.emit({
+            type: 'session.output_audio.delta',
+            delta: providerAudioAfterThinkingAppend,
+        });
+        assert.deepEqual(await waitForJsonMessage(ws, 1_000), {
+            type: 'output_audio.delta',
+            audioBase64: providerAudioAfterThinkingAppend,
+        });
         stubLiveSession.emit({
             type: 'error',
             event_id: 'provider-append-error',
@@ -1480,6 +1849,76 @@ test('Live sends current caller corrections and ignores no-op delegations and st
                 },
             });
         }
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Live competing delegations fail safely without app-generated progress audio', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const liveSession = new StubOpenAiLiveVoiceSession();
+    let workflowCalls = 0;
+    let ttsCalls = 0;
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'live',
+        openAiLiveVoiceSessionFactory: async () => liveSession,
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'unused' };
+            },
+            async synthesize() {
+                ttsCalls += 1;
+                return { audio: Buffer.from([1, 1]) };
+            },
+        },
+        workflowRunner: {
+            async runRealtimeConversation() {
+                workflowCalls += 1;
+                return { status: 'failed' };
+            },
+        },
+    });
+
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'live', inputAudio);
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        liveSession.emit({
+            type: 'session.input_transcript.delta',
+            event_id: 'transcript-competing',
+            delta: 'Which request should I answer?',
+            start_ms: 0,
+            end_ms: 500,
+        });
+        for (const [id, offsetMs] of [
+            ['delegation-first', 600],
+            ['delegation-second', 700],
+        ] as const) {
+            liveSession.emit({
+                type: 'session.delegation.created',
+                event_id: `${id}-event`,
+                offset_ms: offsetMs,
+                delegation: { id, target: 'client', type: 'delegation' },
+            });
+        }
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
+        assert.equal(workflowCalls, 0);
+        assert.equal(ttsCalls, 0);
+        assert.equal(liveSession.thinking.length, 0);
+        assert.equal(liveSession.commentary.length, 1);
+        assert.match(
+            liveSession.commentary[0]!.text,
+            /could not confidently match/u
+        );
+        await assert.rejects(
+            waitForJsonMessage(ws, 50),
+            /Timed out waiting for a voice event/
+        );
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
         if (ws) await closeWebSocket(ws);
         await harness.close();
     }

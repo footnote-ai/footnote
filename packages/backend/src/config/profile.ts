@@ -16,6 +16,7 @@ export type {
     BotProfileConfig,
     BotProfilePromptOverlay,
     BotProfilePromptOverlaySource,
+    BotProfileSpeechPresentation,
     ParseBotProfileConfigInput,
 } from '@footnote/config-spec/bot-profile';
 export {

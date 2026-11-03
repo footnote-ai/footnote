@@ -10,6 +10,10 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { envConfigSourceByKey, envDefaultValues } from '@footnote/config-spec';
 import {
+    normalizeSpeechPresentation,
+    type BotProfileSpeechPresentation,
+} from '@footnote/config-spec/bot-profile';
+import {
     envPathSourceEntries,
     settingsSpecEntries,
     type SettingsValueKind,
@@ -50,6 +54,7 @@ type CanonicalDiscordBot = {
         overlayPath?: string;
         personaExpressionStrength?: string;
         mentionAliases?: string[];
+        speechPresentation?: BotProfileSpeechPresentation;
     };
 };
 
@@ -506,6 +511,7 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
             'overlay-path',
             'persona-expression-strength',
             'mention-aliases',
+            'speech-presentation',
         ]);
         if (profileSource !== undefined) {
             if (!isRecord(profileSource)) {
@@ -539,6 +545,51 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
                 pointer: `${botPointer}.profile.mention-aliases`,
             });
         }
+        const speechPresentationSource = isRecord(profileSource)
+            ? profileSource['speech-presentation']
+            : undefined;
+        if (
+            speechPresentationSource !== undefined &&
+            !isRecord(speechPresentationSource)
+        ) {
+            throw new ServerSettingsValidationError({
+                message: `Invalid server settings YAML at ${settingsPath}: ${botPointer}.profile.speech-presentation must be an object.`,
+                category: 'type_mismatch',
+                pointer: `${botPointer}.profile.speech-presentation`,
+            });
+        }
+        const speechPresentationRecord = isRecord(speechPresentationSource)
+            ? speechPresentationSource
+            : undefined;
+        if (speechPresentationRecord) {
+            for (const key of Object.keys(speechPresentationRecord)) {
+                if (key !== 'progress-phrases') {
+                    throw new ServerSettingsValidationError({
+                        message: `Invalid server settings YAML at ${settingsPath}: ${botPointer}.profile.speech-presentation contains unsupported key "${key}".`,
+                        category: 'unsupported_key',
+                        pointer: `${botPointer}.profile.speech-presentation.${key}`,
+                    });
+                }
+            }
+        }
+        const progressPhrases = speechPresentationRecord?.['progress-phrases'];
+        if (
+            progressPhrases !== undefined &&
+            (!Array.isArray(progressPhrases) ||
+                !progressPhrases.every((phrase) => typeof phrase === 'string'))
+        ) {
+            throw new ServerSettingsValidationError({
+                message: `Invalid server settings YAML at ${settingsPath}: ${botPointer}.profile.speech-presentation.progress-phrases must be an array of strings.`,
+                category: 'type_mismatch',
+                pointer: `${botPointer}.profile.speech-presentation.progress-phrases`,
+            });
+        }
+        const speechPresentation =
+            progressPhrases === undefined
+                ? undefined
+                : normalizeSpeechPresentation({
+                      progressPhrases: progressPhrases as string[],
+                  });
 
         const credentialsObj = {
             discordTokenEnv:
@@ -588,6 +639,10 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
                 Array.isArray(mentionAliases) && mentionAliases.length > 0
                     ? (mentionAliases as string[])
                     : undefined,
+            ...(speechPresentation &&
+                Object.keys(speechPresentation).length > 0 && {
+                    speechPresentation,
+                }),
         };
         const hasProfile = Object.values(profileObj).some(
             (value) => value !== undefined
