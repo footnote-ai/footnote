@@ -2,22 +2,17 @@
 
 ## Summary
 
-Footnote's Discord bot receives speech and plays replies in a voice channel. The
-bot handles Discord audio; the backend handles providers, Workflow and usage
-records. Discord connects to `/api/internal/voice/realtime`, not directly to
-OpenAI.
+Footnote's Discord bot handles voice capture and playback. The backend handles
+speech providers, Workflow and usage records through
+`/api/internal/voice/realtime`; Discord does not connect directly to OpenAI.
 
-Voice has two modes. **Standard** uses OpenRouter to transcribe speech and
-synthesize Workflow-approved answers. **Live** uses GPT-Live for conversation
-and delegates substantive requests to the same Workflow, though it may speak
-independently or paraphrase approved commentary. The
-[alignment tracker](../status/realtime-voice-alignment.md) records what's been
-tested and what remains uncertain. The
-[persona evaluation record](../status/voice-persona-evaluation.md) separates
-verified wiring and synthetic checks from the provider and human evaluation
-that remains. Neither mode has been tested with paid providers or in a real
-Discord call.
-
+**Standard** transcribes speech through OpenRouter and synthesizes approved
+Workflow answers. **Live** handles conversation through GPT-Live and delegates
+substantive questions to Workflow, but can also speak independently or paraphrase
+approved commentary. See the [alignment tracker](../status/realtime-voice-alignment.md)
+and [persona evaluation](../status/voice-persona-evaluation.md) for tested
+behavior and remaining gaps. Neither mode has been tried with paid providers
+or in a real Discord call.
 ## High-Level Flow
 
 ```mermaid
@@ -135,17 +130,13 @@ provider adapters enforce their own transport limits. Standard sends the exact
 approved text to TTS; GPT-Live may paraphrase approved commentary, so its
 handoff is not evidence of exact-text playback.
 
-Workflow Voice receipts include only content-free length measurements,
-outcomes, Result/candidate references, timing, usage, and cost where reported.
-They do not retain prompts, questions, conversations, retrieval bodies,
-assessment text, or answer drafts. Separate Voice-provider accounting remains
-incomplete: transcription usage is logged when returned, Standard TTS does not
-return usage, and GPT-Live handling currently logs duration only. See the
-[persona evaluation record](../status/voice-persona-evaluation.md) for the
-bounded cost plan and unverified behavior. The
-[Workflow documentation](./workflow.md#voice-answer-condensation) explains the
-Step's lineage, limits, and failure behavior.
-
+Workflow Voice receipts contain content-free measurements, outcomes,
+references, timing and reported usage/cost, never conversation bodies, drafts
+or review prose. Voice-provider charges are not yet complete: transcription
+usage is logged when returned, Standard TTS reports no usage, and GPT-Live
+currently logs duration only. The [evaluation plan](../status/voice-persona-evaluation.md)
+covers the missing real-world checks; [Workflow documentation](./workflow.md#voice-answer-condensation)
+explains condensation and its limits.
 A [six-case synthetic evaluation fixture](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json)
 runs through the real Workflow in
 `packages/backend/test/realtimeWorkflowOrchestrator.test.ts` under the default
