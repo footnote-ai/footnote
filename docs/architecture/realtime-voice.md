@@ -13,6 +13,7 @@ approved commentary. See the [alignment tracker](../status/realtime-voice-alignm
 and [persona evaluation](../status/voice-persona-evaluation.md) for tested
 behavior and remaining gaps. Neither mode has been tried with paid providers
 or in a real Discord call.
+
 ## High-Level Flow
 
 ```mermaid
@@ -137,6 +138,7 @@ usage is logged when returned, Standard TTS reports no usage, and GPT-Live
 currently logs duration only. The [evaluation plan](../status/voice-persona-evaluation.md)
 covers the missing real-world checks; [Workflow documentation](./workflow.md#voice-answer-condensation)
 explains condensation and its limits.
+
 A [six-case synthetic evaluation fixture](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json)
 runs through the real Workflow in
 `packages/backend/test/realtimeWorkflowOrchestrator.test.ts` under the default
