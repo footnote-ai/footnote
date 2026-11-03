@@ -17,7 +17,10 @@ import type {
 import type { ModelProfile } from '@footnote/contracts';
 import type { StepRoutingChainsConfig } from '@footnote/contracts';
 import type { WorkflowModeId } from '@footnote/contracts/policy';
-import type { BotProfileConfig } from './profile.js';
+import type {
+    BotProfileConfig,
+    BotProfileSpeechPresentation,
+} from './profile.js';
 import type { TrustGraphTargetConfig } from '../services/executionContractTrustGraph/trustGraphEvidenceTypes.js';
 
 /**
@@ -341,6 +344,7 @@ export type RuntimeConfig = {
                 overlayPath?: string;
                 personaExpressionStrength?: string;
                 mentionAliases?: string[];
+                speechPresentation?: BotProfileSpeechPresentation;
             };
         }> | null;
     };

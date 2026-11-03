@@ -159,6 +159,10 @@ test('Voice selects the invoking Discord node from existing server configuration
                 id: 'danny',
                 displayName: 'Danny bot',
                 personaExpressionStrength: 'subtle',
+                speechPresentation: {
+                    progressPhrases: ['I’ll work through that carefully.'],
+                    ttsVoice: 'profile-voice-must-stay-separate',
+                },
             },
         },
         {
@@ -167,7 +171,13 @@ test('Voice selects the invoking Discord node from existing server configuration
         },
     ];
     try {
-        const backend = parseBotProfileConfig({ profileId: 'footnote' });
+        const backend = parseBotProfileConfig({
+            profileId: 'footnote',
+            speechPresentation: {
+                progressPhrases: ['The deployment phrase.'],
+                ttsVoice: 'deployment-voice-must-stay-separate',
+            },
+        });
         const danny = resolveVoicePersona(backend, logger, {
             discordNodeId: 'danny-bot',
             botPersonaId: 'danny',
@@ -179,8 +189,16 @@ test('Voice selects the invoking Discord node from existing server configuration
         assert.equal(danny.profile.id, 'danny');
         assert.equal(danny.profile.displayName, 'Danny bot');
         assert.equal(danny.expression.strength, 'subtle');
+        assert.deepEqual(danny.profile.speechPresentation?.progressPhrases, [
+            'I’ll work through that carefully.',
+        ]);
+        assert.equal(danny.profile.speechPresentation?.ttsVoice, undefined);
         assert.equal(winter.profile.id, 'winter');
         assert.equal(winter.expression.strength, 'strong');
+        assert.deepEqual(winter.profile.speechPresentation?.progressPhrases, [
+            'The deployment phrase.',
+        ]);
+        assert.equal(winter.profile.speechPresentation?.ttsVoice, undefined);
         assert.equal(
             resolveVoicePersona(backend, logger, {
                 discordNodeId: 'winter-bot',

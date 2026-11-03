@@ -80,6 +80,19 @@ single-use delivery handoff, reports local start/completion/interruption/failure
 and stops stale playback on caller interruption. Synthesis is a complete PCM
 artifact; Discord streams it through the existing guild playback pipeline.
 
+If Workflow is still pending after two seconds, Standard can speak one brief
+progress cue. The call-pinned persona and expression strength choose its phrase
+pool; application code selects uniformly with `crypto.randomInt`. The phrases
+are static and contain no transcript or Workflow content. Operators can replace
+the pool per bot with `discord-bots[].profile.speech-presentation.progress-phrases`
+(up to eight phrases, 160 characters each), or set the deployment profile's
+`BOT_PROFILE_TTS_PROGRESS_PHRASES` comma-separated value. Custom personas use
+the neutral pool unless configured. Fast answers skip the cue. Answer readiness,
+new caller audio and call close cancel pending cue work; a late TTS result is
+discarded. Cue audio has no delivery ID, and approved answer playback stops the
+generic playback queue before speaking, so it does not overlap the reviewed
+answer.
+
 ### Live
 
 `openAiLiveVoice.ts` owns the GPT-Live WebSocket on the backend. Discord sends
@@ -103,11 +116,14 @@ errors to the original append and logs a valid context-window usage ratio when
 GPT-Live reports one. An acknowledgment confirms the note was appended, not
 that GPT-Live understood or used it.
 
-There is a possible timing issue: a thinking append can suppress a pending
-automatic spoken acknowledgment. Audio already emitted still reaches Discord,
-and Footnote adds no separate progress message. The provider doesn't report
-when an automatic acknowledgment finishes, so that interaction needs a real
-call to evaluate under [#974](https://github.com/footnote-ai/footnote/issues/974).
+Live has no backend-generated progress cue; GPT-Live remains the source of its
+conversational acknowledgments. A thinking append can affect a pending automatic
+acknowledgment, but its receipt confirms only that the note was appended, not
+what GPT-Live said or when its audio finished. Synthetic tests order a thinking
+append receipt and provider audio event to check the backend relay; they do not
+establish that a real provider speaks the cue or prevent provider-side overlap.
+That timing and listening behavior remains for a real call under
+[#974](https://github.com/footnote-ai/footnote/issues/974).
 
 ### Answer length
 

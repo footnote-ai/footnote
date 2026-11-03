@@ -114,6 +114,20 @@ test('Voice answer token ceiling is editable in setup YAML and defaults to auto'
     );
 });
 
+test('Voice progress phrase overrides use the speech settings path', () => {
+    assert.equal(envSpecByKey.BOT_PROFILE_TTS_PROGRESS_PHRASES.kind, 'csv');
+    assert.equal(
+        envConfigSourceByKey.BOT_PROFILE_TTS_PROGRESS_PHRASES,
+        'settings_yaml'
+    );
+    assert.deepEqual(
+        settingsSpecEntries.find(
+            (entry) => entry.envKey === 'BOT_PROFILE_TTS_PROGRESS_PHRASES'
+        )?.path,
+        ['speech', 'tts-progress-phrases']
+    );
+});
+
 test('retired presentation validator settings are absent from the config spec', () => {
     assert.equal(
         Object.prototype.hasOwnProperty.call(

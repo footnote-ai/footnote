@@ -79,6 +79,7 @@ const ENV_PATH_OVERRIDES: Record<string, string[]> = {
     BOT_PROFILE_TTS_MODEL: ['speech', 'tts-model'],
     BOT_PROFILE_TTS_VOICE: ['speech', 'tts-voice'],
     BOT_PROFILE_TTS_DELIVERY: ['speech', 'tts-delivery'],
+    BOT_PROFILE_TTS_PROGRESS_PHRASES: ['speech', 'tts-progress-phrases'],
     BOT_PROFILE_REALTIME_MODEL: ['speech', 'realtime-model'],
     BOT_PROFILE_REALTIME_VOICE: ['speech', 'realtime-voice'],
     BOT_PROFILE_REALTIME_DELIVERY: ['speech', 'realtime-delivery'],

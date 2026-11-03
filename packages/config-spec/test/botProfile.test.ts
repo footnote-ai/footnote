@@ -72,6 +72,22 @@ test('reads bounded per-profile speech presentation overrides', () => {
     });
 });
 
+test('reads bounded Voice progress phrases from profile configuration', () => {
+    const parsed = readBotProfileConfig({
+        env: {
+            BOT_PROFILE_TTS_PROGRESS_PHRASES:
+                '  One moment. , I’m working through that. , , ' +
+                'x'.repeat(161),
+        },
+        warn: () => undefined,
+    });
+
+    assert.deepEqual(parsed.speechPresentation?.progressPhrases, [
+        'One moment.',
+        'I’m working through that.',
+    ]);
+});
+
 test('parseBotProfileConfig prefers inline overlay over file overlay', () => {
     const parsed = parseBotProfileConfig({
         profileId: 'ari-vendor',

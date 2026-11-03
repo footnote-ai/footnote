@@ -35,7 +35,10 @@ import type {
     OpenAiLiveVoiceSession,
     OpenAiLiveVoiceSessionFactory,
 } from '../services/openAiLiveVoice.js';
-import { resolveSpeechSelection } from '../services/speechPresentation.js';
+import {
+    resolveSpeechSelection,
+    selectVoiceProgressPhrase,
+} from '../services/speechPresentation.js';
 import {
     fitsVoiceAnswerDelivery,
     resolveVoiceAnswerTokenLimit,
@@ -60,6 +63,7 @@ const realtimeLogger =
 const CALL_LIMIT_MS = 60_000;
 const EXTENDED_CALL_LIMIT_MS = 5 * 60_000;
 const SESSION_SETUP_TIMEOUT_MS = 15_000;
+const STANDARD_PROGRESS_CUE_DELAY_MS = 2_000;
 const LIVE_TRANSCRIPT_SETTLE_MS = 500;
 const LIVE_CLOSE_GRACE_MS = 2_500;
 const STANDARD_TTS_MODEL = 'openai/gpt-4o-mini-tts-2025-12-15';
@@ -166,6 +170,8 @@ export const createInternalVoiceRealtimeHandler = ({
         let conversationUnsubscribe: (() => void) | undefined;
         let transcriptionController: AbortController | undefined;
         let synthesisController: AbortController | undefined;
+        let progressCueTimer: ReturnType<typeof setTimeout> | undefined;
+        let progressCueController: AbortController | undefined;
         let currentDeliveryId: string | undefined;
         let currentDeliveryText: string | undefined;
         let audioChunks: Buffer[] = [];
@@ -229,6 +235,98 @@ export const createInternalVoiceRealtimeHandler = ({
         let currentLiveDeliveryDelegationId: string | undefined;
         let lastLiveWorkingContextRevision: number | undefined;
 
+        const cancelProgressCue = (): void => {
+            clearTimer(progressCueTimer);
+            progressCueTimer = undefined;
+            progressCueController?.abort('progress cue cancelled');
+            progressCueController = undefined;
+        };
+
+        const scheduleStandardProgressCue = (
+            handle: RealtimeFreshnessHandle,
+            turnId: string
+        ): void => {
+            cancelProgressCue();
+            const cuePersona = persona;
+            const cueSpeechSelection = speechSelection;
+            if (
+                mode !== 'standard' ||
+                !cueSpeechSelection ||
+                !cuePersona ||
+                !openRouterVoiceService
+            )
+                return;
+            progressCueTimer = setTimer(() => {
+                progressCueTimer = undefined;
+                const state = conversationState;
+                const execution = state?.executionStatus();
+                if (
+                    closed ||
+                    mode !== 'standard' ||
+                    !state ||
+                    !state.isDeliveryFresh(handle) ||
+                    !execution?.occupied ||
+                    execution.status !== 'pending' ||
+                    execution.turnId !== turnId
+                )
+                    return;
+                const controller = new AbortController();
+                progressCueController = controller;
+                const phrase = selectVoiceProgressPhrase({
+                    profileId: cuePersona.profile.id,
+                    expressionStrength: cuePersona.expression.strength,
+                    operatorPhrases:
+                        cuePersona.profile.speechPresentation?.progressPhrases,
+                });
+                void openRouterVoiceService
+                    .synthesize(
+                        phrase,
+                        {
+                            model: cueSpeechSelection.model,
+                            voice: cueSpeechSelection.voice,
+                            instructions: cueSpeechSelection.delivery,
+                        },
+                        controller.signal
+                    )
+                    .then((result) => {
+                        const currentExecution =
+                            conversationState?.executionStatus();
+                        if (
+                            closed ||
+                            controller.signal.aborted ||
+                            progressCueController !== controller ||
+                            !conversationState ||
+                            !conversationState.isDeliveryFresh(handle) ||
+                            !currentExecution?.occupied ||
+                            currentExecution.status !== 'pending' ||
+                            currentExecution.turnId !== turnId ||
+                            ws.readyState !== WebSocket.OPEN
+                        )
+                            return;
+                        sendServerEvent(ws, {
+                            type: 'output_audio.delta',
+                            audioBase64: result.audio.toString('base64'),
+                        });
+                    })
+                    .catch((error: unknown) => {
+                        if (!controller.signal.aborted && !closed)
+                            realtimeLogger.warn(
+                                'Voice progress cue synthesis failed.',
+                                {
+                                    error:
+                                        error instanceof Error
+                                            ? error.message
+                                            : String(error),
+                                }
+                            );
+                    })
+                    .finally(() => {
+                        if (progressCueController === controller)
+                            progressCueController = undefined;
+                    });
+            }, STANDARD_PROGRESS_CUE_DELAY_MS);
+        };
+
         const reportAnswerTooLong = (): void => {
             if (!closed && !socketClosed && ws.readyState === WebSocket.OPEN)
                 sendServerEvent(ws, {
@@ -263,45 +361,51 @@ export const createInternalVoiceRealtimeHandler = ({
                 ? null
                 : {
                       runRealtimeConversation: async (snapshot, context) => {
-                          if (!mode || !persona)
-                              throw new Error('Voice mode is unavailable.');
-                          const result =
-                              await workflowRunner.runRealtimeConversation(
-                                  snapshot,
-                                  {
-                                      ...context,
-                                      voiceMode: mode,
-                                      maxAnswerTokens:
-                                          deliveryTokenLimits[mode],
-                                      persona,
-                                  }
-                              );
-                          const answer = result.finalResponse;
-                          if (
-                              answer?.disposition === 'workflow_limit_reached'
-                          ) {
-                              if (!context.signal.aborted)
-                                  reportWorkflowLimitReached(
-                                      answer.limitReason
+                          try {
+                              if (!mode || !persona)
+                                  throw new Error('Voice mode is unavailable.');
+                              const result =
+                                  await workflowRunner.runRealtimeConversation(
+                                      snapshot,
+                                      {
+                                          ...context,
+                                          voiceMode: mode,
+                                          maxAnswerTokens:
+                                              deliveryTokenLimits[mode],
+                                          persona,
+                                      }
                                   );
-                              return result;
+                              const answer = result.finalResponse;
+                              if (
+                                  answer?.disposition ===
+                                  'workflow_limit_reached'
+                              ) {
+                                  if (!context.signal.aborted)
+                                      reportWorkflowLimitReached(
+                                          answer.limitReason
+                                      );
+                                  return result;
+                              }
+                              const tooLong =
+                                  answer?.disposition === 'answer_too_long' ||
+                                  (answer?.disposition === 'approved' &&
+                                      !fitsVoiceAnswerDelivery(
+                                          answer.text,
+                                          mode,
+                                          deliveryTokenLimits[mode]
+                                      ));
+                              if (!tooLong) return result;
+                              if (!context.signal.aborted)
+                                  reportAnswerTooLong();
+                              return {
+                                  ...result,
+                                  finalResponse: {
+                                      disposition: 'answer_too_long',
+                                  },
+                              };
+                          } finally {
+                              if (mode === 'standard') cancelProgressCue();
                           }
-                          const tooLong =
-                              answer?.disposition === 'answer_too_long' ||
-                              (answer?.disposition === 'approved' &&
-                                  !fitsVoiceAnswerDelivery(
-                                      answer.text,
-                                      mode,
-                                      deliveryTokenLimits[mode]
-                                  ));
-                          if (!tooLong) return result;
-                          if (!context.signal.aborted) reportAnswerTooLong();
-                          return {
-                              ...result,
-                              finalResponse: {
-                                  disposition: 'answer_too_long',
-                              },
-                          };
                       },
                   };
 
@@ -326,6 +430,7 @@ export const createInternalVoiceRealtimeHandler = ({
         const synthesizeApprovedDelivery = async (
             handle: RealtimeFreshnessHandle
         ): Promise<void> => {
+            cancelProgressCue();
             const state = conversationState;
             if (
                 closed ||
@@ -452,7 +557,9 @@ export const createInternalVoiceRealtimeHandler = ({
                     const result = conversationState.startExecution(
                         boundedWorkflowRunner
                     );
-                    if (!result.accepted) {
+                    if (result.accepted) {
+                        scheduleStandardProgressCue(turn.handle, turn.turnId);
+                    } else {
                         sendServerEvent(ws, {
                             type: 'error',
                             message: 'The voice turn could not start Workflow.',
@@ -519,6 +626,7 @@ export const createInternalVoiceRealtimeHandler = ({
             callTimeout = undefined;
             clearTimer(liveDelegationTimer);
             liveDelegationTimer = undefined;
+            cancelProgressCue();
             providerSetupController?.abort(reason);
             providerSetupController = undefined;
             conversationUnsubscribe?.();
@@ -1209,6 +1317,7 @@ export const createInternalVoiceRealtimeHandler = ({
                     }
                     const audio = Buffer.from(event.audioBase64, 'base64');
                     if (audioBytes === 0) {
+                        cancelProgressCue();
                         transcriptionController?.abort('new_utterance');
                         transcriptionController = undefined;
                         synthesisController?.abort('interrupted');
@@ -1254,6 +1363,7 @@ export const createInternalVoiceRealtimeHandler = ({
                 }
 
                 if (event.type === 'input_audio.clear') {
+                    cancelProgressCue();
                     audioChunks = [];
                     audioBytes = 0;
                     transcriptionController?.abort('audio_cleared');

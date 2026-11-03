@@ -217,7 +217,15 @@ discord-bots:
           id: 'default'
           display-name: 'Footnote'
           mention-aliases: []
+          speech-presentation:
+              progress-phrases:
+                  - 'One moment while I think it through.'
+                  - 'I am working through that now.'
 ```
+
+`speech-presentation.progress-phrases` overrides the Standard Voice progress
+cue pool for that bot. A single-profile deployment can use
+`BOT_PROFILE_TTS_PROGRESS_PHRASES` as a comma-separated list instead.
 
 Set `DISCORD_USER_ID` to the authorized developer's Discord user ID, not
 the bot's ID. Use the same value in the backend and each bot process to permit

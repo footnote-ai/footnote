@@ -5,6 +5,8 @@
  * @footnote-risk: high - Incorrect precedence changes both speech paths and effective-provider metadata.
  * @footnote-ethics: high - Persona delivery guidance affects user-facing identity and must not inherit TRACE caution.
  */
+import { randomInt as cryptoRandomInt } from 'node:crypto';
+import type { PersonaExpressionStrength } from '@footnote/contracts/policy';
 import type { BotProfileConfig } from '../config/profile.js';
 
 export type SpeechModality = 'tts' | 'realtime';
@@ -47,6 +49,105 @@ type ResolveSpeechSelectionInput = {
     ignoreOperatorModel?: boolean;
     ignoreOperatorVoice?: boolean;
     fallbackReason?: string | null;
+};
+
+type VoiceProgressPhrasePools = Record<
+    PersonaExpressionStrength,
+    readonly string[]
+>;
+
+const DEFAULT_VOICE_PROGRESS_PHRASES: Record<string, VoiceProgressPhrasePools> =
+    {
+        footnote: {
+            subtle: [
+                'I’ll take a moment with that.',
+                'Let me work through that.',
+            ],
+            balanced: [
+                'I’ll think that through for a moment.',
+                'I’m working through it now.',
+                'One moment while I sort this out.',
+            ],
+            strong: [
+                'Let me untangle the pieces for a moment.',
+                'I’ll work through that carefully.',
+            ],
+        },
+        danny: {
+            subtle: [
+                'I’ll take a moment to consider that.',
+                'Let me work through it carefully.',
+            ],
+            balanced: [
+                'I’ll take a moment and work through this.',
+                'Let me consider that carefully.',
+                'I’m working through that step by step.',
+            ],
+            strong: [
+                'I’ll take a moment and think through the question carefully.',
+                'Let me consider that from a couple of angles.',
+            ],
+        },
+        myuri: {
+            subtle: [
+                'Let me untangle that for a moment.',
+                'I’ll sort through that thought.',
+            ],
+            balanced: [
+                'Hmm, give me a moment to connect the pieces.',
+                'Let me untangle that little knot.',
+                'I’ll follow that thread for a moment.',
+            ],
+            strong: [
+                'A few threads to sort out—give me a moment.',
+                'Let me untangle this one for a moment.',
+            ],
+        },
+        winter: {
+            subtle: ['One moment.', 'I’ll take a moment with that.'],
+            balanced: [
+                'One moment while I think it through.',
+                'I’m working through that now.',
+                'Let me give that a moment.',
+            ],
+            strong: [
+                'I’ll think that through carefully.',
+                'One moment while I work through the details.',
+            ],
+        },
+    };
+
+const DEFAULT_CUSTOM_VOICE_PROGRESS_PHRASES: VoiceProgressPhrasePools = {
+    subtle: ['One moment.', 'I’ll take a moment with that.'],
+    balanced: [
+        'One moment while I work through that.',
+        'I’ll take a moment to think this through.',
+    ],
+    strong: [
+        'Let me work through that carefully.',
+        'I’ll take a moment to sort that out.',
+    ],
+};
+
+/** Selects a short cue locally; injected indexes keep phrase choice reproducible in tests. */
+export const selectVoiceProgressPhrase = ({
+    profileId,
+    expressionStrength,
+    operatorPhrases,
+    randomInt = cryptoRandomInt,
+}: {
+    profileId: string;
+    expressionStrength: PersonaExpressionStrength;
+    operatorPhrases?: readonly string[];
+    randomInt?: (max: number) => number;
+}): string => {
+    const configured = operatorPhrases?.filter((phrase) => phrase.trim());
+    const normalizedId = profileId.trim().toLowerCase();
+    const defaults = Object.hasOwn(DEFAULT_VOICE_PROGRESS_PHRASES, normalizedId)
+        ? DEFAULT_VOICE_PROGRESS_PHRASES[normalizedId]!
+        : DEFAULT_CUSTOM_VOICE_PROGRESS_PHRASES;
+    const pool = configured?.length ? configured : defaults[expressionStrength];
+    return pool[randomInt(pool.length)]!;
 };
 
 const choose = (

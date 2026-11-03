@@ -32,6 +32,7 @@ export interface BotProfileSpeechPresentation {
     ttsModel?: string;
     ttsVoice?: string;
     ttsDelivery?: string;
+    progressPhrases?: string[];
     realtimeModel?: string;
     realtimeVoice?: string;
     realtimeDelivery?: string;
@@ -47,7 +48,7 @@ export interface BotProfileConfig {
     promptOverlay: BotProfilePromptOverlay;
     /** Optional persona expression override. */
     personaExpressionStrength?: PersonaExpressionStrength;
-    /** Optional operator overrides; deployment defaults apply until auditioned persona defaults are implemented. */
+    /** Optional operator overrides for speech delivery and progress phrases. */
     speechPresentation?: BotProfileSpeechPresentation;
 }
 
@@ -122,7 +123,8 @@ const normalizeOptionalString = (
     return normalized.length > 0 ? normalized : null;
 };
 
-const normalizeSpeechPresentation = (
+/** Trims speech settings and bounds configured progress phrases for safe playback. */
+export const normalizeSpeechPresentation = (
     value: Partial<BotProfileSpeechPresentation> | undefined
 ): BotProfileSpeechPresentation => {
     const result: BotProfileSpeechPresentation = {};
@@ -139,6 +141,11 @@ const normalizeSpeechPresentation = (
         const maxLength = key.endsWith('Delivery') ? 500 : 128;
         if (normalized.length <= maxLength) result[key] = normalized;
     }
+    const progressPhrases = value?.progressPhrases
+        ?.map((phrase) => phrase.trim())
+        .filter((phrase) => phrase.length > 0 && phrase.length <= 160)
+        .slice(0, 8);
+    if (progressPhrases?.length) result.progressPhrases = progressPhrases;
     return result;
 };
 
@@ -340,6 +347,7 @@ export const readBotProfileConfig = (
             ttsModel: env.BOT_PROFILE_TTS_MODEL,
             ttsVoice: env.BOT_PROFILE_TTS_VOICE,
             ttsDelivery: env.BOT_PROFILE_TTS_DELIVERY,
+            progressPhrases: env.BOT_PROFILE_TTS_PROGRESS_PHRASES?.split(','),
             realtimeModel: env.BOT_PROFILE_REALTIME_MODEL,
             realtimeVoice: env.BOT_PROFILE_REALTIME_VOICE,
             realtimeDelivery: env.BOT_PROFILE_REALTIME_DELIVERY,

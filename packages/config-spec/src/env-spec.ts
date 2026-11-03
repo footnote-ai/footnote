@@ -943,6 +943,20 @@ export const envEntries = [
     ),
 
     defineEnv({
+        key: 'BOT_PROFILE_TTS_PROGRESS_PHRASES',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'speech',
+        required: false,
+        secret: false,
+        kind: 'csv',
+        description:
+            'Optional comma-separated Voice progress phrases for this profile; phrase selection stays in application code.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config/profile.ts'],
+    }),
+
+    defineEnv({
         key: 'BOT_PROFILE_PROMPT_OVERLAY',
         owner: 'discord-bot',
         stage: 'bootstrap',
