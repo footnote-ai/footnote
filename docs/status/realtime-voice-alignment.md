@@ -1,34 +1,12 @@
 # Realtime Voice alignment
 
-Updated: 2026-11-02. Owner: [#558](https://github.com/footnote-ai/footnote/issues/558).
+Updated: 2026-11-02 · [Issue #558](https://github.com/footnote-ai/footnote/issues/558)
 
-[PR #965](https://github.com/footnote-ai/footnote/pull/965) connected both
-Voice modes to the existing Workflow. Standard sends approved answers to TTS.
-Live delegates substantive questions but can also speak independently or
-paraphrase approved commentary.
+Standard and Live use the existing Workflow for substantive answers. Standard speaks approved text through TTS. GPT-Live also handles conversation directly and can paraphrase approved commentary.
 
-Both modes use the invoking bot's persona, pinned at call admission.
-GPT-Live receives the same behavioral guidance at startup, without
-participant names or optional transcript summaries in its instructions.
-Participant metadata still supports caller and consent checks. A missing
-required overlay prevents the call instead of silently substituting Footnote.
-
-The startup payload, Workflow wiring and call boundaries have synthetic
-coverage, but real persona fidelity and audible delivery remain untested.
-See the [Voice evaluation plan](./voice-persona-evaluation.md) for the provider
-and listening protocol; no model-behavior scores have been collected.
-The [architecture guide](../architecture/realtime-voice.md) documents current
-behavior, while the [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
-tracks later design work.
+Both modes use the invoking bot's persona, fixed when the call starts. The startup instructions exclude participant names and optional transcript summaries. Synthetic tests cover the persona handoff, delegation and call controls. We still need to test real speech, cancellation and cost reporting in Discord; the [persona evaluation plan](./voice-persona-evaluation.md) covers that work.
 
 ## Alignment matrix
-
-| Area | Current behavior | Still to verify |
-| --- | --- | --- |
-| Persona | Standard Workflow, Live Workflow and GPT-Live startup share the call-pinned persona. | Real model fidelity and consistency with reviewed substance. |
-| Speech | Standard sends approved text to TTS; Live may speak independently or paraphrase approved commentary. | Human audibility and the missing listener-facing source marker for Live. |
-| Call handling | One consenting caller; interruption or closure revokes stale delivery. | Real Discord operation, provider cancellation and recovery when capacity remains `occupied`. |
-| Usage and cost | Workflow stores content-free usage/cost where reported. | Transcription is only logged when supplied, TTS lacks usage, and Live logs duration only. Total Voice spend is not reconciled. |
 
 The detailed matrix below preserves the baseline through #964. Its earlier
 `Gap` entries describe that period, not necessarily the current implementation.
