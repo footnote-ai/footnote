@@ -4,7 +4,16 @@ Updated: 2026-11-02 · [Issue #558](https://github.com/footnote-ai/footnote/issu
 
 Standard and Live use the existing Workflow for substantive answers. Standard speaks approved text through TTS. GPT-Live also handles conversation directly and can paraphrase approved commentary.
 
-Both modes use the invoking bot's persona, fixed when the call starts. The startup instructions exclude participant names and optional transcript summaries. Live also receives a short, ephemeral update for each accepted caller request and correction. Synthetic tests cover the persona handoff, delegation, forwarding already-emitted audio, and call controls. A thinking append can cancel an automatic acknowledgment that is still pending, and the current WebSocket events do not expose acknowledgment completion; provider timing, speech, retention and listening remain for #974. The [persona evaluation plan](./voice-persona-evaluation.md) covers that work.
+Both modes keep the invoking bot's persona throughout the call. GPT-Live
+receives short updates when a caller request or correction is accepted.
+Participant names and optional transcript summaries stay out of its startup
+instructions.
+
+Synthetic tests cover persona setup, delegation, context updates, call
+controls and forwarding audio already emitted by GPT-Live. A context update
+may suppress an automatic acknowledgment that hasn't played yet. We need
+real calls to check the timing and spoken behavior; see the
+[persona evaluation plan](./voice-persona-evaluation.md).
 
 ## Alignment matrix
 
