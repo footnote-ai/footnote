@@ -12,8 +12,11 @@ synthesize Workflow-approved answers. **Live** uses GPT-Live for conversation
 and delegates substantive requests to the same Workflow, though it may speak
 independently or paraphrase approved commentary. The
 [alignment tracker](../status/realtime-voice-alignment.md) records what's been
-tested and what remains uncertain. Neither mode has been tested with paid
-providers or in a real Discord call.
+tested and what remains uncertain. The
+[persona evaluation record](../status/voice-persona-evaluation.md) separates
+verified wiring and synthetic checks from the provider and human evaluation
+that remains. Neither mode has been tested with paid providers or in a real
+Discord call.
 
 ## High-Level Flow
 
@@ -132,11 +135,16 @@ provider adapters enforce their own transport limits. Standard sends the exact
 approved text to TTS; GPT-Live may paraphrase approved commentary, so its
 handoff is not evidence of exact-text playback.
 
-Canonical Voice receipts include only content-free length measurements,
-outcomes, Result/candidate references, timing, usage, and cost. They do not
-retain prompts, questions, conversations, retrieval bodies, assessment text,
-or answer drafts. The [Workflow documentation](./workflow.md#voice-answer-condensation)
-explains the Step's lineage, limits, and failure behavior.
+Workflow Voice receipts include only content-free length measurements,
+outcomes, Result/candidate references, timing, usage, and cost where reported.
+They do not retain prompts, questions, conversations, retrieval bodies,
+assessment text, or answer drafts. Separate Voice-provider accounting remains
+incomplete: transcription usage is logged when returned, Standard TTS does not
+return usage, and GPT-Live handling currently logs duration only. See the
+[persona evaluation record](../status/voice-persona-evaluation.md) for the
+bounded cost plan and unverified behavior. The
+[Workflow documentation](./workflow.md#voice-answer-condensation) explains the
+Step's lineage, limits, and failure behavior.
 
 A [six-case synthetic evaluation fixture](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json)
 runs through the real Workflow in

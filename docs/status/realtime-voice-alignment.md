@@ -26,17 +26,22 @@ with synthetic providers. We have not yet evaluated persona fidelity, provider
 behavior or playback in a real Discord call. Independent Live speech and
 paraphrased commentary cannot be treated as the exact reviewed answer.
 
+The [persona and behavior evaluation record](./voice-persona-evaluation.md)
+separates verified wiring and synthetic checks from the proposed paid-provider
+and human-listening evaluation. No model-behavior scores have been collected.
+
 The [architecture guide](../architecture/realtime-voice.md) explains the
 implementation. The [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
 covers the remaining design work and consent decisions.
 
 ## Alignment matrix
 
-| Area            | Current behavior                                                                                                                                                      | What remains unverified                                                                                       |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Persona         | Standard, Live delegation and GPT-Live startup use the same call-pinned behavioral persona. Participant names and startup summaries are not included in instructions. | Tests confirm the wiring, not how consistently GPT-Live follows it.                                           |
-| Speech approval | Standard speaks approved Workflow text. Live may speak independently or paraphrase approved commentary.                                                               | Live audio cannot be verified as the exact reviewed wording; actual speech and audibility still need testing. |
-| Call handling   | One consenting caller is admitted. Live delegation is matched to the current turn, and interruption or closure revokes stale delivery.                                | Real Discord events, provider retention and recovery after deployment failure still need evaluation.          |
+| Area            | Current behavior                                                                                                                                                      | What remains unverified                                                                                                                                                  |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Persona         | Standard, Live delegation and GPT-Live startup use the same call-pinned behavioral persona. Participant names and startup summaries are not included in instructions. | Tests confirm the wiring, not how consistently GPT-Live follows it.                                                                                                      |
+| Speech approval | Standard sends approved Workflow text to TTS. Live may speak independently or paraphrase approved commentary.                                                         | Live speech has no listener-facing source marker; real speech and audibility still need testing.                                                                         |
+| Call handling   | One consenting caller is admitted. Live delegation is matched to the current turn, and interruption or closure revokes stale delivery.                                | Synthetic controls do not establish real Discord startup, provider cancellation, or recovery behavior.                                                                   |
+| Usage and cost  | Workflow evidence records content-free usage and cost where provider data is available. Voice-provider usage is handled separately.                                   | Standard transcription usage is only logged when returned; Standard TTS has no usage response; Live logs duration only. Complete per-call Voice spend is not reconciled. |
 
 The detailed matrix below preserves the baseline through #964. Its earlier
 `Gap` entries describe that period, not necessarily the current implementation.
