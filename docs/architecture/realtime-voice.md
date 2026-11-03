@@ -2,17 +2,11 @@
 
 ## Summary
 
-Footnote's Discord bot handles voice capture and playback. The backend handles
-speech providers, Workflow and usage records through
-`/api/internal/voice/realtime`; Discord does not connect directly to OpenAI.
+The Discord bot captures and plays audio. The backend handles speech providers and Workflow through `/api/internal/voice/realtime`.
 
-**Standard** transcribes speech through OpenRouter and synthesizes approved
-Workflow answers. **Live** handles conversation through GPT-Live and delegates
-substantive questions to Workflow, but can also speak independently or paraphrase
-approved commentary. See the [alignment tracker](../status/realtime-voice-alignment.md)
-and [persona evaluation](../status/voice-persona-evaluation.md) for tested
-behavior and remaining gaps. Neither mode has been tried with paid providers
-or in a real Discord call.
+**Standard** uses OpenRouter to transcribe speech and synthesize approved Workflow answers. **Live** handles conversation through GPT-Live and delegates substantive questions to Workflow. Live can also speak independently or paraphrase approved commentary.
+
+The [alignment tracker](../status/realtime-voice-alignment.md) covers current behavior, and the [persona evaluation plan](../status/voice-persona-evaluation.md) outlines the first real Discord tests. Both modes have only been tested synthetically so far.
 
 ## High-Level Flow
 
