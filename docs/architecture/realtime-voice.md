@@ -91,17 +91,17 @@ GPT-Live may also speak without delegation and may paraphrase that commentary;
 Live audio therefore carries no exact-text approval or playback receipt.
 
 When a caller's request is accepted and matched to a Live delegation, the
-backend sends GPT-Live a short `session.thinking.append` note. It includes
-the latest request and whether Workflow could start. Corrections replace the
-previous request. The note comes from the existing call state, with transcript
-text identified as the caller's unverified words. Persona instructions and
-Workflow approval stay as they were.
+backend sends GPT-Live a short `session.thinking.append` note with the latest
+request and whether Workflow could start. A correction supersedes the earlier
+request in Footnote's call state; earlier appends may remain in the Live
+session. The note uses the caller transcript as unverified input. Persona
+instructions and Workflow approval stay as they were.
 
-All three text append types (`thinking`, `instructions` and `commentary`)
-have a 500-estimated-token limit. The backend matches provider acknowledgments
-and errors to the original append and logs a valid context-window usage ratio
-when GPT-Live reports one. We haven't measured whether Live actually uses
-these notes in conversation.
+Each `thinking`, `instructions` and `commentary` append independently has a
+500-estimated-token limit. The backend matches provider acknowledgments and
+errors to the original append and logs a valid context-window usage ratio when
+GPT-Live reports one. An acknowledgment confirms the note was appended, not
+that GPT-Live understood or used it.
 
 There is a possible timing issue: a thinking append can suppress a pending
 automatic spoken acknowledgment. Audio already emitted still reaches Discord,

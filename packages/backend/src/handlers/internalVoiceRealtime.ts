@@ -815,7 +815,7 @@ export const createInternalVoiceRealtimeHandler = ({
                     [
                         `Latest caller request (transcript may contain errors; caller-reported, not verified): ${JSON.stringify(activeRequest.content)}`,
                         `Workflow status: ${execution.accepted ? 'accepted, awaiting start' : 'not started'}; no result is available yet.`,
-                        'This request replaces earlier caller requests.',
+                        'This is the current caller request in Footnote call state; it supersedes earlier requests. Older Live context may remain.',
                     ].join('\n'),
                     delegation.id
                 );

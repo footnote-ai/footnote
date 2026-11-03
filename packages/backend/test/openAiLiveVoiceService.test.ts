@@ -13,36 +13,41 @@ import {
     validateOpenAiLiveTextAppend,
 } from '../src/services/openAiLiveVoice.js';
 
+class FakeSocket extends EventEmitter {
+    public readyState = 1;
+
+    public constructor(private readonly sent: Array<Record<string, unknown>>) {
+        super();
+    }
+
+    send(data: string): void {
+        const event = JSON.parse(data) as Record<string, unknown>;
+        this.sent.push(event);
+        if (event.type === 'session.start') {
+            setImmediate(() =>
+                this.emit(
+                    'message',
+                    Buffer.from(
+                        JSON.stringify({
+                            type: 'session.started',
+                            session: { id: 'live-session' },
+                        })
+                    )
+                )
+            );
+        }
+    }
+
+    close(): void {
+        this.readyState = 3;
+        this.emit('close');
+    }
+}
+
 test('GPT-Live starts a backend WebSocket session with client delegation and sends PCM and commentary events', async () => {
     const sent: Array<Record<string, unknown>> = [];
     let openedUrl = '';
     let authorization = '';
-    class FakeSocket extends EventEmitter {
-        public readyState = 1;
-
-        send(data: string): void {
-            const event = JSON.parse(data) as Record<string, unknown>;
-            sent.push(event);
-            if (event.type === 'session.start') {
-                setImmediate(() =>
-                    this.emit(
-                        'message',
-                        Buffer.from(
-                            JSON.stringify({
-                                type: 'session.started',
-                                session: { id: 'live-session' },
-                            })
-                        )
-                    )
-                );
-            }
-        }
-
-        close(): void {
-            this.readyState = 3;
-            this.emit('close');
-        }
-    }
     const session = await createOpenAiLiveVoiceSession({
         apiKey: 'test-key',
         instructions: 'Speak naturally and delegate substantive work.',
@@ -50,7 +55,7 @@ test('GPT-Live starts a backend WebSocket session with client delegation and sen
         createWebSocket: (url, options) => {
             openedUrl = url;
             authorization = options.headers.Authorization;
-            const socket = new FakeSocket();
+            const socket = new FakeSocket(sent);
             setImmediate(() => socket.emit('open'));
             return socket as never;
         },
@@ -120,37 +125,12 @@ test('GPT-Live removes setup cancellation listeners when startup is aborted', as
 test('GPT-Live appends thinking, instructions, and commentary with correlatable event IDs', async () => {
     const sent: Array<Record<string, unknown>> = [];
     let socket: FakeSocket | undefined;
-    class FakeSocket extends EventEmitter {
-        public readyState = 1;
-
-        send(data: string): void {
-            const event = JSON.parse(data) as Record<string, unknown>;
-            sent.push(event);
-            if (event.type === 'session.start') {
-                setImmediate(() =>
-                    this.emit(
-                        'message',
-                        Buffer.from(
-                            JSON.stringify({
-                                type: 'session.started',
-                                session: { id: 'live-session' },
-                            })
-                        )
-                    )
-                );
-            }
-        }
-
-        close(): void {
-            this.readyState = 3;
-        }
-    }
     const session = await createOpenAiLiveVoiceSession({
         apiKey: 'test-key',
         instructions: 'Fixed call persona.',
         voice: 'marin',
         createWebSocket: () => {
-            socket = new FakeSocket();
+            socket = new FakeSocket(sent);
             setImmediate(() => socket?.emit('open'));
             return socket as never;
         },

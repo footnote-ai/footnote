@@ -998,7 +998,15 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
         'The reviewed answer keeps its explanation and source.';
     const stubLiveSession = new StubOpenAiLiveVoiceSession();
     let startRequest: { instructions: string; voice: string } | undefined;
+    let notifyNextTimerScheduled: (() => void) | undefined;
     const harness = await createRealtimeHandlerHarness({
+        setTimer: ((...args: Parameters<typeof setTimeout>) => {
+            const timer = setTimeout(...args);
+            const notify = notifyNextTimerScheduled;
+            notifyNextTimerScheduled = undefined;
+            notify?.();
+            return timer;
+        }) as typeof setTimeout,
         openAiLiveVoiceSessionFactory: async (request) => {
             startRequest = request;
             return stubLiveSession;
@@ -1034,6 +1042,20 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
     });
 
     let ws: WebSocket | undefined;
+    const waitForNextTimerScheduled = (): Promise<void> =>
+        new Promise((resolve, reject) => {
+            const timeout = setTimeout(
+                () =>
+                    reject(
+                        new Error('Live commit did not schedule its timer.')
+                    ),
+                1_000
+            );
+            notifyNextTimerScheduled = () => {
+                clearTimeout(timeout);
+                resolve();
+            };
+        });
     try {
         ws = await harness.connect();
         ws.send(
@@ -1080,8 +1102,9 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
                 speakerId: 'user-1',
             })
         );
+        const firstCommitScheduled = waitForNextTimerScheduled();
         ws.send(JSON.stringify({ type: 'input_audio.commit' }));
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await firstCommitScheduled;
         assert.deepEqual(stubLiveSession.audio, [inputAudio]);
         await new Promise((resolve) => setTimeout(resolve, 600));
 
@@ -1185,8 +1208,9 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
                 speakerId: 'user-1',
             })
         );
+        const secondCommitScheduled = waitForNextTimerScheduled();
         ws.send(JSON.stringify({ type: 'input_audio.commit' }));
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await secondCommitScheduled;
         stubLiveSession.emit({
             type: 'session.input_transcript.delta',
             event_id: 'transcript-with-no-ack-audio',
@@ -1229,7 +1253,7 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
     }
 });
 
-test('Live sends a newer caller correction once and ignores delayed or duplicate append acknowledgments', async () => {
+test('Live sends current caller corrections and ignores no-op delegations and stale append receipts', async () => {
     let resolveWorkflowStarted!: () => void;
     const workflowStarted = new Promise<void>((resolve) => {
         resolveWorkflowStarted = resolve;
@@ -1323,6 +1347,18 @@ test('Live sends a newer caller correction once and ignores delayed or duplicate
         await workflowStarted;
         assert.equal(stubLiveSession.thinking.length, 1);
         assert.equal(stubLiveSession.commentary.length, 0);
+        stubLiveSession.emit({
+            type: 'session.delegation.created',
+            event_id: 'delegation-event-thursday-duplicate',
+            offset_ms: 650,
+            delegation: {
+                id: 'delegation-thursday',
+                target: 'client',
+                type: 'delegation',
+            },
+        });
+        assert.equal(stubLiveSession.thinking.length, 1);
+        assert.equal(stubLiveSession.commentary.length, 0);
 
         await sendTurn(
             'Correction: it is Friday, not Thursday.',
@@ -1337,6 +1373,10 @@ test('Live sends a newer caller correction once and ignores delayed or duplicate
         assert.match(
             stubLiveSession.thinking[1]!.text,
             /Friday, not Thursday/u
+        );
+        assert.match(
+            stubLiveSession.thinking[1]!.text,
+            /older Live context may remain/iu
         );
         assert.doesNotMatch(
             stubLiveSession.thinking[1]!.text,
@@ -1367,11 +1407,6 @@ test('Live sends a newer caller correction once and ignores delayed or duplicate
             ...oldAcknowledgment,
             event_id: 'ack-thursday-duplicate',
         });
-        stubLiveSession.emit({
-            type: 'session.thinking.appended',
-            event_id: 'ack-friday',
-            client_event_id: secondAppendId,
-        });
         assert.equal(stubLiveSession.thinking.length, 2);
         assert.equal(stubLiveSession.commentary.length, 1);
         assert.equal(
@@ -1380,6 +1415,30 @@ test('Live sends a newer caller correction once and ignores delayed or duplicate
             ),
             false
         );
+
+        await sendTurn(
+            'Correction: it is Saturday, not Friday.',
+            1_200,
+            1_500,
+            1_600,
+            'saturday'
+        );
+        assert.equal(stubLiveSession.thinking.length, 3);
+        assert.match(
+            stubLiveSession.thinking[2]!.text,
+            /Saturday, not Friday/u
+        );
+        assert.doesNotMatch(stubLiveSession.thinking[2]!.text, /Thursday/u);
+        assert.equal(stubLiveSession.commentary.length, 2);
+        stubLiveSession.emit({
+            type: 'error',
+            event_id: 'error-friday-late',
+            client_event_id: secondAppendId,
+            error: { code: 'append_rejected', message: 'private append text' },
+        });
+        assert.equal(ws.readyState, WebSocket.OPEN);
+        assert.equal(stubLiveSession.thinking.length, 3);
+        assert.equal(stubLiveSession.commentary.length, 2);
 
         ws.send(JSON.stringify({ type: 'session.close' }));
         await closeWebSocket(ws);
