@@ -100,7 +100,12 @@ instructions and commentary appends share a 500-estimated-token event limit;
 the answer delivery limit remains separate.
 Append acknowledgments identify provider timeline acceptance, not comprehension
 or audible delivery. Context-window usage ratio is logged only when a valid
-optional metric is supplied.
+optional metric is supplied. Client delegation keeps GPT-Live's default
+immediate automatic acknowledgment request. A later thinking append can cancel
+an acknowledgment that is still pending; the current WebSocket events do not
+expose when an acknowledgment has finished. Synthetic coverage checks that
+already-emitted audio is forwarded and that the application adds no separate
+progress utterance. Pending-ack timing and real speech remain unverified.
 
 ### Answer length
 

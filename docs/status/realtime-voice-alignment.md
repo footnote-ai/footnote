@@ -4,7 +4,7 @@ Updated: 2026-11-02 · [Issue #558](https://github.com/footnote-ai/footnote/issu
 
 Standard and Live use the existing Workflow for substantive answers. Standard speaks approved text through TTS. GPT-Live also handles conversation directly and can paraphrase approved commentary.
 
-Both modes use the invoking bot's persona, fixed when the call starts. The startup instructions exclude participant names and optional transcript summaries. Live also receives a short, ephemeral update for each accepted caller request and correction. Synthetic tests cover the persona handoff, delegation and call controls. Real speech, automatic acknowledgment timing, provider retention and listening remain unverified; the [persona evaluation plan](./voice-persona-evaluation.md) covers that work.
+Both modes use the invoking bot's persona, fixed when the call starts. The startup instructions exclude participant names and optional transcript summaries. Live also receives a short, ephemeral update for each accepted caller request and correction. Synthetic tests cover the persona handoff, delegation, forwarding already-emitted audio, and call controls. A thinking append can cancel an automatic acknowledgment that is still pending, and the current WebSocket events do not expose acknowledgment completion; provider timing, speech, retention and listening remain for #974. The [persona evaluation plan](./voice-persona-evaluation.md) covers that work.
 
 ## Alignment matrix
 
@@ -201,11 +201,12 @@ speak independently or paraphrase them. That is not exact-text playback.
 Each accepted Live caller request that fits the append limit adds a bounded
 working note from the current call state, with transcript provenance and
 freshness checks. A newer request replaces the active note; this slice does not
-select broader history or summarize transcripts. Thinking and commentary appends can affect GPT-Live's
-automatic acknowledgments, so synthetic tests verify event ordering, stale
-results and duplicate acknowledgments without asserting real speech or model
-comprehension. Provider behavior, retention, speech timing and listening remain
-for #974.
+select broader history or summarize transcripts. The handler adds no separate
+spoken progress utterance; synthetic tests cover already-emitted provider audio
+and keep it separate from approved Workflow commentary. A context append can
+cancel a still-pending automatic acknowledgment, and the current WebSocket
+events do not expose acknowledgment completion. Provider timing, speech,
+retention and listening remain for #974.
 
 `/call mode` or `VOICE_DEFAULT_MODE` selects the mode. Calls last up to 60
 seconds, with a five-minute override for the configured developer. Only the

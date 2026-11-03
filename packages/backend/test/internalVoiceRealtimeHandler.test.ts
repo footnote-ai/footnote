@@ -1102,6 +1102,18 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
                 type: 'delegation',
             },
         });
+        const automaticAcknowledgmentAudio = Buffer.from([0, 0]).toString(
+            'base64'
+        );
+        stubLiveSession.emit({
+            type: 'session.output_audio.delta',
+            delta: automaticAcknowledgmentAudio,
+        });
+        assert.deepEqual(await waitForJsonMessage(ws), {
+            type: 'output_audio.delta',
+            audioBase64: automaticAcknowledgmentAudio,
+        });
+        assert.equal(stubLiveSession.thinking.length, 0);
         await new Promise((resolve) => setTimeout(resolve, 600));
 
         assert.equal(snapshots.length, 1);
@@ -1164,6 +1176,51 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
             type: 'output_audio.delta',
             audioBase64: Buffer.from([0, 0]).toString('base64'),
         });
+
+        ws.send(
+            JSON.stringify({
+                type: 'input_audio.append',
+                audioBase64: inputAudio.toString('base64'),
+                speakerLabel: 'Alice',
+                speakerId: 'user-1',
+            })
+        );
+        ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        stubLiveSession.emit({
+            type: 'session.input_transcript.delta',
+            event_id: 'transcript-with-no-ack-audio',
+            delta: 'What about Friday?',
+            start_ms: 700,
+            end_ms: 1000,
+        });
+        stubLiveSession.emit({
+            type: 'session.delegation.created',
+            event_id: 'delegation-event-with-no-ack-audio',
+            offset_ms: 1100,
+            delegation: {
+                id: 'delegation-with-no-ack-audio',
+                target: 'client',
+                type: 'delegation',
+            },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
+        assert.equal(stubLiveSession.thinking.length, 2);
+        assert.equal(
+            stubLiveSession.thinking[1]?.delegationId,
+            'delegation-with-no-ack-audio'
+        );
+        assert.deepEqual(stubLiveSession.commentary, [
+            {
+                text: reviewedAnswer,
+                delegationId: 'delegation-1',
+            },
+            {
+                text: reviewedAnswer,
+                delegationId: 'delegation-with-no-ack-audio',
+            },
+        ]);
         ws.send(JSON.stringify({ type: 'session.close' }));
         await closeWebSocket(ws);
     } finally {
