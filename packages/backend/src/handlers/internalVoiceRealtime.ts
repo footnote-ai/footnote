@@ -198,6 +198,13 @@ export const createInternalVoiceRealtimeHandler = ({
             status: 'pending' | 'acknowledged' | 'rejected';
             handle?: RealtimeFreshnessHandle;
         };
+        const liveAppendPurposeByEventType: Partial<
+            Record<OpenAiLiveVoiceEvent['type'], LiveAppend['purpose']>
+        > = {
+            'session.thinking.appended': 'thinking',
+            'session.instructions.appended': 'instructions',
+            'session.commentary.appended': 'commentary',
+        };
         const liveAppendEvents = new Map<string, LiveAppend>();
         const rememberLiveAppend = (
             eventId: string,
@@ -875,74 +882,56 @@ export const createInternalVoiceRealtimeHandler = ({
             }
         };
 
-        const handleLiveAppendReceipt = (
+        const getLiveAppendClientEventId = (
             event: OpenAiLiveVoiceEvent
+        ): string | undefined => {
+            if (typeof event.client_event_id === 'string')
+                return event.client_event_id;
+            if (typeof event.error !== 'object' || event.error === null)
+                return undefined;
+            const errorPayload = event.error as Record<string, unknown>;
+            return typeof errorPayload.client_event_id === 'string'
+                ? errorPayload.client_event_id
+                : undefined;
+        };
+
+        const acknowledgeLiveAppend = (
+            purpose: LiveAppend['purpose'],
+            clientEventId: string | undefined,
+            providerEventId: string | undefined
         ): boolean => {
-            let appendedPurpose: LiveAppend['purpose'] | undefined;
-            switch (event.type) {
-                case 'session.thinking.appended':
-                    appendedPurpose = 'thinking';
-                    break;
-                case 'session.instructions.appended':
-                    appendedPurpose = 'instructions';
-                    break;
-                case 'session.commentary.appended':
-                    appendedPurpose = 'commentary';
-                    break;
-            }
-            const errorPayload =
-                typeof event.error === 'object' && event.error !== null
-                    ? (event.error as Record<string, unknown>)
-                    : undefined;
-            let clientEventId: string | undefined;
-            if (typeof event.client_event_id === 'string') {
-                clientEventId = event.client_event_id;
-            } else if (typeof errorPayload?.client_event_id === 'string') {
-                clientEventId = errorPayload.client_event_id;
-            }
-            if (appendedPurpose) {
-                const append =
-                    clientEventId === undefined
-                        ? undefined
-                        : liveAppendEvents.get(clientEventId);
-                if (
-                    !append ||
-                    append.purpose !== appendedPurpose ||
-                    append.status !== 'pending'
-                ) {
-                    let status: string;
-                    if (!append) status = 'unmatched';
-                    else if (append.purpose !== appendedPurpose)
-                        status = 'purpose_mismatch';
-                    else status = append.status;
-                    realtimeLogger.debug(
-                        'OpenAI Live append acknowledgment ignored.',
-                        {
-                            purpose: appendedPurpose,
-                            status,
-                        }
-                    );
-                    return true;
-                }
-                append.status = 'acknowledged';
-                const providerEventId =
-                    typeof event.event_id === 'string'
-                        ? event.event_id
-                        : undefined;
-                const stale = Boolean(
-                    append.handle &&
-                    !conversationState?.isCurrent(append.handle)
+            const append =
+                clientEventId === undefined
+                    ? undefined
+                    : liveAppendEvents.get(clientEventId);
+            if (append?.purpose !== purpose || append?.status !== 'pending') {
+                let status = append?.status ?? 'unmatched';
+                if (append?.purpose !== undefined && append.purpose !== purpose)
+                    status = 'purpose_mismatch';
+                realtimeLogger.debug(
+                    'OpenAI Live append acknowledgment ignored.',
+                    { purpose, status }
                 );
-                realtimeLogger.info('OpenAI Live append acknowledged.', {
-                    purpose: appendedPurpose,
-                    clientEventId,
-                    providerEventId,
-                    stale,
-                });
                 return true;
             }
-            if (event.type !== 'error' || clientEventId === undefined)
-                return false;
+            append.status = 'acknowledged';
+            const stale = Boolean(
+                append.handle && !conversationState?.isCurrent(append.handle)
+            );
+            realtimeLogger.info('OpenAI Live append acknowledged.', {
+                purpose,
+                clientEventId,
+                providerEventId,
+                stale,
+            });
+            return true;
+        };
+
+        const rejectLiveAppend = (
+            clientEventId: string | undefined,
+            providerEventId: string | undefined
+        ): boolean => {
+            if (clientEventId === undefined) return false;
             const append = liveAppendEvents.get(clientEventId);
             if (!append) return false;
             if (append.status !== 'pending') return true;
@@ -950,12 +939,26 @@ export const createInternalVoiceRealtimeHandler = ({
             realtimeLogger.warn('OpenAI Live append rejected.', {
                 purpose: append.purpose,
                 clientEventId,
-                providerEventId:
-                    typeof event.event_id === 'string'
-                        ? event.event_id
-                        : undefined,
+                providerEventId,
             });
             return append.purpose !== 'commentary';
+        };
+
+        const handleLiveAppendReceipt = (
+            event: OpenAiLiveVoiceEvent
+        ): boolean => {
+            const clientEventId = getLiveAppendClientEventId(event);
+            const providerEventId =
+                typeof event.event_id === 'string' ? event.event_id : undefined;
+            const appendedPurpose = liveAppendPurposeByEventType[event.type];
+            if (appendedPurpose !== undefined)
+                return acknowledgeLiveAppend(
+                    appendedPurpose,
+                    clientEventId,
+                    providerEventId
+                );
+            if (event.type !== 'error') return false;
+            return rejectLiveAppend(clientEventId, providerEventId);
         };
 
         const forwardLiveAudioDelta = (event: OpenAiLiveVoiceEvent): void => {
