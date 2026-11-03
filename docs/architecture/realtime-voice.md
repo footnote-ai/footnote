@@ -125,13 +125,7 @@ provider adapters enforce their own transport limits. Standard sends the exact
 approved text to TTS; GPT-Live may paraphrase approved commentary, so its
 handoff is not evidence of exact-text playback.
 
-Workflow Voice receipts contain content-free measurements, outcomes,
-references, timing and reported usage/cost, never conversation bodies, drafts
-or review prose. Voice-provider charges are not yet complete: transcription
-usage is logged when returned, Standard TTS reports no usage, and GPT-Live
-currently logs duration only. The [evaluation plan](../status/voice-persona-evaluation.md)
-covers the missing real-world checks; [Workflow documentation](./workflow.md#voice-answer-condensation)
-explains condensation and its limits.
+Voice receipts retain IDs, measurements, outcomes, timing and available usage/cost. They exclude conversation bodies and drafts. Complete Voice-provider costs are still unavailable: transcription usage is logged when supplied, Standard TTS reports no usage, and GPT-Live currently logs duration. See the [Workflow documentation](./workflow.md#voice-answer-condensation) for condensation lineage and limits.
 
 A [six-case synthetic evaluation fixture](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json)
 runs through the real Workflow in
