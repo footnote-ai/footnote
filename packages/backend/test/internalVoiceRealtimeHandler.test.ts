@@ -125,11 +125,22 @@ class StubRealtimeSession implements RealtimeVoiceSession {
 
 class StubOpenAiLiveVoiceSession implements OpenAiLiveVoiceSession {
     public readonly audio: Buffer[] = [];
+    public readonly thinking: Array<{
+        text: string;
+        delegationId: string | null;
+        eventId: string;
+    }> = [];
+    public readonly instructions: Array<{
+        text: string;
+        delegationId: string | null;
+        eventId: string;
+    }> = [];
     public readonly commentary: Array<{
         text: string;
         delegationId: string | null;
     }> = [];
     public closed = false;
+    private nextAppendId = 0;
     private readonly listeners = new Set<
         (event: OpenAiLiveVoiceEvent) => void
     >();
@@ -138,8 +149,24 @@ class StubOpenAiLiveVoiceSession implements OpenAiLiveVoiceSession {
         this.audio.push(audio);
     }
 
-    public appendCommentary(text: string, delegationId: string | null): void {
+    public appendThinking(text: string, delegationId: string | null): string {
+        const eventId = `append-${++this.nextAppendId}`;
+        this.thinking.push({ text, delegationId, eventId });
+        return eventId;
+    }
+
+    public appendInstructions(
+        text: string,
+        delegationId: string | null
+    ): string {
+        const eventId = `append-${++this.nextAppendId}`;
+        this.instructions.push({ text, delegationId, eventId });
+        return eventId;
+    }
+
+    public appendCommentary(text: string, delegationId: string | null): string {
         this.commentary.push({ text, delegationId });
+        return `append-${++this.nextAppendId}`;
     }
 
     public close(): void {
@@ -1086,6 +1113,47 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
                 delegationId: 'delegation-1',
             },
         ]);
+        assert.equal(stubLiveSession.thinking.length, 1);
+        assert.equal(stubLiveSession.thinking[0]?.delegationId, 'delegation-1');
+        assert.match(
+            stubLiveSession.thinking[0]?.text ?? '',
+            /latest caller request.*transcript may contain errors/iu
+        );
+        assert.match(
+            stubLiveSession.thinking[0]?.text ?? '',
+            /What is the answer\?/u
+        );
+        assert.match(
+            stubLiveSession.thinking[0]?.text ?? '',
+            /Workflow status: accepted, awaiting start/u
+        );
+        assert.equal(
+            stubLiveSession.thinking[0]?.text.includes(maliciousTranscript),
+            false
+        );
+
+        const contextAppendId = stubLiveSession.thinking[0]!.eventId;
+        stubLiveSession.emit({
+            type: 'error',
+            event_id: 'provider-append-error',
+            client_event_id: contextAppendId,
+            error: { code: 'append_rejected', message: 'private append text' },
+        });
+        stubLiveSession.emit({
+            type: 'session.usage.updated',
+            event_id: 'usage-with-context',
+            usage: { seconds: 12 },
+            context_window: { usage_ratio: 0.75 },
+        });
+        stubLiveSession.emit({
+            type: 'session.usage.updated',
+            event_id: 'usage-with-malformed-context',
+            usage: { seconds: Number.NaN },
+            context_window: { usage_ratio: 'invalid' },
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(ws.readyState, WebSocket.OPEN);
+        assert.equal(stubLiveSession.commentary.length, 1);
 
         stubLiveSession.emit({
             type: 'session.output_audio.delta',
@@ -1099,6 +1167,203 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
         ws.send(JSON.stringify({ type: 'session.close' }));
         await closeWebSocket(ws);
     } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Live sends a newer caller correction once and ignores delayed or duplicate append acknowledgments', async () => {
+    let resolveWorkflowStarted!: () => void;
+    const workflowStarted = new Promise<void>((resolve) => {
+        resolveWorkflowStarted = resolve;
+    });
+    let resolveWorkflow!: (result: {
+        responseId: string;
+        runId: string;
+        status: 'completed';
+        finalResponse: {
+            disposition: 'approved';
+            responseId: string;
+            runId: string;
+            candidateId: string;
+            generationStepId: string;
+            assessmentStepId: string;
+            text: string;
+        };
+    }) => void;
+    let workflowSignal: AbortSignal | undefined;
+    const staleThursdayAnswer = 'The event is on Thursday.';
+    const stubLiveSession = new StubOpenAiLiveVoiceSession();
+    const harness = await createRealtimeHandlerHarness({
+        openAiLiveVoiceSessionFactory: async () => stubLiveSession,
+        workflowRunner: {
+            runRealtimeConversation(_snapshot, context) {
+                context.onRunStarted('thursday-run');
+                workflowSignal = context.signal;
+                resolveWorkflowStarted();
+                return new Promise((resolve) => {
+                    resolveWorkflow = resolve;
+                });
+            },
+        },
+    });
+
+    let ws: WebSocket | undefined;
+    const sendTurn = async (
+        transcript: string,
+        startMs: number,
+        endMs: number,
+        offsetMs: number,
+        suffix: string
+    ): Promise<void> => {
+        ws!.send(
+            JSON.stringify({
+                type: 'input_audio.append',
+                audioBase64: Buffer.from([0, 0, 1, 0]).toString('base64'),
+                speakerLabel: 'Alice',
+                speakerId: 'user-1',
+            })
+        );
+        ws!.send(JSON.stringify({ type: 'input_audio.commit' }));
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        stubLiveSession.emit({
+            type: 'session.input_transcript.delta',
+            event_id: `transcript-${suffix}`,
+            delta: transcript,
+            start_ms: startMs,
+            end_ms: endMs,
+        });
+        stubLiveSession.emit({
+            type: 'session.delegation.created',
+            event_id: `delegation-event-${suffix}`,
+            offset_ms: offsetMs,
+            delegation: {
+                id: `delegation-${suffix}`,
+                target: 'client',
+                type: 'delegation',
+            },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 600));
+    };
+
+    try {
+        ws = await harness.connect();
+        ws.send(
+            JSON.stringify({
+                type: 'session.start',
+                mode: 'live',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
+            })
+        );
+        assert.equal((await waitForJsonMessage(ws)).type, 'session.ready');
+
+        await sendTurn('The event is on Thursday.', 0, 500, 600, 'thursday');
+        await workflowStarted;
+        assert.equal(stubLiveSession.thinking.length, 1);
+        assert.equal(stubLiveSession.commentary.length, 0);
+
+        await sendTurn(
+            'Correction: it is Friday, not Thursday.',
+            700,
+            1_000,
+            1_100,
+            'friday'
+        );
+
+        assert.equal(stubLiveSession.thinking.length, 2);
+        assert.match(stubLiveSession.thinking[0]!.text, /Thursday/u);
+        assert.match(
+            stubLiveSession.thinking[1]!.text,
+            /Friday, not Thursday/u
+        );
+        assert.doesNotMatch(
+            stubLiveSession.thinking[1]!.text,
+            /The event is on Thursday/u
+        );
+        assert.equal(
+            stubLiveSession.thinking[1]!.delegationId,
+            'delegation-friday'
+        );
+        assert.equal(workflowSignal?.aborted, true);
+        assert.equal(stubLiveSession.commentary.length, 1);
+        assert.match(
+            stubLiveSession.commentary[0]!.text,
+            /could not start that task yet/u
+        );
+
+        const firstAppendId = stubLiveSession.thinking[0]!.eventId;
+        const secondAppendId = stubLiveSession.thinking[1]!.eventId;
+        const oldAcknowledgment = {
+            type: 'session.thinking.appended',
+            client_event_id: firstAppendId,
+        };
+        stubLiveSession.emit({
+            ...oldAcknowledgment,
+            event_id: 'ack-thursday-late',
+        });
+        stubLiveSession.emit({
+            ...oldAcknowledgment,
+            event_id: 'ack-thursday-duplicate',
+        });
+        stubLiveSession.emit({
+            type: 'session.thinking.appended',
+            event_id: 'ack-friday',
+            client_event_id: secondAppendId,
+        });
+        assert.equal(stubLiveSession.thinking.length, 2);
+        assert.equal(stubLiveSession.commentary.length, 1);
+        assert.equal(
+            stubLiveSession.commentary.some(
+                ({ text }) => text === staleThursdayAnswer
+            ),
+            false
+        );
+
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+        resolveWorkflow({
+            responseId: 'thursday-response',
+            runId: 'thursday-run',
+            status: 'completed',
+            finalResponse: {
+                disposition: 'approved',
+                responseId: 'thursday-response',
+                runId: 'thursday-run',
+                candidateId: 'candidate',
+                generationStepId: 'answer',
+                assessmentStepId: 'review',
+                text: staleThursdayAnswer,
+            },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        assert.equal(
+            stubLiveSession.commentary.some(
+                ({ text }) => text === staleThursdayAnswer
+            ),
+            false
+        );
+    } finally {
+        if (resolveWorkflow) {
+            resolveWorkflow({
+                responseId: 'thursday-response',
+                runId: 'thursday-run',
+                status: 'completed',
+                finalResponse: {
+                    disposition: 'approved',
+                    responseId: 'thursday-response',
+                    runId: 'thursday-run',
+                    candidateId: 'candidate',
+                    generationStepId: 'answer',
+                    assessmentStepId: 'review',
+                    text: staleThursdayAnswer,
+                },
+            });
+        }
         if (ws) await closeWebSocket(ws);
         await harness.close();
     }
