@@ -205,7 +205,7 @@ export const createInternalVoiceRealtimeHandler = ({
         ): void => {
             liveAppendEvents.set(eventId, append);
             if (liveAppendEvents.size > 128) {
-                // shortcut: retain 128 receipts; raise if a call needs a longer acknowledgment window.
+                // Keep the most recent 128 append receipts for this call.
                 const oldestEventId = liveAppendEvents.keys().next().value;
                 if (oldestEventId) liveAppendEvents.delete(oldestEventId);
             }
@@ -631,7 +631,7 @@ export const createInternalVoiceRealtimeHandler = ({
                 });
                 lastLiveWorkingContextRevision = handle.revision;
             } catch {
-                // Working context is optional; it must not block the existing Workflow.
+                // A failed context update should leave Workflow running.
                 realtimeLogger.warn(
                     'OpenAI Live working context could not be appended.',
                     { revision: handle.revision }
