@@ -8,12 +8,30 @@
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
+import { estimateVoiceAnswerTokens } from './voiceAnswerBudget.js';
 
 export type OpenAiLiveVoiceEvent = Record<string, unknown> & { type: string };
+export type OpenAiLiveTextAppendPurpose =
+    'thinking' | 'instructions' | 'commentary';
+
+const LIVE_APPEND_TOKEN_LIMIT = 500;
+
+/** Check text appends against the 500-token estimate before sending them. */
+export const validateOpenAiLiveTextAppend = (
+    purpose: OpenAiLiveTextAppendPurpose,
+    content: string
+): void => {
+    if (estimateVoiceAnswerTokens(content) > LIVE_APPEND_TOKEN_LIMIT)
+        throw new RangeError(
+            `OpenAI Live ${purpose} append exceeds the ${LIVE_APPEND_TOKEN_LIMIT}-token limit.`
+        );
+};
 
 export interface OpenAiLiveVoiceSession {
     sendAudio(audio: Buffer): void;
-    appendCommentary(text: string, delegationId: string | null): void;
+    appendThinking(text: string, delegationId: string | null): string;
+    appendInstructions(text: string, delegationId: string | null): string;
+    appendCommentary(text: string, delegationId: string | null): string;
     close(): void;
     onEvent(listener: (event: OpenAiLiveVoiceEvent) => void): () => void;
 }
@@ -67,6 +85,22 @@ export const createOpenAiLiveVoiceSession = async ({
         if (closed || socket.readyState !== WebSocket.OPEN)
             throw new Error('OpenAI Live session is not connected.');
         socket.send(JSON.stringify(event));
+    };
+
+    const append = (
+        purpose: OpenAiLiveTextAppendPurpose,
+        content: string,
+        delegationId: string | null
+    ): string => {
+        validateOpenAiLiveTextAppend(purpose, content);
+        const eventId = randomUUID();
+        send({
+            type: `session.${purpose}.append`,
+            event_id: eventId,
+            delegation_id: delegationId,
+            content,
+        });
+        return eventId;
     };
 
     const ready = new Promise<void>((resolve, reject) => {
@@ -156,13 +190,14 @@ export const createOpenAiLiveVoiceSession = async ({
                 audio: audio.toString('base64'),
             });
         },
+        appendThinking(text, delegationId) {
+            return append('thinking', text, delegationId);
+        },
+        appendInstructions(text, delegationId) {
+            return append('instructions', text, delegationId);
+        },
         appendCommentary(text, delegationId) {
-            send({
-                type: 'session.commentary.append',
-                event_id: randomUUID(),
-                delegation_id: delegationId,
-                content: text,
-            });
+            return append('commentary', text, delegationId);
         },
         close() {
             if (closed) return;

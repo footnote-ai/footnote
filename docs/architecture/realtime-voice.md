@@ -90,6 +90,25 @@ closed. Only a persisted, approved Workflow answer is appended as commentary.
 GPT-Live may also speak without delegation and may paraphrase that commentary;
 Live audio therefore carries no exact-text approval or playback receipt.
 
+When a caller's request is accepted and matched to a Live delegation, the
+backend sends GPT-Live a short `session.thinking.append` note with the latest
+request and whether Workflow could start. A correction supersedes the earlier
+request in Footnote's call state; earlier appends may remain in the Live
+session. The note uses the caller transcript as unverified input. Persona
+instructions and Workflow approval stay as they were.
+
+Each `thinking`, `instructions` and `commentary` append independently has a
+500-estimated-token limit. The backend matches provider acknowledgments and
+errors to the original append and logs a valid context-window usage ratio when
+GPT-Live reports one. An acknowledgment confirms the note was appended, not
+that GPT-Live understood or used it.
+
+There is a possible timing issue: a thinking append can suppress a pending
+automatic spoken acknowledgment. Audio already emitted still reaches Discord,
+and Footnote adds no separate progress message. The provider doesn't report
+when an automatic acknowledgment finishes, so that interaction needs a real
+call to evaluate under [#974](https://github.com/footnote-ai/footnote/issues/974).
+
 ### Answer length
 
 `voice.max-answer-tokens` defaults to `auto`: Live uses up to 400 estimated
@@ -125,7 +144,12 @@ provider adapters enforce their own transport limits. Standard sends the exact
 approved text to TTS; GPT-Live may paraphrase approved commentary, so its
 handoff is not evidence of exact-text playback.
 
-Voice receipts retain IDs, measurements, outcomes, timing and available usage/cost. They exclude conversation bodies and drafts. Complete Voice-provider costs are still unavailable: transcription usage is logged when supplied, Standard TTS reports no usage, and GPT-Live currently logs duration. See the [Workflow documentation](./workflow.md#voice-answer-condensation) for condensation lineage and limits.
+Voice receipts retain IDs, outcomes, timing and available usage or cost.
+Conversation bodies and drafts stay out of those records. Provider costs
+remain incomplete: transcription usage is logged when supplied, Standard TTS
+reports no usage, and GPT-Live reports duration and context-window usage when
+available. See the [Workflow documentation](./workflow.md#voice-answer-condensation)
+for condensation lineage and limits.
 
 A [six-case synthetic evaluation fixture](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json)
 runs through the real Workflow in
@@ -274,8 +298,8 @@ caller identification and consent checks. Optional summaries sent at startup
 are not used to initialize turn state; Live delegation uses bounded transcript
 events received during the call. Keeping names and summaries out of provider
 instructions prevents them from being treated as behavioral authority, though
-spoken input can still influence GPT-Live. Further context updates belong to
-[#973](https://github.com/footnote-ai/footnote/issues/973).
+spoken input can still influence GPT-Live. Broader context selection and
+summarization remain under [#973](https://github.com/footnote-ai/footnote/issues/973).
 
 Tests check the instructions sent to the provider session factory and their
 consistency with delegated Workflow. They do not show how faithfully GPT-Live

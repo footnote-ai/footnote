@@ -8,38 +8,46 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter, getEventListeners } from 'node:events';
-import { createOpenAiLiveVoiceSession } from '../src/services/openAiLiveVoice.js';
+import {
+    createOpenAiLiveVoiceSession,
+    validateOpenAiLiveTextAppend,
+} from '../src/services/openAiLiveVoice.js';
+
+class FakeSocket extends EventEmitter {
+    public readyState = 1;
+
+    public constructor(private readonly sent: Array<Record<string, unknown>>) {
+        super();
+    }
+
+    send(data: string): void {
+        const event = JSON.parse(data) as Record<string, unknown>;
+        this.sent.push(event);
+        if (event.type === 'session.start') {
+            setImmediate(() =>
+                this.emit(
+                    'message',
+                    Buffer.from(
+                        JSON.stringify({
+                            type: 'session.started',
+                            session: { id: 'live-session' },
+                        })
+                    )
+                )
+            );
+        }
+    }
+
+    close(): void {
+        this.readyState = 3;
+        this.emit('close');
+    }
+}
 
 test('GPT-Live starts a backend WebSocket session with client delegation and sends PCM and commentary events', async () => {
     const sent: Array<Record<string, unknown>> = [];
     let openedUrl = '';
     let authorization = '';
-    class FakeSocket extends EventEmitter {
-        public readyState = 1;
-
-        send(data: string): void {
-            const event = JSON.parse(data) as Record<string, unknown>;
-            sent.push(event);
-            if (event.type === 'session.start') {
-                setImmediate(() =>
-                    this.emit(
-                        'message',
-                        Buffer.from(
-                            JSON.stringify({
-                                type: 'session.started',
-                                session: { id: 'live-session' },
-                            })
-                        )
-                    )
-                );
-            }
-        }
-
-        close(): void {
-            this.readyState = 3;
-            this.emit('close');
-        }
-    }
     const session = await createOpenAiLiveVoiceSession({
         apiKey: 'test-key',
         instructions: 'Speak naturally and delegate substantive work.',
@@ -47,7 +55,7 @@ test('GPT-Live starts a backend WebSocket session with client delegation and sen
         createWebSocket: (url, options) => {
             openedUrl = url;
             authorization = options.headers.Authorization;
-            const socket = new FakeSocket();
+            const socket = new FakeSocket(sent);
             setImmediate(() => socket.emit('open'));
             return socket as never;
         },
@@ -112,4 +120,143 @@ test('GPT-Live removes setup cancellation listeners when startup is aborted', as
     await assert.rejects(setup, /setup was cancelled/i);
     assert.equal(socket?.readyState, 3);
     assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+});
+
+test('GPT-Live appends thinking, instructions, and commentary with correlatable event IDs', async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    let socket: FakeSocket | undefined;
+    const session = await createOpenAiLiveVoiceSession({
+        apiKey: 'test-key',
+        instructions: 'Fixed call persona.',
+        voice: 'marin',
+        createWebSocket: () => {
+            socket = new FakeSocket(sent);
+            setImmediate(() => socket?.emit('open'));
+            return socket as never;
+        },
+    });
+    const received: Array<Record<string, unknown>> = [];
+    session.onEvent((event) => received.push(event));
+
+    const thinkingId = session.appendThinking(
+        'Caller asks for Friday.',
+        'delegation-1'
+    );
+    const instructionId = session.appendInstructions(
+        'Keep the fixed persona.',
+        null
+    );
+    const commentaryId = session.appendCommentary(
+        'The reviewed result.',
+        'delegation-1'
+    );
+    const sentBeforeOversizedAppends = sent.length;
+    assert.throws(
+        () => session.appendThinking('中'.repeat(167), 'delegation-1'),
+        /500-token limit/
+    );
+    assert.throws(
+        () => session.appendInstructions('中'.repeat(167), null),
+        /500-token limit/
+    );
+    assert.throws(
+        () => session.appendCommentary('中'.repeat(167), 'delegation-1'),
+        /500-token limit/
+    );
+    assert.equal(sent.length, sentBeforeOversizedAppends);
+
+    assert.equal(new Set([thinkingId, instructionId, commentaryId]).size, 3);
+    assert.deepEqual(
+        sent.slice(1).map(({ type, event_id, delegation_id }) => ({
+            type,
+            event_id,
+            delegation_id,
+        })),
+        [
+            {
+                type: 'session.thinking.append',
+                event_id: thinkingId,
+                delegation_id: 'delegation-1',
+            },
+            {
+                type: 'session.instructions.append',
+                event_id: instructionId,
+                delegation_id: null,
+            },
+            {
+                type: 'session.commentary.append',
+                event_id: commentaryId,
+                delegation_id: 'delegation-1',
+            },
+        ]
+    );
+    assert.deepEqual(
+        sent.slice(1).map((event) => event.content),
+        [
+            'Caller asks for Friday.',
+            'Keep the fixed persona.',
+            'The reviewed result.',
+        ]
+    );
+
+    socket?.emit(
+        'message',
+        Buffer.from(
+            JSON.stringify({
+                type: 'session.thinking.appended',
+                event_id: 'provider-ack-1',
+                client_event_id: thinkingId,
+                start_ms: 100,
+                end_ms: 100,
+            })
+        )
+    );
+    socket?.emit(
+        'message',
+        Buffer.from(
+            JSON.stringify({
+                type: 'error',
+                event_id: 'provider-error-1',
+                client_event_id: instructionId,
+                error: { code: 'rejected', message: 'append rejected' },
+            })
+        )
+    );
+
+    assert.deepEqual(
+        received.map(({ type, event_id, client_event_id }) => ({
+            type,
+            event_id,
+            client_event_id,
+        })),
+        [
+            {
+                type: 'session.thinking.appended',
+                event_id: 'provider-ack-1',
+                client_event_id: thinkingId,
+            },
+            {
+                type: 'error',
+                event_id: 'provider-error-1',
+                client_event_id: instructionId,
+            },
+        ]
+    );
+    session.close();
+});
+
+test('GPT-Live append validation accepts multilingual 500-token estimates per event', () => {
+    const purposes = ['thinking', 'instructions', 'commentary'] as const;
+    for (const purpose of purposes) {
+        assert.doesNotThrow(() =>
+            validateOpenAiLiveTextAppend(purpose, 'é'.repeat(250))
+        );
+        assert.doesNotThrow(() =>
+            validateOpenAiLiveTextAppend(purpose, '中'.repeat(166))
+        );
+        assert.throws(
+            () => validateOpenAiLiveTextAppend(purpose, '中'.repeat(167)),
+            /500-token limit/
+        );
+    }
 });

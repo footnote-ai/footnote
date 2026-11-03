@@ -193,6 +193,30 @@ export const createInternalVoiceRealtimeHandler = ({
         const liveDelegations: Array<{ id: string; offsetMs: number }> = [];
         const seenLiveTranscriptEvents = new Set<string>();
         const seenLiveDelegations = new Set<string>();
+        type LiveAppend = {
+            purpose: 'thinking' | 'instructions' | 'commentary';
+            status: 'pending' | 'acknowledged' | 'rejected';
+            handle?: RealtimeFreshnessHandle;
+        };
+        const liveAppendPurposeByEventType: Partial<
+            Record<OpenAiLiveVoiceEvent['type'], LiveAppend['purpose']>
+        > = {
+            'session.thinking.appended': 'thinking',
+            'session.instructions.appended': 'instructions',
+            'session.commentary.appended': 'commentary',
+        };
+        const liveAppendEvents = new Map<string, LiveAppend>();
+        const rememberLiveAppend = (
+            eventId: string,
+            append: LiveAppend
+        ): void => {
+            liveAppendEvents.set(eventId, append);
+            if (liveAppendEvents.size > 128) {
+                // Keep the most recent 128 append receipts for this call.
+                const oldestEventId = liveAppendEvents.keys().next().value;
+                if (oldestEventId) liveAppendEvents.delete(oldestEventId);
+            }
+        };
         let liveAudioBytes = 0;
         let liveCurrentUtteranceBytes = 0;
         let liveInputOpen = false;
@@ -203,6 +227,7 @@ export const createInternalVoiceRealtimeHandler = ({
         let liveTranscriptCursorMs = 0;
         let liveDelegationTimer: ReturnType<typeof setTimeout> | undefined;
         let currentLiveDeliveryDelegationId: string | undefined;
+        let lastLiveWorkingContextRevision: number | undefined;
 
         const reportAnswerTooLong = (): void => {
             if (!closed && !socketClosed && ws.readyState === WebSocket.OPEN)
@@ -472,6 +497,7 @@ export const createInternalVoiceRealtimeHandler = ({
             providerFinalizationTimeout = undefined;
             liveUnsubscribe?.();
             liveUnsubscribe = undefined;
+            liveAppendEvents.clear();
             if (callReservation && activeVoiceCall === callReservation)
                 activeVoiceCall = undefined;
             callReservation = undefined;
@@ -566,7 +592,14 @@ export const createInternalVoiceRealtimeHandler = ({
         ): boolean => {
             try {
                 if (!liveSession) return false;
-                liveSession.appendCommentary(text, delegationId);
+                const clientEventId = liveSession.appendCommentary(
+                    text,
+                    delegationId
+                );
+                rememberLiveAppend(clientEventId, {
+                    purpose: 'commentary',
+                    status: 'pending',
+                });
                 return true;
             } catch {
                 sendServerEvent(ws, {
@@ -576,6 +609,40 @@ export const createInternalVoiceRealtimeHandler = ({
                 });
                 finishCall('live_commentary_failed', true, true);
                 return false;
+            }
+        };
+
+        const appendLiveWorkingContext = (
+            handle: RealtimeFreshnessHandle,
+            content: string,
+            delegationId: string
+        ): void => {
+            const state = conversationState;
+            if (
+                closed ||
+                !state ||
+                !liveSession ||
+                !state.isDeliveryFresh(handle) ||
+                lastLiveWorkingContextRevision === handle.revision
+            )
+                return;
+            try {
+                const clientEventId = liveSession.appendThinking(
+                    content,
+                    delegationId
+                );
+                rememberLiveAppend(clientEventId, {
+                    purpose: 'thinking',
+                    status: 'pending',
+                    handle,
+                });
+                lastLiveWorkingContextRevision = handle.revision;
+            } catch {
+                // A failed context update should leave Workflow running.
+                realtimeLogger.warn(
+                    'OpenAI Live working context could not be appended.',
+                    { revision: handle.revision }
+                );
             }
         };
 
@@ -616,7 +683,14 @@ export const createInternalVoiceRealtimeHandler = ({
                 return;
             }
             try {
-                liveSession.appendCommentary(delivery.text, delegationId);
+                const clientEventId = liveSession.appendCommentary(
+                    delivery.text,
+                    delegationId
+                );
+                rememberLiveAppend(clientEventId, {
+                    purpose: 'commentary',
+                    status: 'pending',
+                });
                 currentLiveDeliveryDelegationId = undefined;
             } catch {
                 state.reportPlayback(delivery.deliveryId, 'failed');
@@ -741,6 +815,18 @@ export const createInternalVoiceRealtimeHandler = ({
                 return;
             }
             const execution = state.startExecution(boundedWorkflowRunner!);
+            const activeRequest = turn.context.messages.at(-1);
+            if (activeRequest?.role === 'user') {
+                appendLiveWorkingContext(
+                    turn.handle,
+                    [
+                        `Latest caller request (transcript may contain errors; caller-reported, not verified): ${JSON.stringify(activeRequest.content)}`,
+                        `Workflow status: ${execution.accepted ? 'accepted, awaiting start' : 'not started'}; no result is available yet.`,
+                        'This is the current caller request in Footnote call state; it supersedes earlier requests. Older Live context may remain.',
+                    ].join('\n'),
+                    delegation.id
+                );
+            }
             if (!execution?.accepted) {
                 appendLiveCommentary(
                     'I could not start that task yet. Please wait briefly and try again.',
@@ -777,6 +863,102 @@ export const createInternalVoiceRealtimeHandler = ({
                     seconds: usage.seconds,
                 });
             }
+            const contextWindow =
+                typeof event.context_window === 'object' &&
+                event.context_window !== null
+                    ? (event.context_window as Record<string, unknown>)
+                    : undefined;
+            const usageRatio = contextWindow?.usage_ratio;
+            if (
+                typeof usageRatio === 'number' &&
+                Number.isFinite(usageRatio) &&
+                usageRatio >= 0 &&
+                usageRatio <= 1
+            ) {
+                realtimeLogger.info(
+                    'OpenAI Live context-window usage reported.',
+                    { usageRatio }
+                );
+            }
+        };
+
+        const getLiveAppendClientEventId = (
+            event: OpenAiLiveVoiceEvent
+        ): string | undefined => {
+            if (typeof event.client_event_id === 'string')
+                return event.client_event_id;
+            if (typeof event.error !== 'object' || event.error === null)
+                return undefined;
+            const errorPayload = event.error as Record<string, unknown>;
+            return typeof errorPayload.client_event_id === 'string'
+                ? errorPayload.client_event_id
+                : undefined;
+        };
+
+        const acknowledgeLiveAppend = (
+            purpose: LiveAppend['purpose'],
+            clientEventId: string | undefined,
+            providerEventId: string | undefined
+        ): boolean => {
+            const append =
+                clientEventId === undefined
+                    ? undefined
+                    : liveAppendEvents.get(clientEventId);
+            if (append?.purpose !== purpose || append?.status !== 'pending') {
+                let status = append?.status ?? 'unmatched';
+                if (append?.purpose !== undefined && append.purpose !== purpose)
+                    status = 'purpose_mismatch';
+                realtimeLogger.debug(
+                    'OpenAI Live append acknowledgment ignored.',
+                    { purpose, status }
+                );
+                return true;
+            }
+            append.status = 'acknowledged';
+            const stale = Boolean(
+                append.handle && !conversationState?.isCurrent(append.handle)
+            );
+            realtimeLogger.info('OpenAI Live append acknowledged.', {
+                purpose,
+                clientEventId,
+                providerEventId,
+                stale,
+            });
+            return true;
+        };
+
+        const rejectLiveAppend = (
+            clientEventId: string | undefined,
+            providerEventId: string | undefined
+        ): boolean => {
+            if (clientEventId === undefined) return false;
+            const append = liveAppendEvents.get(clientEventId);
+            if (!append) return false;
+            if (append.status !== 'pending') return true;
+            append.status = 'rejected';
+            realtimeLogger.warn('OpenAI Live append rejected.', {
+                purpose: append.purpose,
+                clientEventId,
+                providerEventId,
+            });
+            return append.purpose !== 'commentary';
+        };
+
+        const handleLiveAppendReceipt = (
+            event: OpenAiLiveVoiceEvent
+        ): boolean => {
+            const clientEventId = getLiveAppendClientEventId(event);
+            const providerEventId =
+                typeof event.event_id === 'string' ? event.event_id : undefined;
+            const appendedPurpose = liveAppendPurposeByEventType[event.type];
+            if (appendedPurpose !== undefined)
+                return acknowledgeLiveAppend(
+                    appendedPurpose,
+                    clientEventId,
+                    providerEventId
+                );
+            if (event.type !== 'error') return false;
+            return rejectLiveAppend(clientEventId, providerEventId);
         };
 
         const forwardLiveAudioDelta = (event: OpenAiLiveVoiceEvent): void => {
@@ -868,6 +1050,7 @@ export const createInternalVoiceRealtimeHandler = ({
 
         const handleLiveProviderEvent = (event: OpenAiLiveVoiceEvent): void => {
             logLiveProviderUsage(event);
+            if (handleLiveAppendReceipt(event)) return;
             if (event.type === 'session.closed') {
                 if (closed) releaseCallReservation();
                 else finishCall('provider_closed', false, true);

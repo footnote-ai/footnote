@@ -125,11 +125,22 @@ class StubRealtimeSession implements RealtimeVoiceSession {
 
 class StubOpenAiLiveVoiceSession implements OpenAiLiveVoiceSession {
     public readonly audio: Buffer[] = [];
+    public readonly thinking: Array<{
+        text: string;
+        delegationId: string | null;
+        eventId: string;
+    }> = [];
+    public readonly instructions: Array<{
+        text: string;
+        delegationId: string | null;
+        eventId: string;
+    }> = [];
     public readonly commentary: Array<{
         text: string;
         delegationId: string | null;
     }> = [];
     public closed = false;
+    private nextAppendId = 0;
     private readonly listeners = new Set<
         (event: OpenAiLiveVoiceEvent) => void
     >();
@@ -138,8 +149,24 @@ class StubOpenAiLiveVoiceSession implements OpenAiLiveVoiceSession {
         this.audio.push(audio);
     }
 
-    public appendCommentary(text: string, delegationId: string | null): void {
+    public appendThinking(text: string, delegationId: string | null): string {
+        const eventId = `append-${++this.nextAppendId}`;
+        this.thinking.push({ text, delegationId, eventId });
+        return eventId;
+    }
+
+    public appendInstructions(
+        text: string,
+        delegationId: string | null
+    ): string {
+        const eventId = `append-${++this.nextAppendId}`;
+        this.instructions.push({ text, delegationId, eventId });
+        return eventId;
+    }
+
+    public appendCommentary(text: string, delegationId: string | null): string {
         this.commentary.push({ text, delegationId });
+        return `append-${++this.nextAppendId}`;
     }
 
     public close(): void {
@@ -971,7 +998,15 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
         'The reviewed answer keeps its explanation and source.';
     const stubLiveSession = new StubOpenAiLiveVoiceSession();
     let startRequest: { instructions: string; voice: string } | undefined;
+    let notifyNextTimerScheduled: (() => void) | undefined;
     const harness = await createRealtimeHandlerHarness({
+        setTimer: ((...args: Parameters<typeof setTimeout>) => {
+            const timer = setTimeout(...args);
+            const notify = notifyNextTimerScheduled;
+            notifyNextTimerScheduled = undefined;
+            notify?.();
+            return timer;
+        }) as typeof setTimeout,
         openAiLiveVoiceSessionFactory: async (request) => {
             startRequest = request;
             return stubLiveSession;
@@ -1007,6 +1042,20 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
     });
 
     let ws: WebSocket | undefined;
+    const waitForNextTimerScheduled = (): Promise<void> =>
+        new Promise((resolve, reject) => {
+            const timeout = setTimeout(
+                () =>
+                    reject(
+                        new Error('Live commit did not schedule its timer.')
+                    ),
+                1_000
+            );
+            notifyNextTimerScheduled = () => {
+                clearTimeout(timeout);
+                resolve();
+            };
+        });
     try {
         ws = await harness.connect();
         ws.send(
@@ -1053,8 +1102,9 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
                 speakerId: 'user-1',
             })
         );
+        const firstCommitScheduled = waitForNextTimerScheduled();
         ws.send(JSON.stringify({ type: 'input_audio.commit' }));
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await firstCommitScheduled;
         assert.deepEqual(stubLiveSession.audio, [inputAudio]);
         await new Promise((resolve) => setTimeout(resolve, 600));
 
@@ -1075,6 +1125,18 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
                 type: 'delegation',
             },
         });
+        const automaticAcknowledgmentAudio = Buffer.from([0, 0]).toString(
+            'base64'
+        );
+        stubLiveSession.emit({
+            type: 'session.output_audio.delta',
+            delta: automaticAcknowledgmentAudio,
+        });
+        assert.deepEqual(await waitForJsonMessage(ws), {
+            type: 'output_audio.delta',
+            audioBase64: automaticAcknowledgmentAudio,
+        });
+        assert.equal(stubLiveSession.thinking.length, 0);
         await new Promise((resolve) => setTimeout(resolve, 600));
 
         assert.equal(snapshots.length, 1);
@@ -1086,6 +1148,47 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
                 delegationId: 'delegation-1',
             },
         ]);
+        assert.equal(stubLiveSession.thinking.length, 1);
+        assert.equal(stubLiveSession.thinking[0]?.delegationId, 'delegation-1');
+        assert.match(
+            stubLiveSession.thinking[0]?.text ?? '',
+            /latest caller request.*transcript may contain errors/iu
+        );
+        assert.match(
+            stubLiveSession.thinking[0]?.text ?? '',
+            /What is the answer\?/u
+        );
+        assert.match(
+            stubLiveSession.thinking[0]?.text ?? '',
+            /Workflow status: accepted, awaiting start/u
+        );
+        assert.equal(
+            stubLiveSession.thinking[0]?.text.includes(maliciousTranscript),
+            false
+        );
+
+        const contextAppendId = stubLiveSession.thinking[0]!.eventId;
+        stubLiveSession.emit({
+            type: 'error',
+            event_id: 'provider-append-error',
+            client_event_id: contextAppendId,
+            error: { code: 'append_rejected', message: 'private append text' },
+        });
+        stubLiveSession.emit({
+            type: 'session.usage.updated',
+            event_id: 'usage-with-context',
+            usage: { seconds: 12 },
+            context_window: { usage_ratio: 0.75 },
+        });
+        stubLiveSession.emit({
+            type: 'session.usage.updated',
+            event_id: 'usage-with-malformed-context',
+            usage: { seconds: Number.NaN },
+            context_window: { usage_ratio: 'invalid' },
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(ws.readyState, WebSocket.OPEN);
+        assert.equal(stubLiveSession.commentary.length, 1);
 
         stubLiveSession.emit({
             type: 'session.output_audio.delta',
@@ -1096,9 +1199,287 @@ test('Live streams only caller audio, delegates the caller transcript, and retur
             type: 'output_audio.delta',
             audioBase64: Buffer.from([0, 0]).toString('base64'),
         });
+
+        ws.send(
+            JSON.stringify({
+                type: 'input_audio.append',
+                audioBase64: inputAudio.toString('base64'),
+                speakerLabel: 'Alice',
+                speakerId: 'user-1',
+            })
+        );
+        const secondCommitScheduled = waitForNextTimerScheduled();
+        ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+        await secondCommitScheduled;
+        stubLiveSession.emit({
+            type: 'session.input_transcript.delta',
+            event_id: 'transcript-with-no-ack-audio',
+            delta: 'What about Friday?',
+            start_ms: 700,
+            end_ms: 1000,
+        });
+        stubLiveSession.emit({
+            type: 'session.delegation.created',
+            event_id: 'delegation-event-with-no-ack-audio',
+            offset_ms: 1100,
+            delegation: {
+                id: 'delegation-with-no-ack-audio',
+                target: 'client',
+                type: 'delegation',
+            },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 600));
+
+        assert.equal(stubLiveSession.thinking.length, 2);
+        assert.equal(
+            stubLiveSession.thinking[1]?.delegationId,
+            'delegation-with-no-ack-audio'
+        );
+        assert.deepEqual(stubLiveSession.commentary, [
+            {
+                text: reviewedAnswer,
+                delegationId: 'delegation-1',
+            },
+            {
+                text: reviewedAnswer,
+                delegationId: 'delegation-with-no-ack-audio',
+            },
+        ]);
         ws.send(JSON.stringify({ type: 'session.close' }));
         await closeWebSocket(ws);
     } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Live sends current caller corrections and ignores no-op delegations and stale append receipts', async () => {
+    let resolveWorkflowStarted!: () => void;
+    const workflowStarted = new Promise<void>((resolve) => {
+        resolveWorkflowStarted = resolve;
+    });
+    let resolveWorkflow!: (result: {
+        responseId: string;
+        runId: string;
+        status: 'completed';
+        finalResponse: {
+            disposition: 'approved';
+            responseId: string;
+            runId: string;
+            candidateId: string;
+            generationStepId: string;
+            assessmentStepId: string;
+            text: string;
+        };
+    }) => void;
+    let workflowSignal: AbortSignal | undefined;
+    const staleThursdayAnswer = 'The event is on Thursday.';
+    const stubLiveSession = new StubOpenAiLiveVoiceSession();
+    const harness = await createRealtimeHandlerHarness({
+        openAiLiveVoiceSessionFactory: async () => stubLiveSession,
+        workflowRunner: {
+            runRealtimeConversation(_snapshot, context) {
+                context.onRunStarted('thursday-run');
+                workflowSignal = context.signal;
+                resolveWorkflowStarted();
+                return new Promise((resolve) => {
+                    resolveWorkflow = resolve;
+                });
+            },
+        },
+    });
+
+    let ws: WebSocket | undefined;
+    const sendTurn = async (
+        transcript: string,
+        startMs: number,
+        endMs: number,
+        offsetMs: number,
+        suffix: string
+    ): Promise<void> => {
+        ws!.send(
+            JSON.stringify({
+                type: 'input_audio.append',
+                audioBase64: Buffer.from([0, 0, 1, 0]).toString('base64'),
+                speakerLabel: 'Alice',
+                speakerId: 'user-1',
+            })
+        );
+        ws!.send(JSON.stringify({ type: 'input_audio.commit' }));
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        stubLiveSession.emit({
+            type: 'session.input_transcript.delta',
+            event_id: `transcript-${suffix}`,
+            delta: transcript,
+            start_ms: startMs,
+            end_ms: endMs,
+        });
+        stubLiveSession.emit({
+            type: 'session.delegation.created',
+            event_id: `delegation-event-${suffix}`,
+            offset_ms: offsetMs,
+            delegation: {
+                id: `delegation-${suffix}`,
+                target: 'client',
+                type: 'delegation',
+            },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 600));
+    };
+
+    try {
+        ws = await harness.connect();
+        ws.send(
+            JSON.stringify({
+                type: 'session.start',
+                mode: 'live',
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
+            })
+        );
+        assert.equal((await waitForJsonMessage(ws)).type, 'session.ready');
+
+        await sendTurn('The event is on Thursday.', 0, 500, 600, 'thursday');
+        await workflowStarted;
+        assert.equal(stubLiveSession.thinking.length, 1);
+        assert.equal(stubLiveSession.commentary.length, 0);
+        stubLiveSession.emit({
+            type: 'session.delegation.created',
+            event_id: 'delegation-event-thursday-duplicate',
+            offset_ms: 650,
+            delegation: {
+                id: 'delegation-thursday',
+                target: 'client',
+                type: 'delegation',
+            },
+        });
+        assert.equal(stubLiveSession.thinking.length, 1);
+        assert.equal(stubLiveSession.commentary.length, 0);
+
+        await sendTurn(
+            'Correction: it is Friday, not Thursday.',
+            700,
+            1_000,
+            1_100,
+            'friday'
+        );
+
+        assert.equal(stubLiveSession.thinking.length, 2);
+        assert.match(stubLiveSession.thinking[0]!.text, /Thursday/u);
+        assert.match(
+            stubLiveSession.thinking[1]!.text,
+            /Friday, not Thursday/u
+        );
+        assert.match(
+            stubLiveSession.thinking[1]!.text,
+            /older Live context may remain/iu
+        );
+        assert.doesNotMatch(
+            stubLiveSession.thinking[1]!.text,
+            /The event is on Thursday/u
+        );
+        assert.equal(
+            stubLiveSession.thinking[1]!.delegationId,
+            'delegation-friday'
+        );
+        assert.equal(workflowSignal?.aborted, true);
+        assert.equal(stubLiveSession.commentary.length, 1);
+        assert.match(
+            stubLiveSession.commentary[0]!.text,
+            /could not start that task yet/u
+        );
+
+        const firstAppendId = stubLiveSession.thinking[0]!.eventId;
+        const secondAppendId = stubLiveSession.thinking[1]!.eventId;
+        const oldAcknowledgment = {
+            type: 'session.thinking.appended',
+            client_event_id: firstAppendId,
+        };
+        stubLiveSession.emit({
+            ...oldAcknowledgment,
+            event_id: 'ack-thursday-late',
+        });
+        stubLiveSession.emit({
+            ...oldAcknowledgment,
+            event_id: 'ack-thursday-duplicate',
+        });
+        assert.equal(stubLiveSession.thinking.length, 2);
+        assert.equal(stubLiveSession.commentary.length, 1);
+        assert.equal(
+            stubLiveSession.commentary.some(
+                ({ text }) => text === staleThursdayAnswer
+            ),
+            false
+        );
+
+        await sendTurn(
+            'Correction: it is Saturday, not Friday.',
+            1_200,
+            1_500,
+            1_600,
+            'saturday'
+        );
+        assert.equal(stubLiveSession.thinking.length, 3);
+        assert.match(
+            stubLiveSession.thinking[2]!.text,
+            /Saturday, not Friday/u
+        );
+        assert.doesNotMatch(stubLiveSession.thinking[2]!.text, /Thursday/u);
+        assert.equal(stubLiveSession.commentary.length, 2);
+        stubLiveSession.emit({
+            type: 'error',
+            event_id: 'error-friday-late',
+            client_event_id: secondAppendId,
+            error: { code: 'append_rejected', message: 'private append text' },
+        });
+        assert.equal(ws.readyState, WebSocket.OPEN);
+        assert.equal(stubLiveSession.thinking.length, 3);
+        assert.equal(stubLiveSession.commentary.length, 2);
+
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+        resolveWorkflow({
+            responseId: 'thursday-response',
+            runId: 'thursday-run',
+            status: 'completed',
+            finalResponse: {
+                disposition: 'approved',
+                responseId: 'thursday-response',
+                runId: 'thursday-run',
+                candidateId: 'candidate',
+                generationStepId: 'answer',
+                assessmentStepId: 'review',
+                text: staleThursdayAnswer,
+            },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        assert.equal(
+            stubLiveSession.commentary.some(
+                ({ text }) => text === staleThursdayAnswer
+            ),
+            false
+        );
+    } finally {
+        if (resolveWorkflow) {
+            resolveWorkflow({
+                responseId: 'thursday-response',
+                runId: 'thursday-run',
+                status: 'completed',
+                finalResponse: {
+                    disposition: 'approved',
+                    responseId: 'thursday-response',
+                    runId: 'thursday-run',
+                    candidateId: 'candidate',
+                    generationStepId: 'answer',
+                    assessmentStepId: 'review',
+                    text: staleThursdayAnswer,
+                },
+            });
+        }
         if (ws) await closeWebSocket(ws);
         await harness.close();
     }
