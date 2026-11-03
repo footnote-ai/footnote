@@ -16,7 +16,7 @@ export type OpenAiLiveTextAppendPurpose =
 
 const LIVE_APPEND_TOKEN_LIMIT = 500;
 
-/** Enforces the shared GPT-Live text event cap using the existing multilingual estimate. */
+/** Check text appends against the 500-token estimate before sending them. */
 export const validateOpenAiLiveTextAppend = (
     purpose: OpenAiLiveTextAppendPurpose,
     content: string
