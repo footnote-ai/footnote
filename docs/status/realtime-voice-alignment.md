@@ -20,6 +20,7 @@ and listening protocol; no model-behavior scores have been collected.
 The [architecture guide](../architecture/realtime-voice.md) documents current
 behavior, while the [Talker–Reasoner proposal](../proposals/realtime-talker-reasoner.md)
 tracks later design work.
+
 ## Alignment matrix
 
 | Area | Current behavior | Still to verify |
@@ -28,6 +29,7 @@ tracks later design work.
 | Speech | Standard sends approved text to TTS; Live may speak independently or paraphrase approved commentary. | Human audibility and the missing listener-facing source marker for Live. |
 | Call handling | One consenting caller; interruption or closure revokes stale delivery. | Real Discord operation, provider cancellation and recovery when capacity remains `occupied`. |
 | Usage and cost | Workflow stores content-free usage/cost where reported. | Transcription is only logged when supplied, TTS lacks usage, and Live logs duration only. Total Voice spend is not reconciled. |
+
 The detailed matrix below preserves the baseline through #964. Its earlier
 `Gap` entries describe that period, not necessarily the current implementation.
 Remaining work is tracked in the sections that follow.
