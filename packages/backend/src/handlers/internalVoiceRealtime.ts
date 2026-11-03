@@ -878,24 +878,28 @@ export const createInternalVoiceRealtimeHandler = ({
         const handleLiveAppendReceipt = (
             event: OpenAiLiveVoiceEvent
         ): boolean => {
-            const appendedPurpose =
-                event.type === 'session.thinking.appended'
-                    ? 'thinking'
-                    : event.type === 'session.instructions.appended'
-                      ? 'instructions'
-                      : event.type === 'session.commentary.appended'
-                        ? 'commentary'
-                        : undefined;
+            let appendedPurpose: LiveAppend['purpose'] | undefined;
+            switch (event.type) {
+                case 'session.thinking.appended':
+                    appendedPurpose = 'thinking';
+                    break;
+                case 'session.instructions.appended':
+                    appendedPurpose = 'instructions';
+                    break;
+                case 'session.commentary.appended':
+                    appendedPurpose = 'commentary';
+                    break;
+            }
             const errorPayload =
                 typeof event.error === 'object' && event.error !== null
                     ? (event.error as Record<string, unknown>)
                     : undefined;
-            const clientEventId =
-                typeof event.client_event_id === 'string'
-                    ? event.client_event_id
-                    : typeof errorPayload?.client_event_id === 'string'
-                      ? errorPayload.client_event_id
-                      : undefined;
+            let clientEventId: string | undefined;
+            if (typeof event.client_event_id === 'string') {
+                clientEventId = event.client_event_id;
+            } else if (typeof errorPayload?.client_event_id === 'string') {
+                clientEventId = errorPayload.client_event_id;
+            }
             if (appendedPurpose) {
                 const append =
                     clientEventId === undefined
@@ -906,31 +910,34 @@ export const createInternalVoiceRealtimeHandler = ({
                     append.purpose !== appendedPurpose ||
                     append.status !== 'pending'
                 ) {
+                    let status: string;
+                    if (!append) status = 'unmatched';
+                    else if (append.purpose !== appendedPurpose)
+                        status = 'purpose_mismatch';
+                    else status = append.status;
                     realtimeLogger.debug(
                         'OpenAI Live append acknowledgment ignored.',
                         {
                             purpose: appendedPurpose,
-                            status: !append
-                                ? 'unmatched'
-                                : append.purpose !== appendedPurpose
-                                  ? 'purpose_mismatch'
-                                  : append.status,
+                            status,
                         }
                     );
                     return true;
                 }
                 append.status = 'acknowledged';
+                const providerEventId =
+                    typeof event.event_id === 'string'
+                        ? event.event_id
+                        : undefined;
+                const stale = Boolean(
+                    append.handle &&
+                    !conversationState?.isCurrent(append.handle)
+                );
                 realtimeLogger.info('OpenAI Live append acknowledged.', {
                     purpose: appendedPurpose,
                     clientEventId,
-                    providerEventId:
-                        typeof event.event_id === 'string'
-                            ? event.event_id
-                            : undefined,
-                    stale: Boolean(
-                        append.handle &&
-                        !conversationState?.isCurrent(append.handle)
-                    ),
+                    providerEventId,
+                    stale,
                 });
                 return true;
             }
