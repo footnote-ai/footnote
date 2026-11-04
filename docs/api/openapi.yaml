@@ -3750,6 +3750,53 @@ components:
                     minLength: 1
                     maxLength: 64
                     description: 'Private initiating voice turn, omitted from public Trace.'
+                voicePersona:
+                    type: object
+                    description: >-
+                        Voice persona and the sources of its settings. Excludes display names,
+                        overlay text and file paths.
+                    properties:
+                        personaId:
+                            type: string
+                            minLength: 1
+                        selectionSource:
+                            type: string
+                            enum:
+                                - operator_profile
+                                - runtime_profile
+                                - persona_catalog
+                        overlaySelection:
+                            type: string
+                            enum:
+                                - configured
+                                - catalog
+                                - default
+                        overlaySource:
+                            type: string
+                            enum:
+                                - inline
+                                - file
+                                - none
+                        expressionStrength:
+                            type: string
+                            enum:
+                                - subtle
+                                - balanced
+                                - strong
+                        expressionSource:
+                            type: string
+                            enum:
+                                - request
+                                - profile
+                                - persona_default
+                    required:
+                        - personaId
+                        - selectionSource
+                        - overlaySelection
+                        - overlaySource
+                        - expressionStrength
+                        - expressionSource
+                    additionalProperties: false
                 runStatus:
                     type: string
                     enum:

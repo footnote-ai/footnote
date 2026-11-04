@@ -14,7 +14,8 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { runtimeConfig } from '../src/config.js';
 import { parseBotProfileConfig } from '../src/config/profile.js';
-import { Duplex } from 'node:stream';
+import { Duplex, Writable } from 'node:stream';
+import { format, transports } from 'winston';
 import type { IncomingMessage } from 'node:http';
 import WebSocket from 'ws';
 import type { InternalVoiceRealtimeServerEvent } from '@footnote/contracts/voice';
@@ -36,6 +37,7 @@ import type {
 
 import { createInternalVoiceRealtimeHandler } from '../src/handlers/internalVoiceRealtime.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
+import { logger } from '../src/utils/logger.js';
 
 const testProfile: BotProfileConfig = {
     id: 'winter',
@@ -1929,6 +1931,17 @@ test('Live startup payload and delegated Workflow share the call-pinned persona'
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'live-persona-'));
     const overlayPath = path.join(root, 'operator.md');
     await fs.writeFile(overlayPath, 'Private operator behavior for this bot.');
+    const logOutput: string[] = [];
+    const logTransport = new transports.Stream({
+        stream: new Writable({
+            write(chunk, _encoding, done) {
+                logOutput.push(String(chunk));
+                done();
+            },
+        }),
+        format: format.printf((info) => JSON.stringify(info)),
+    });
+    logger.add(logTransport);
     runtimeConfig.settings.discordBots = [
         {
             id: 'operator-node',
@@ -2009,6 +2022,7 @@ test('Live startup payload and delegated Workflow share the call-pinned persona'
             let ws: WebSocket | undefined;
             try {
                 ws = await harness.connect();
+                logOutput.length = 0;
                 ws.send(
                     JSON.stringify({
                         type: 'session.start',
@@ -2037,6 +2051,55 @@ test('Live startup payload and delegated Workflow share the call-pinned persona'
                 );
                 const ready = await waitForJsonMessage(ws);
                 assert.equal(ready.type, 'session.ready', entry.id);
+                const startLog = logOutput
+                    .map(
+                        (entry) => JSON.parse(entry) as Record<string, unknown>
+                    )
+                    .find((entry) =>
+                        String(entry.message).includes(
+                            'Internal voice session starting.'
+                        )
+                    );
+                assert.ok(startLog, JSON.stringify(logOutput));
+                assert.equal(
+                    startLog.personaSelectionSource,
+                    entry.id === 'custom'
+                        ? 'operator_profile'
+                        : entry.id === 'winter'
+                          ? 'runtime_profile'
+                          : 'persona_catalog',
+                    entry.id
+                );
+                assert.equal(
+                    startLog.personaExpressionStrength,
+                    entry.strength,
+                    entry.id
+                );
+                assert.equal(
+                    startLog.personaOverlaySelection,
+                    entry.id === 'custom'
+                        ? 'configured'
+                        : entry.id === 'footnote'
+                          ? 'default'
+                          : 'catalog',
+                    entry.id
+                );
+                assert.equal(
+                    startLog.personaOverlaySource,
+                    entry.id === 'custom' || entry.overlay ? 'file' : 'none',
+                    entry.id
+                );
+                assert.equal(
+                    startLog.personaExpressionSource,
+                    entry.override ? 'profile' : 'persona_default',
+                    entry.id
+                );
+                assert.equal(
+                    logOutput
+                        .join('')
+                        .includes('Private operator behavior for this bot.'),
+                    false
+                );
                 assert.equal(startRequest?.voice, 'marin', entry.id);
                 assert.match(
                     startRequest?.instructions ?? '',
@@ -2109,6 +2172,24 @@ test('Live startup payload and delegated Workflow share the call-pinned persona'
                 await new Promise((resolve) => setTimeout(resolve, 600));
                 assert.equal(delegatedPersona?.profile.id, entry.id);
                 assert.equal(
+                    delegatedPersona?.selectionSource,
+                    entry.id === 'custom'
+                        ? 'operator_profile'
+                        : entry.id === 'winter'
+                          ? 'runtime_profile'
+                          : 'persona_catalog',
+                    entry.id
+                );
+                assert.equal(
+                    delegatedPersona?.overlaySelection,
+                    entry.id === 'custom'
+                        ? 'configured'
+                        : entry.id === 'footnote'
+                          ? 'default'
+                          : 'catalog',
+                    entry.id
+                );
+                assert.equal(
                     delegatedPersona?.expression.strength,
                     entry.strength
                 );
@@ -2125,6 +2206,7 @@ test('Live startup payload and delegated Workflow share the call-pinned persona'
             }
         }
     } finally {
+        logger.remove(logTransport);
         runtimeConfig.settings.discordBots = previousBots;
         await fs.rm(root, { recursive: true, force: true });
     }
@@ -2299,6 +2381,7 @@ test('real Discord adapters select their configured personas against a shared Fo
                 await session.commitAudio();
                 await delivered;
                 assert.equal(received?.profile.id, id);
+                assert.equal(received?.selectionSource, 'operator_profile');
                 assert.equal(
                     received?.expression.strength,
                     id === 'danny'

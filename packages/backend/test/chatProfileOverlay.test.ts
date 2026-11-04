@@ -244,6 +244,36 @@ test('Voice selects the invoking Discord node from existing server configuration
     }
 });
 
+test('Voice retains same-identity expression defaults when node config omits them', () => {
+    const previous = runtimeConfig.settings.discordBots;
+    runtimeConfig.settings.discordBots = [
+        {
+            id: 'operator-node',
+            profile: { id: 'operator', displayName: 'Operator' },
+        },
+    ];
+    try {
+        const resolved = resolveVoicePersona(
+            parseBotProfileConfig({
+                profileId: 'operator',
+                inlineOverlayText: 'PRIVATE_OPERATOR_OVERLAY',
+                personaExpressionStrength: 'strong',
+            }),
+            logger,
+            { botPersonaId: 'operator', discordNodeId: 'operator-node' }
+        );
+        assert.equal(resolved.selectionSource, 'operator_profile');
+        assert.equal(resolved.expression.strength, 'strong');
+        assert.equal(resolved.expression.source, 'profile');
+        assert.equal(
+            resolved.profile.promptOverlay.text,
+            'PRIVATE_OPERATOR_OVERLAY'
+        );
+    } finally {
+        runtimeConfig.settings.discordBots = previous;
+    }
+});
+
 test('matching Discord identity preserves the operator profile and overlay', () => {
     const previous = { ...runtimeConfig.profile };
     try {
@@ -300,6 +330,56 @@ test('duplicate configured persona IDs preserve ordinary chat fallback while Voi
         );
     } finally {
         runtimeConfig.settings.discordBots = previous;
+    }
+});
+
+test('duplicate configured persona IDs matching the runtime profile use catalog fallback', () => {
+    const previousBots = runtimeConfig.settings.discordBots;
+    const previousProfile = { ...runtimeConfig.profile };
+    const warnings: Array<{ message: string; requestedPersonaId?: string }> =
+        [];
+    runtimeConfig.settings.discordBots = [
+        { id: 'one', profile: { id: 'danny', displayName: 'First Danny' } },
+        { id: 'two', profile: { id: 'danny', displayName: 'Second Danny' } },
+    ];
+    Object.assign(runtimeConfig.profile, {
+        id: 'danny',
+        displayName: 'Runtime Danny',
+        promptOverlay: {
+            source: 'inline',
+            text: 'PRIVATE_RUNTIME_DANNY_OVERLAY',
+            path: null,
+            length: 28,
+        },
+    });
+    try {
+        const profile = resolveChatPersonaProfile(
+            { surface: 'discord', botPersonaId: 'danny' },
+            {
+                warn: (message, meta) =>
+                    warnings.push({
+                        message,
+                        requestedPersonaId: meta?.requestedPersonaId,
+                    }),
+            }
+        );
+
+        assert.equal(profile.displayName, 'Danny');
+        assert.equal(profile.promptOverlay.source, 'file');
+        assert.notEqual(
+            profile.promptOverlay.text,
+            'PRIVATE_RUNTIME_DANNY_OVERLAY'
+        );
+        assert.deepEqual(warnings, [
+            {
+                message:
+                    'chat persona configuration is ambiguous; retaining fallback routing',
+                requestedPersonaId: 'danny',
+            },
+        ]);
+    } finally {
+        runtimeConfig.settings.discordBots = previousBots;
+        Object.assign(runtimeConfig.profile, previousProfile);
     }
 });
 

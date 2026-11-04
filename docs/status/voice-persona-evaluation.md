@@ -1,19 +1,29 @@
 # Voice persona evaluation
 
-Updated: 2026-11-02 · [Issue #974](https://github.com/footnote-ai/footnote/issues/974)
+Updated: 2026-11-03 · [Issue #974](https://github.com/footnote-ai/footnote/issues/974)
 
 ## Where we are
 
-The invoking bot's persona is now pinned for the whole call ([#976](https://github.com/footnote-ai/footnote/pull/976)), and GPT-Live receives its behavioral instructions at startup ([#977](https://github.com/footnote-ai/footnote/pull/977)). [#979](https://github.com/footnote-ai/footnote/pull/979) also improved the default answer limits and recovery budget.
+The bot that receives a call determines its persona for the whole session
+([#976](https://github.com/footnote-ai/footnote/pull/976)). GPT-Live receives
+that persona's behavioral instructions at startup
+([#977](https://github.com/footnote-ai/footnote/pull/977)). [#984](https://github.com/footnote-ai/footnote/pull/984)
+preserves configured expression strength when a matching Discord bot omits it
+and records the effective persona and its selection sources in Workflow
+metadata. [#979](https://github.com/footnote-ai/footnote/pull/979) improved
+the default answer limits and recovery budget.
 
-The synthetic tests cover persona selection, Workflow approval, speech handoff, interruption and cleanup. We still need to hear how Standard and Live behave in Discord. No provider calls or listening evaluations have been run for this issue.
+Synthetic tests check which persona reaches each path, along with approval,
+speech handoff, corrections, interruptions and cleanup. They cannot tell us
+whether the model actually follows that persona or how either mode sounds in
+Discord. No paid-provider or listening tests have been run for this issue.
 
-There are a few things to pay particular attention to:
+The listening comparison should look closely at four areas:
 
-- **Persona:** Footnote, Danny, Myuri and Winter receive their configured behavior and expression strength. We don't yet know how recognizable they sound, especially when GPT-Live responds on its own.
-- **Reviewed answers:** Standard passes approved text to TTS. GPT-Live can paraphrase approved commentary or speak independently. There is currently no way for the listener to tell where a Live response came from.
-- **Cancellation:** A replacement turn may arrive while the previous Workflow still holds the process-wide execution slot. The new run can be rejected as `occupied`. Synthetic cancellation tests cannot establish when a real provider stops.
-- **Usage:** Workflow records usage and cost where available. Transcription usage is logged when supplied, Standard TTS has no usage response, and GPT-Live currently records duration. We cannot yet reconcile the full cost of a call.
+- **Persona:** Do Footnote, Danny, Myuri and Winter sound distinct and recognizable, especially when GPT-Live speaks without delegating?
+- **Reviewed answers:** Standard sends approved text to TTS. GPT-Live can paraphrase approved commentary or answer on its own, and listeners currently have no reliable indication of which happened.
+- **Cancellation:** A new turn may arrive while the previous Workflow still occupies the process-wide execution slot, causing the replacement to be rejected as `occupied`. We haven't measured when a real provider stops after cancellation.
+- **Usage:** Workflow records usage and cost when available. Transcription logs usage if the provider supplies it; Standard TTS returns no usage data, and GPT-Live records duration. We still can't reconcile the full cost of a call.
 
 The delivery ceilings are 400 estimated tokens for Live and 1,600 estimated tokens plus 3,686 code points for Standard. We'll need to check whether the resulting answers sound natural and fit within the call.
 
@@ -54,4 +64,7 @@ Testing will need the configured OpenAI, OpenRouter, Workflow and search credent
 
 ## What comes next
 
-Use the pilot to decide what needs fixing before [#973](https://github.com/footnote-ai/footnote/issues/973). Speech origin in Live, cancellation under occupied capacity, and Voice cost accounting are the main candidates. Keep #974 open until the provider comparison and listening checks have been done.
+Once provider testing is approved, run the private listening comparison and
+record what people actually hear. Keep #974 open until those checks are
+complete, and report model behavior separately from the verified startup and
+Workflow wiring.

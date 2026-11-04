@@ -1564,6 +1564,21 @@ const WorkflowRecordSchema = z
         runId: z.string().min(1).optional(),
         sessionCorrelationId: z.string().min(1).max(64).optional(),
         initiatingTurnId: z.string().min(1).max(64).optional(),
+        voicePersona: z
+            .object({
+                personaId: z.string().min(1),
+                selectionSource: z.enum([
+                    'operator_profile',
+                    'runtime_profile',
+                    'persona_catalog',
+                ]),
+                overlaySelection: z.enum(['configured', 'catalog', 'default']),
+                overlaySource: z.enum(['inline', 'file', 'none']),
+                expressionStrength: PersonaExpressionStrengthSchema,
+                expressionSource: PersonaExpressionSourceSchema,
+            })
+            .strict()
+            .optional(),
         runStatus: z
             .enum(['completed', 'degraded', 'limited', 'failed', 'rejected'])
             .optional(),

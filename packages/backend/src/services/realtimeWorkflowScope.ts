@@ -430,6 +430,7 @@ export type RealtimeWorkflowScope = {
     turnId: string;
     onRunStarted: (runId: string) => void;
     deliveryPolicy: VoiceAnswerDeliveryPolicy;
+    voicePersona?: NonNullable<WorkflowRecord['voicePersona']>;
     actionRejected?: boolean;
     recorded?: Required<
         Pick<RealtimeWorkflowResult, 'responseId' | 'runId' | 'status'>
@@ -716,6 +717,9 @@ export const projectRealtimeWorkflowMetadata = (
                   ]),
                   sessionCorrelationId: voice.sessionCorrelationId,
                   initiatingTurnId: voice.turnId,
+                  ...(voice.voicePersona
+                      ? { voicePersona: voice.voicePersona }
+                      : {}),
                   steps: original.steps.map((step) => ({
                       ...pick(step, [
                           'stepId',

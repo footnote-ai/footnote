@@ -78,8 +78,19 @@ for (const mode of ['standard', 'live'] as const) {
             const previousMode = runtimeConfig.chatWorkflow.modeId;
             const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
             const previousProfile = { ...runtimeConfig.profile };
+            const previousBots = runtimeConfig.settings.discordBots;
             runtimeConfig.chatWorkflow.modeId = 'grounded';
             runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+            if (id === 'operator')
+                runtimeConfig.settings.discordBots = [
+                    {
+                        id: 'operator-node',
+                        profile: {
+                            id: 'operator',
+                            displayName: 'Private operator name',
+                        },
+                    },
+                ];
             const persona = resolveVoicePersona(
                 parseBotProfileConfig({
                     profileId: id,
@@ -91,7 +102,13 @@ for (const mode of ['standard', 'live'] as const) {
                           }
                         : {}),
                 }),
-                { warn: () => undefined }
+                { warn: () => undefined },
+                id === 'operator'
+                    ? {
+                          botPersonaId: 'operator',
+                          discordNodeId: 'operator-node',
+                      }
+                    : {}
             );
             Object.assign(runtimeConfig.profile, {
                 id: 'footnote',
@@ -170,6 +187,31 @@ for (const mode of ['standard', 'live'] as const) {
                     new RegExp(`Persona expression strength: ${strength}`)
                 );
                 assert.ok(records.length);
+                const persisted = ResponseMetadataSchema.parse(
+                    JSON.parse(records.at(-1)!)
+                );
+                assert.deepEqual(persisted.workflow?.voicePersona, {
+                    personaId: id,
+                    selectionSource:
+                        id === 'operator'
+                            ? 'operator_profile'
+                            : 'runtime_profile',
+                    overlaySelection:
+                        id === 'operator'
+                            ? 'configured'
+                            : id === 'footnote'
+                              ? 'default'
+                              : 'catalog',
+                    overlaySource:
+                        id === 'operator'
+                            ? 'inline'
+                            : id === 'footnote'
+                              ? 'none'
+                              : 'file',
+                    expressionStrength: strength,
+                    expressionSource:
+                        id === 'operator' ? 'profile' : 'persona_default',
+                });
                 assert.doesNotMatch(
                     records.join('\n'),
                     /PRIVATE_OPERATOR_BEHAVIOR|Private operator name|VOICE_SECRET/
@@ -180,10 +222,110 @@ for (const mode of ['standard', 'live'] as const) {
                 Object.assign(runtimeConfig.profile, previousProfile);
                 runtimeConfig.profile.personaExpressionStrength =
                     previousProfile.personaExpressionStrength;
+                runtimeConfig.settings.discordBots = previousBots;
             }
         });
     }
 }
+
+test('Standard Workflow provider requests retain persona guidance across representative prompts', async () => {
+    const previousMode = runtimeConfig.chatWorkflow.modeId;
+    const previousReview = runtimeConfig.chatWorkflow.reviewLoopEnabled;
+    runtimeConfig.chatWorkflow.modeId = 'grounded';
+    runtimeConfig.chatWorkflow.reviewLoopEnabled = true;
+    const persona = resolveVoicePersona(
+        parseBotProfileConfig({
+            profileId: 'operator',
+            inlineOverlayText: 'PRIVATE_OPERATOR_BEHAVIOR',
+            personaExpressionStrength: 'strong',
+        }),
+        { warn: () => undefined }
+    );
+    const requests: string[] = [];
+    const responses = [
+        JSON.stringify(answerPlan()),
+        'The reviewed answer.',
+        JSON.stringify({
+            reviewDecision: 'finalize',
+            reviewReason: 'Sufficient evidence.',
+        }),
+    ];
+    let callIndex = 0;
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: {
+            kind: 'synthetic',
+            generate: async (request) => {
+                requests.push(
+                    request.messages
+                        .map((message) => message.content)
+                        .join('\n')
+                );
+                return {
+                    model: request.model,
+                    text: responses[callIndex++ % responses.length]!,
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+    const prompts = [
+        ['ordinary conversation', 'How was your day?'],
+        [
+            'technical question',
+            'Explain how this function rejects stale execution handles.',
+        ],
+        [
+            'disagreement',
+            'I think this proves a violation. Disagree if the evidence does not.',
+        ],
+        [
+            'uncertainty',
+            'There are 51 requests against a limit of 50, but no timestamp. Does that prove a breach?',
+        ],
+        [
+            'refusal',
+            'Give me a private account identifier that I am not allowed to export.',
+        ],
+        [
+            'delegation',
+            'Find the current official GPT-Live model pricing and cite its source.',
+        ],
+    ] as const;
+
+    try {
+        for (const [kind, prompt] of prompts) {
+            const firstRequest = requests.length;
+            const result = await orchestrator.runRealtimeConversation(
+                snapshot(prompt),
+                {
+                    signal: new AbortController().signal,
+                    onRunStarted: () => undefined,
+                    voiceMode: 'standard',
+                    persona,
+                }
+            );
+            const providerPayload = requests.slice(firstRequest).join('\n');
+            assert.equal(result.finalResponse?.disposition, 'approved', kind);
+            assert.ok(providerPayload.includes(prompt), kind);
+            assert.ok(
+                providerPayload.includes('PRIVATE_OPERATOR_BEHAVIOR'),
+                kind
+            );
+            assert.match(
+                providerPayload,
+                /Persona expression strength: strong\./u,
+                kind
+            );
+            assert.match(providerPayload, /This controls prose only\./u, kind);
+        }
+    } finally {
+        runtimeConfig.chatWorkflow.modeId = previousMode;
+        runtimeConfig.chatWorkflow.reviewLoopEnabled = previousReview;
+    }
+});
 
 for (const provider of ['openrouter', 'openai'] as const) {
     test(`the configured ${provider} route plans, generates and assesses Voice with metadata-only SQLite receipts`, async (t) => {
