@@ -1203,6 +1203,16 @@ export type WorkflowRecord = {
     sessionCorrelationId?: string;
     /** Private initiating voice turn; not a text-chat message or public Trace identity. */
     initiatingTurnId?: string;
+    /** Content-free record of the effective Voice persona; never includes overlay text or paths. */
+    voicePersona?: {
+        personaId: string;
+        selectionSource:
+            'operator_profile' | 'runtime_profile' | 'persona_catalog';
+        overlaySelection: 'configured' | 'catalog' | 'default';
+        overlaySource: 'inline' | 'file' | 'none';
+        expressionStrength: PersonaExpressionStrength;
+        expressionSource: PersonaExpressionSource;
+    };
     runStatus?: 'completed' | 'degraded' | 'limited' | 'failed' | 'rejected';
     /**
      * Backend-observed Run wall-clock bounds. `durationMs` is derived as

@@ -286,8 +286,10 @@ Older clients that send no identity metadata use the backend's default profile.
 Standard Voice and delegated Live requests pass this resolved persona to the
 existing `RealtimeWorkflowRunner`. Generation, assessment and presentation
 therefore use the same identity without loading it again for each turn.
-Private persona data stays out of conversation snapshots and metadata-only
-Voice receipts. The adapter's expression preference takes precedence over
+The Workflow receipt records its persona ID, selection and overlay provenance,
+and expression strength/source. It never records the display name, overlay
+text or path. Private persona data stays out of conversation snapshots and
+metadata-only Voice receipts. The adapter's expression preference takes precedence over
 configured profile and deployment defaults, followed by catalog defaults
 (`strong` for Winter, `balanced` otherwise). Ordinary text chat keeps its
 own request-override rules.

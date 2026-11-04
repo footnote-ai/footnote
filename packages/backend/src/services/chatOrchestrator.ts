@@ -2176,6 +2176,14 @@ export const createChatOrchestrator = ({
                 sessionCorrelationId: snapshot.sessionCorrelationId,
                 turnId: snapshot.intent.turnId,
                 onRunStarted: context.onRunStarted,
+                voicePersona: {
+                    personaId: persona.profile.id,
+                    selectionSource: persona.selectionSource,
+                    overlaySelection: persona.overlaySelection,
+                    overlaySource: persona.profile.promptOverlay.source,
+                    expressionStrength: persona.expression.strength,
+                    expressionSource: persona.expression.source,
+                },
                 deliveryPolicy: {
                     mode: voiceMode,
                     maxAnswerTokens: resolveVoiceAnswerTokenLimit(

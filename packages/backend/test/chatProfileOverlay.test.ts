@@ -244,6 +244,36 @@ test('Voice selects the invoking Discord node from existing server configuration
     }
 });
 
+test('Voice retains same-identity expression defaults when node config omits them', () => {
+    const previous = runtimeConfig.settings.discordBots;
+    runtimeConfig.settings.discordBots = [
+        {
+            id: 'operator-node',
+            profile: { id: 'operator', displayName: 'Operator' },
+        },
+    ];
+    try {
+        const resolved = resolveVoicePersona(
+            parseBotProfileConfig({
+                profileId: 'operator',
+                inlineOverlayText: 'PRIVATE_OPERATOR_OVERLAY',
+                personaExpressionStrength: 'strong',
+            }),
+            logger,
+            { botPersonaId: 'operator', discordNodeId: 'operator-node' }
+        );
+        assert.equal(resolved.selectionSource, 'operator_profile');
+        assert.equal(resolved.expression.strength, 'strong');
+        assert.equal(resolved.expression.source, 'profile');
+        assert.equal(
+            resolved.profile.promptOverlay.text,
+            'PRIVATE_OPERATOR_OVERLAY'
+        );
+    } finally {
+        runtimeConfig.settings.discordBots = previous;
+    }
+});
+
 test('matching Discord identity preserves the operator profile and overlay', () => {
     const previous = { ...runtimeConfig.profile };
     try {

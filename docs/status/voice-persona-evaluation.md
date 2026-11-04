@@ -6,7 +6,10 @@ Updated: 2026-11-02 · [Issue #974](https://github.com/footnote-ai/footnote/issu
 
 The invoking bot's persona is now pinned for the whole call ([#976](https://github.com/footnote-ai/footnote/pull/976)), and GPT-Live receives its behavioral instructions at startup ([#977](https://github.com/footnote-ai/footnote/pull/977)). [#979](https://github.com/footnote-ai/footnote/pull/979) also improved the default answer limits and recovery budget.
 
-The synthetic tests cover persona selection, Workflow approval, speech handoff, interruption and cleanup. We still need to hear how Standard and Live behave in Discord. No provider calls or listening evaluations have been run for this issue.
+The synthetic tests cover persona selection and provenance, Workflow approval,
+speech handoff, correction, interruption and cleanup. We still need to hear how
+Standard and Live behave in Discord. No provider calls or listening evaluations
+have been run for this issue.
 
 There are a few things to pay particular attention to:
 
@@ -54,4 +57,6 @@ Testing will need the configured OpenAI, OpenRouter, Workflow and search credent
 
 ## What comes next
 
-Use the pilot to decide what needs fixing before [#973](https://github.com/footnote-ai/footnote/issues/973). Speech origin in Live, cancellation under occupied capacity, and Voice cost accounting are the main candidates. Keep #974 open until the provider comparison and listening checks have been done.
+Run this private listening comparison after provider testing is approved. Keep
+#974 open until the comparison and listening checks have been done. Report model
+adherence separately from verified startup and Workflow wiring.

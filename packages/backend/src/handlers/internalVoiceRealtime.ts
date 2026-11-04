@@ -1606,6 +1606,11 @@ export const createInternalVoiceRealtimeHandler = ({
                 realtimeLogger.info('Internal voice session starting.', {
                     mode,
                     profileId: persona.profile.id,
+                    personaSelectionSource: persona.selectionSource,
+                    personaOverlaySelection: persona.overlaySelection,
+                    personaOverlaySource: persona.profile.promptOverlay.source,
+                    personaExpressionStrength: persona.expression.strength,
+                    personaExpressionSource: persona.expression.source,
                 });
                 if (mode === 'standard') {
                     speechSelection = resolveSpeechSelection({

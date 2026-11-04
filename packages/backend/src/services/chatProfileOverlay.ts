@@ -238,7 +238,7 @@ export const resolveChatPersonaProfile = (
             try {
                 configured = resolveInvokingBotProfile(runtimeConfig.profile, {
                     botPersonaId: requestedPersonaId,
-                });
+                }).profile;
             } catch (error) {
                 logger.warn(
                     'chat persona configuration is invalid; retaining catalog routing',
@@ -299,8 +299,14 @@ const resolveConfiguredPersonaProfile = (
 export type ResolvedVoicePersona = Readonly<{
     profile: BotProfileConfig;
     expression: PersonaExpressionResolution;
+    selectionSource: 'operator_profile' | 'runtime_profile' | 'persona_catalog';
     overlaySelection: 'configured' | 'catalog' | 'default';
 }>;
+
+type InvokingBotProfileResolution = {
+    profile: BotProfileConfig;
+    selectionSource: ResolvedVoicePersona['selectionSource'];
+};
 
 type VoicePersonaIdentity = Pick<
     Extract<InternalVoiceRealtimeClientEvent, { type: 'session.start' }>,
@@ -315,8 +321,9 @@ type ConfiguredDiscordBotProfile = NonNullable<
 const resolveInvokingBotProfile = (
     fallback: BotProfileConfig,
     identity: VoicePersonaIdentity
-): BotProfileConfig => {
-    if (!identity.botPersonaId && !identity.discordNodeId) return fallback;
+): InvokingBotProfileResolution => {
+    if (!identity.botPersonaId && !identity.discordNodeId)
+        return { profile: fallback, selectionSource: 'runtime_profile' };
     const bots = runtimeConfig.settings.discordBots ?? [];
     const matches = bots.filter(
         (bot) =>
@@ -329,19 +336,35 @@ const resolveInvokingBotProfile = (
         throw new Error('Configured Voice persona identity is unavailable.');
     const selected = matches[0]?.profile;
     if (selected)
-        return resolveConfiguredDiscordBotProfile(fallback, identity, selected);
+        return {
+            profile: resolveConfiguredDiscordBotProfile(
+                fallback,
+                identity,
+                selected
+            ),
+            selectionSource: 'operator_profile',
+        };
     if (identity.discordNodeId)
         throw new Error('Configured Voice persona identity is unavailable.');
-    if (identity.botPersonaId === fallback.id) return fallback;
+    if (identity.botPersonaId === fallback.id)
+        return { profile: fallback, selectionSource: 'runtime_profile' };
     const persona = PERSONA_CATALOG[identity.botPersonaId ?? ''];
     if (!persona)
         throw new Error('Configured Voice persona identity is unavailable.');
     return {
-        id: persona.id,
-        displayName: persona.displayName,
-        mentionAliases: [],
-        promptOverlay: { source: 'none', text: null, path: null, length: 0 },
-        speechPresentation: fallback.speechPresentation,
+        profile: {
+            id: persona.id,
+            displayName: persona.displayName,
+            mentionAliases: [],
+            promptOverlay: {
+                source: 'none',
+                text: null,
+                path: null,
+                length: 0,
+            },
+            speechPresentation: fallback.speechPresentation,
+        },
+        selectionSource: 'persona_catalog',
     };
 };
 
@@ -369,7 +392,10 @@ const resolveConfiguredDiscordBotProfile = (
                     : undefined,
             BOT_PROFILE_PROMPT_OVERLAY_PATH: selected.overlayPath,
             BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH:
-                selected.personaExpressionStrength,
+                selected.personaExpressionStrength ??
+                (selected.id === fallback.id
+                    ? fallback.personaExpressionStrength
+                    : undefined),
         },
         projectRoot: runtimeConfig.runtime.projectRoot,
         warn: () => undefined,
@@ -392,7 +418,8 @@ export const resolveVoicePersona = (
     logger: ChatProfileOverlayLogger,
     identity: VoicePersonaIdentity = {}
 ): ResolvedVoicePersona => {
-    configuredProfile = resolveInvokingBotProfile(configuredProfile, identity);
+    const selection = resolveInvokingBotProfile(configuredProfile, identity);
+    configuredProfile = selection.profile;
     const effective = resolveConfiguredPersonaProfile(
         configuredProfile,
         logger
@@ -444,6 +471,7 @@ export const resolveVoicePersona = (
     return Object.freeze({
         profile,
         expression,
+        selectionSource: selection.selectionSource,
         overlaySelection,
     });
 };

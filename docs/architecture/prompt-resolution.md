@@ -35,8 +35,9 @@ Voice disambiguates them with the configured Discord node ID.
 Voice resolves the configured profile once at admission and pins its expression
 strength and overlay for Standard and Live Workflow. Unavailable required
 overlays reject admission instead of invoking that chat fallback. Custom IDs
-require an operator overlay. GPT-Live's own behavioral startup instructions are
-still deferred; see [Voice prompt composition](./realtime-voice.md#5-prompt-composition).
+require an operator overlay. GPT-Live startup instructions use the same resolved
+persona plus its listening, interruption and delegation rules; see [Voice prompt
+composition](./realtime-voice.md#5-prompt-composition).
 
 - `PROMPT_CONFIG_PATH` is shared by backend and Discord bot runtimes.
 - `PROMPT_CONFIG_PATH` applies before Discord profile overlay composition.
