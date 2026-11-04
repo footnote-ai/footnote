@@ -283,16 +283,17 @@ a backend. Standalone adapters use a matching backend profile or bundled
 persona; custom standalone profiles must be configured on the backend too.
 Older clients that send no identity metadata use the backend's default profile.
 
-Standard Voice and delegated Live requests pass this resolved persona to the
-existing `RealtimeWorkflowRunner`. Generation, assessment and presentation
-therefore use the same identity without loading it again for each turn.
-The Workflow receipt records its persona ID, selection and overlay provenance,
-and expression strength/source. It never records the display name, overlay
-text or path. Private persona data stays out of conversation snapshots and
-metadata-only Voice receipts. The adapter's expression preference takes precedence over
-configured profile and deployment defaults, followed by catalog defaults
-(`strong` for Winter, `balanced` otherwise). Ordinary text chat keeps its
-own request-override rules.
+Standard and Live pass the pinned persona into `RealtimeWorkflowRunner`.
+Generation, assessment and presentation use the same identity and expression
+settings throughout the call. Each Voice Workflow receipt records the persona
+ID and where the identity, overlay and expression settings came from. It does
+not contain the display name, overlay text or file path. Private overlay
+content also stays out of conversation snapshots.
+
+For Voice, an expression preference from the Discord adapter takes precedence,
+followed by the configured profile, deployment default and built-in default
+(`strong` for Winter, `balanced` otherwise). Ordinary text chat also supports
+request-level expression overrides.
 
 ### GPT-Live startup instructions
 
