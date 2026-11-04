@@ -17,11 +17,11 @@
             "author": "Maintainer"
         },
         {
-            "content": "Repeat the package boundary rule throughout the wiki: web and discord-bot should integrate through backend HTTP APIs, not direct runtime imports from backend internals.",
+            "content": "Explain package boundaries where they help readers follow ownership or a request. Avoid repeating the same boundary note on pages where it adds no context.",
             "author": "Maintainer"
         },
         {
-            "content": "Structure pages around Purpose, Key concepts, Ownership boundaries, Typical flow, Failure modes, How to test, and Related pages. For routes and data flows, add a concrete How it works walkthrough.",
+            "content": "Choose each page's structure to answer its reader's question. Use a concrete request flow when it clarifies behavior, but do not force every page into the same template or repeat details already explained elsewhere.",
             "author": "Maintainer"
         },
         {
@@ -52,9 +52,11 @@
     "pages": [
         {
             "title": "Introduction",
-            "purpose": "Welcome a new contributor with a polished overview of what Footnote is, why provenance matters, how the wiki is organized, and what to read first.",
+            "purpose": "Introduce Footnote and help readers choose a useful path to try it, run it, understand its answers, or contribute.",
             "entrypoints": [
                 "README.md",
+                "docs/wiki-home.md",
+                "docs/README.md",
                 "cursor.rules",
                 "AGENTS.md",
                 "docs/ai/github-work-management.md",
@@ -65,11 +67,11 @@
             ],
             "page_notes": [
                 {
-                    "content": "Use this as the curated landing page. Include sections for what Footnote is, why it is different, how to read the wiki, a first-30-minutes walkthrough, and suggested reading paths.",
+                    "content": "Make the opening useful to a new reader: explain what Footnote records, then link directly to trying the demo, self-hosting, understanding traces, Voice, and contributing.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Start here, then read Architecture, Glossary, and Provenance. Use Packages when you want to find where a feature lives in code. Include a simple first-run path: start the backend, open the web app, trigger one live chat request, and inspect the resulting trace. Keep this distinct from the homepage's checked-in prepared examples, which do not call a model.",
+                    "content": "Keep a live model request distinct from the checked-in prepared examples, which do not call a model. For a feature's implementation, point readers to its owning package and canonical docs rather than asking them to follow an assumed 30-minute script.",
                     "author": "Maintainer"
                 }
             ]
@@ -321,7 +323,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Repository context selection and preview use `.footnote/context-files` plus `pnpm context:repo:list`; loading those files into TrustGraph is not implemented yet. Keep indexing support separate from the workflow context-step integration and from runtime authority.",
+                    "content": "Local project-document retrieval is opt-in (`CHAT_CONTEXT_PROJECT_DOCS_ENABLED`, default false). File selection and preview, one-time TrustGraph loading, and runtime `project_context` are separate paths; source-code retrieval remains a separate issue (#539). Keep retrieved documents advisory and preserve explicit unavailable or stale states.",
                     "author": "Maintainer"
                 }
             ]
@@ -643,17 +645,24 @@
         },
         {
             "title": "Voice",
-            "purpose": "Document the Discord voice and realtime flow, including audio capture, playback, session management, and consent-sensitive behavior.",
+            "purpose": "Explain how Discord Voice connects audio capture and playback to backend-owned Standard and Live request paths, and where their approval guarantees differ.",
             "parent": "Discord",
             "entrypoints": [
                 "packages/discord-bot/src/voice/VoiceSessionManager.ts",
                 "packages/discord-bot/src/voice/AudioCaptureHandler.ts",
                 "packages/discord-bot/src/voice/AudioPlaybackHandler.ts",
-                "packages/discord-bot/src/realtime/RealtimeAudioHandler.ts"
+                "packages/discord-bot/src/realtime/RealtimeAudioHandler.ts",
+                "packages/backend/src/handlers/internalVoiceRealtime.ts",
+                "packages/backend/src/services/openAiLiveVoice.ts",
+                "packages/backend/src/services/realtimeConversationState.ts",
+                "packages/backend/src/services/chatOrchestrator.ts",
+                "docs/architecture/realtime-voice.md",
+                "docs/status/realtime-voice-alignment.md",
+                "docs/status/voice-persona-evaluation.md"
             ],
             "page_notes": [
                 {
-                    "content": "Include one screenshot or diagram that makes the voice experience tangible. Explain both the live user experience and the privacy-sensitive engineering concerns.",
+                    "content": "Explain Standard as speech for Workflow-approved answers. Live can speak independently or paraphrase and can delegate substantive questions to Workflow; do not describe all Live audio as approved text. Distinguish synthetic wiring tests from provider calls and listening results.",
                     "author": "Maintainer"
                 }
             ]

@@ -19,6 +19,7 @@ export default defineConfig({
             title: 'Footnote Documentation',
             description:
                 'Repository-owned documentation for the transparency-first Footnote AI framework.',
+            favicon: '/favicon.ico',
             // Staging supplies source Git dates so the no-.git Docker build
             // never falls back to an unverified timestamp.
             lastUpdated: true,
@@ -26,6 +27,10 @@ export default defineConfig({
                 {
                     label: 'Start here',
                     items: ['getting-started', 'philosophy', 'documentation'],
+                },
+                {
+                    label: 'Contribute',
+                    items: ['ai', 'ai/github-work-management', 'agents/domain'],
                 },
                 {
                     label: 'Understand Footnote',

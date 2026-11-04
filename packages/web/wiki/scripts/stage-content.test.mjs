@@ -124,6 +124,7 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
         assert.match(documentation, /slug: "documentation"/);
         assert.match(documentation, /lastUpdated: \d{4}-\d{2}-\d{2}T/u);
         assert.match(documentation, /\/wiki\/getting-started\/#quickstart/);
+        assert.match(documentation, /\]\(\/wiki\/\)/u);
         assert.match(architectureGuide, /^##\s+Important Concepts/mu);
         assert.match(documentation, /blob\/main\/docs\/README\.md/);
         assert.match(documentation, /commits\/main\/docs\/README\.md/);
@@ -134,17 +135,20 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
         const landing = await readGenerated('index.md');
         assert.match(
             landing,
-            /Footnote is an AI assistant that shows how its answers were made\./u
+            /Footnote is an AI assistant for the web and Discord\./u
         );
-        assert.doesNotMatch(landing, /transparency-first AI framework/u);
+        assert.match(landing, /blob\/main\/docs\/wiki-home\.md/u);
+        assert.match(landing, /edit\/main\/docs\/wiki-home\.md/u);
         assert.match(landing, /slug: ""/);
         assert.match(machineIndex, /^# Footnote Documentation$/mu);
         assert.match(machineIndex, /\/wiki\/getting-started\//u);
+        assert.match(machineIndex, /canonical source: .*docs\/wiki-home\.md/u);
         assert.match(
             machineIndex,
             /source revision: (?:`[0-9a-f]{40}`|unavailable for this build)/u
         );
         assert.match(machineFull, /source path: `docs\/README\.md`/u);
+        assert.match(machineFull, /source path: `docs\/wiki-home\.md`/u);
         assert.match(machineFull, /lifecycle: current/u);
 
         await fs.writeFile(

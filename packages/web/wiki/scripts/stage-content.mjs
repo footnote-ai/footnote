@@ -38,6 +38,7 @@ const bundledRevisionDatePath = path.join(
 
 const sourceFiles = [
     'README.md',
+    'docs/wiki-home.md',
     'SECURITY.md',
     'MIT_LICENSE.md',
     'HIPPOCRATIC_LICENSE.md',
@@ -72,6 +73,7 @@ const routeForSource = (sourcePath) => {
     const normalized = toPosix(sourcePath);
     const specialRoutes = new Map([
         ['README.md', 'getting-started'],
+        ['docs/wiki-home.md', ''],
         ['SECURITY.md', 'security'],
         ['MIT_LICENSE.md', 'licenses/mit'],
         ['HIPPOCRATIC_LICENSE.md', 'licenses/hippocratic'],
@@ -81,7 +83,7 @@ const routeForSource = (sourcePath) => {
         ['docs/History.md', 'history'],
     ]);
     const specialRoute = specialRoutes.get(normalized);
-    if (specialRoute) {
+    if (specialRoute !== undefined) {
         return specialRoute;
     }
 
@@ -253,8 +255,8 @@ const publicLinkForTarget = (sourcePath, target) => {
         return `/wiki/assets/${assetPath}${resolved.anchor}`;
     }
     const markdownRoute = routeBySource.get(resolved.relative);
-    if (markdownRoute) {
-        return `/wiki/${markdownRoute}/${resolved.anchor}`;
+    if (markdownRoute !== undefined) {
+        return `/wiki/${markdownRoute.length > 0 ? `${markdownRoute}/` : ''}${resolved.anchor}`;
     }
     return `${githubSourceUrl(resolved.relative)}${resolved.anchor}`;
 };
@@ -329,7 +331,10 @@ const stageFile = async (sourcePath) => {
     const absoluteSource = path.join(repositoryRoot, sourcePath);
     const content = await fs.readFile(absoluteSource, 'utf8');
     const route = routeForSource(sourcePath);
-    const targetPath = path.join(sourceRoot, `${route}.md`);
+    const targetPath = path.join(
+        sourceRoot,
+        `${route.length > 0 ? route : 'index'}.md`
+    );
     const title = titleForMarkdown(sourcePath, content);
     const lifecycle = lifecycleForSource(sourcePath);
     const lastUpdated = await lastUpdatedForSource(sourcePath);
@@ -373,25 +378,6 @@ const main = async () => {
     for (const sourcePath of allFiles) {
         await stageFile(sourcePath);
     }
-    await fs.writeFile(
-        path.join(sourceRoot, 'index.md'),
-        [
-            '---',
-            'title: "Welcome"',
-            'slug: ""',
-            'lifecycle: current',
-            'editUrl: false',
-            '---',
-            '',
-            'Footnote is an AI assistant that shows how its answers were made.',
-            '',
-            'Use the navigation to explore sources, workflows, and the canonical repository documentation. The published wiki presents checked-in Markdown; Git history and implementation remain the authority.',
-            '',
-            '[Read the documentation map](/wiki/documentation/)',
-            '',
-        ].join('\n'),
-        'utf8'
-    );
     const sourceRevision = await readVerifiedSourceRevision(repositoryRoot, [
         ...sourceFiles,
         ...sourceDirectories,

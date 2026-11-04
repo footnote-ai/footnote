@@ -35,11 +35,15 @@ That’s the through-line to Footnote: make assistant behavior something you can
 
 I wanted a name that describes a behavior. “Footnote” points to the idea that an answer shouldn’t be a dead end. If you care, you should be able to click through and see what it relied on—sources, assumptions, active rules, tool use, and so on.
 
-## The Future
+## Looking ahead
 
-Long term, more than a single bot, I want Footnote to be a _reusable approach_—patterns and tools for assistants that are easier to audit and steer.
-
-Currently, Footnote focuses on provenance and reviewability, using the Footnote configuration as its baseline. Later, Footnote may support multiple profiles, with different rulesets and defaults.
+The long-term hope is still for Footnote to become more than a single bot: a
+reusable approach to assistants that are easier to audit and steer. The
+profile idea in this early direction has since become part of a larger product
+that also includes bounded workflows, response traces, and Discord Voice.
+For what is implemented now, start with the [README](../README.md) and the
+[architecture guide](./architecture/README.md); this history is not a current
+feature list.
 
 ## Where to go next
 

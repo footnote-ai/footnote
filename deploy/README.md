@@ -12,16 +12,16 @@ Footnote deploys as one server container.
 ## Prerequisites
 
 - Node.js 22.13+
-- `pnpm` (repo uses `pnpm@11.16.0`)
+- `pnpm` (repo pins `pnpm@11.21.0` in `package.json`)
 
 Install `pnpm` with one of:
 
 ```bash
-corepack enable && corepack prepare pnpm@11.16.0 --activate
+corepack enable && corepack prepare pnpm@11.21.0 --activate
 ```
 
 ```bash
-npm i -g pnpm@11.16.0
+npm i -g pnpm@11.21.0
 ```
 
 ## Standalone CLI (v1)

@@ -21,7 +21,9 @@ See `docs/ai/github-work-management.md` and `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 
-Single-context: shared glossary at `docs/ai/CONTEXT.md`, decisions in `docs/ai/adr/`. See `docs/agents/domain.md`.
+Read current concepts in `docs/architecture/`, related status in `docs/status/`,
+recorded decisions in `docs/decisions/`, and exploratory proposals in
+`docs/proposals/`. See `docs/agents/domain.md`.
 For DeepWiki structure or source-entrypoint changes, follow `docs/agents/deepwiki-maintenance.md`.
 For documentation maintenance, follow `docs/agents/deepwiki-maintenance.md`.
 
@@ -177,4 +179,3 @@ process commentary. Preserve technical precision and state uncertainty plainly.
   workflow/orchestrator/provider/provenance logic, fail-open behavior, and
   authority decisions.
 - Do not add comments that only restate obvious code.
-

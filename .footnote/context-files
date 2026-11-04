@@ -13,6 +13,9 @@ docs/architecture/context-integrations/README.md
 docs/architecture/context-integrations/project-context.md
 docs/status/index.md
 docs/status/repository-context-status.md
+docs/architecture/realtime-voice.md
+docs/status/realtime-voice-alignment.md
+docs/status/voice-persona-evaluation.md
 docs/architecture/context-integrations/github.md
 docs/status/web-search-grounding-recovery-status.md
 

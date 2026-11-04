@@ -10,7 +10,7 @@ ENV CI=true
 # Keep builder links self-contained because the runtime image copies /app/node_modules without pnpm's global store.
 ENV PNPM_CONFIG_ENABLE_GLOBAL_VIRTUAL_STORE=false
 
-RUN corepack enable && corepack prepare pnpm@11.16.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.21.0 --activate
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \

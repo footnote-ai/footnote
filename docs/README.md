@@ -32,6 +32,7 @@ Choose a path based on what you want to do.
 The checked-in Markdown is canonical. The [public wiki](https://ai.jordanmakes.dev/wiki/)
 renders it and also publishes machine-readable [`llms.txt`](https://ai.jordanmakes.dev/wiki/llms.txt)
 and [`llms-full.txt`](https://ai.jordanmakes.dev/wiki/llms-full.txt) indexes.
+The wiki's opening page is maintained in [`wiki-home.md`](./wiki-home.md).
 DeepWiki is a secondary generated code explainer, not the documentation
 authority. See [DeepWiki maintenance](./agents/deepwiki-maintenance.md) for
 when its structure should change.
@@ -45,4 +46,3 @@ to it with relative paths.
 | Target                                       | Proposed visual        | Type       | Why it helps                           | UI stable?                                   | Priority / status        |
 | -------------------------------------------- | ---------------------- | ---------- | -------------------------------------- | -------------------------------------------- | ------------------------ |
 | [README Quickstart](../README.md#quickstart) | First-run setup screen | Screenshot | Shows new users what setup looks like. | Not verified; defer capture until confirmed. | Opportunistic / proposed |
-
