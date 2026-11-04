@@ -10,7 +10,7 @@ maintainer approaches this work.
 
 Start with the root [AGENTS.md](../../AGENTS.md) and any instructions near the
 files you're changing. The [architecture guide](../architecture/README.md)
-describes current behavior. [Decisions](../decisions/) explain why certain
+describes current behavior. [Decisions](https://github.com/footnote-ai/footnote/tree/main/docs/decisions) explain why certain
 choices were made; [proposals](../proposals/index.md) may describe work that
 hasn't been adopted.
 
