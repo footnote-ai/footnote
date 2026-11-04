@@ -1203,7 +1203,7 @@ export type WorkflowRecord = {
     sessionCorrelationId?: string;
     /** Private initiating voice turn; not a text-chat message or public Trace identity. */
     initiatingTurnId?: string;
-    /** Content-free record of the effective Voice persona; never includes overlay text or paths. */
+    /** Records the chosen Voice persona and its configuration sources, without private overlay text or paths. */
     voicePersona?: {
         personaId: string;
         selectionSource:
