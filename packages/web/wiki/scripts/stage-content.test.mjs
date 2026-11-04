@@ -135,7 +135,7 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
         const landing = await readGenerated('index.md');
         assert.match(
             landing,
-            /Footnote is an AI assistant for the web and Discord\./u
+            /AI can give you a convincing answer/u
         );
         assert.match(landing, /blob\/main\/docs\/wiki-home\.md/u);
         assert.match(landing, /edit\/main\/docs\/wiki-home\.md/u);

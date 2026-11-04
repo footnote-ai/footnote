@@ -1,28 +1,30 @@
 # Licensing
 
-Last reviewed: 2026-11-04.
+Footnote publishes two license texts: [MIT](../MIT_LICENSE.md) and the
+[Hippocratic License 3.0 Core](../HIPPOCRATIC_LICENSE.md). The README describes
+the project as dual-licensed under these terms. If you're planning to use,
+modify, or redistribute the code, read the license texts themselves; this
+page explains the project's reasons for including them.
 
-## License texts
+MIT gives people broad permission to use and change the software. The
+Hippocratic License adds conditions connected to human rights and supply
+chains. Footnote is meant to be software people can inspect and run for
+themselves, but we also want to be explicit about our opposition to torture,
+genocide, forced labor, and other serious abuses.
 
-The repository publishes two license texts: [MIT](../MIT_LICENSE.md) and the
-core text of the [Hippocratic License 3.0](../HIPPOCRATIC_LICENSE.md). The
-README describes Footnote as dual-licensed under those terms. Read the license
-texts themselves for the permissions and conditions that apply to your use;
-this page is only a map to them.
+There is a real tension here. The [Open Source
+Definition](https://opensource.org/osd) does not allow restrictions based on
+fields of use, so the Hippocratic License does not meet that definition. We
+value open development and self-hosting while recognizing that this licensing
+choice differs from the OSI definition. The
+[philosophy](./Philosophy.md#licensing-and-its-tension) explains the trade-off
+in more detail.
 
-The Hippocratic License sets ethical and supply-chain conditions. This
-repository does not add project-specific license modules or attach
-`license_context` metadata to runtime answers. License terms are separate from
-Footnote's product policies and are not enforced by its chat or Voice runtime.
+These licenses govern rights to the software; they are not controls enforced
+by Footnote's chat or Voice runtime. The current system does not check license
+compliance or attach `license_context` to response traces. Its safety,
+permission, and provenance rules are separate product behavior, not a
+substitute for the legal terms.
 
-Dependencies and other third-party material can carry different terms. Check
-their own license notices before reuse or redistribution.
-
-## How the project describes its approach
-
-[Footnote's philosophy](./Philosophy.md#licensing-and-its-tension) explains
-why the project combines broad permission to inspect and modify software with
-human-rights conditions. The project also acknowledges the tension with the
-[Open Source Definition](https://opensource.org/osd), whose criteria do not
-allow field-of-use restrictions. Do not treat the project's values or this
-summary as a substitute for either license text.
+Third-party code and dependencies may have different licenses. Check their
+own notices before reuse or redistribution.

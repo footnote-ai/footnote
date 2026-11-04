@@ -2,11 +2,13 @@
 
 Last reviewed: 2026-11-04.
 
-Footnote has three related but separate paths for project material: a local
-`project_context` lookup during chat, an approved-document loader for
-TrustGraph, and bounded GitHub metadata for current-state questions. None is a
-general source-code search service; revision-aware source retrieval is tracked
-separately in [#539](https://github.com/footnote-ai/footnote/issues/539).
+Footnote has several ways to use project material. The local `project_context`
+lookup searches approved documents during chat; a separate loader sends
+selected files to TrustGraph; bounded GitHub metadata helps with current-state
+questions. The local document lookup is not a general code-search index.
+[GitHub source retrieval](../architecture/context-integrations/github.md)
+has its own scope and implementation (see
+[#539](https://github.com/footnote-ai/footnote/issues/539)).
 
 ## What is implemented
 
@@ -36,13 +38,17 @@ configuration test confirms that default; enabling it requires an explicit
 provider. A failed or unavailable lookup is reported as such and does not block
 chat.
 
-The reproducible corpus evaluation checks whether representative questions
-retain the intended documents and whether deterministic fake embeddings put
-the expected source in the top result. Routing tests check the mapping from an
-explicit `repo_explainer` intent to the canonical Footnote repository. These
-are useful local checks, but they do not establish that a live planner will
-select retrieval, that a real embedding model will find the right passage, or
-that an answer will use and cite it correctly.
+The 13-question offline evaluation checks that expected documents and
+categories appear in the curated manifest. It also runs a synthetic
+retriever: its documents contain only file paths, and deterministic fake
+embeddings rank the expected path first. That exercises the retrieval
+interface, but it does not read or index the actual document contents or
+verify that those files are selected from the allowlist.
+
+Separate routing tests check how an explicit `repo_explainer` intent maps to
+Footnote's repository. Neither test establishes that a live planner will
+choose retrieval, that real embeddings will find the right passage, or that
+an answer will use and cite it correctly.
 
 No live model or embedding provider was called for this status review. Live
 planner selection, provider-backed retrieval quality, answer wording, source

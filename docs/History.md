@@ -37,13 +37,14 @@ I wanted a name that describes a behavior. “Footnote” points to the idea tha
 
 ## Looking ahead
 
-The long-term hope is still for Footnote to become more than a single bot: a
-reusable approach to assistants that are easier to audit and steer. The
-profile idea in this early direction has since become part of a larger product
-that also includes bounded workflows, response traces, and Discord Voice.
-For what is implemented now, start with the [README](../README.md) and the
-[architecture guide](./architecture/README.md); this history is not a current
-feature list.
+I still want Footnote to become more than a single bot. It's grown to include
+personas, reviewed workflows, response traces, and Discord Voice, but the
+longer-term goal is the same: patterns that make assistants easier for people
+to inspect and steer.
+
+The [README](../README.md) describes what you can run today, and the
+[architecture guide](./architecture/README.md) explains how it works. This
+page is about how the project got here.
 
 ## Where to go next
 

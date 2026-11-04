@@ -1,22 +1,25 @@
 # Footnote Documentation
 
-Footnote is an AI assistant for the web and Discord. Its traces record the
-available sources and workflow behind an answer so people can examine what
-happened. A trace makes a response easier to review; it does not prove that
-the response is correct.
+AI can give you a convincing answer without showing much of what went into
+it. Footnote is an attempt to make that easier to question. Its traces show
+what's available about the sources, tools, and steps behind a response, so you
+can see what happened and where there may be gaps.
 
-## Choose a starting point
+If you want to see Footnote before reading about it, [open the web
+app](https://ai.jordanmakes.dev). The homepage has prepared examples that don't
+call a model; live chat is separate. To run your own instance, start with the
+[deployment guide](../deploy/README.md).
 
-- [Try the live demo](../README.md#quickstart) if you want to use Footnote.
-- [Run Footnote yourself](../deploy/README.md) for self-hosting and deployment.
-- [Follow an answer through Workflow](architecture/workflow.md) to see how
-  generation, review, context, and provenance fit together.
-- [Read the Voice guide](architecture/realtime-voice.md) for the difference
-  between Standard and Live, including what speech is and is not approved.
-- [Browse the documentation map](README.md) for API, account, status, and
-  contributor material.
-- [Contribute](ai/README.md) for repository instructions and focused checks.
+## Find your way around
 
-The checked-in documents are the source for this site. Git history and the
-implementation remain authoritative when a published page or generated code
-explainer has fallen behind.
+[Workflow](architecture/workflow.md) explains how a request moves from
+planning through review. The [philosophy](Philosophy.md) explains why we're
+interested in provenance and keeping people in control.
+
+If you use Discord, the [Voice guide](architecture/realtime-voice.md) explains
+the differences between Standard and Live, including why independently spoken
+Live responses aren't necessarily the exact text that Workflow approved.
+
+If you'd like to contribute, start with the [contributor guide](ai/README.md).
+The [documentation map](README.md) has links to the API, architecture, current
+work, decisions, and proposals.

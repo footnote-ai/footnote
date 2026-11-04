@@ -1,33 +1,39 @@
 # Contributor Guide
 
-This guide points contributors to the rules and checks maintained for the
-repository. For how Footnote uses AI in its own development, see the
-[AI use disclosure](./ai-use-disclosure.md).
+Footnote uses AI assistance in development, but generated changes still need
+human review. The person submitting a change is responsible for understanding
+what it does, checking its assumptions, and reporting what they actually
+tested. The [AI use disclosure](./ai-use-disclosure.md) explains how the
+maintainer approaches this work.
 
-## Before changing code or docs
+## Getting oriented
 
-Read the root [AGENTS.md](../../AGENTS.md), then check the instructions nearest
-to the files you will edit. Use the issue tracker and existing decisions to
-understand scope. Keep changes focused, preserve unrelated work, and make a
-human pass over any AI-assisted output before opening a PR.
+Start with the root [AGENTS.md](../../AGENTS.md) and any instructions near the
+files you're changing. The [architecture guide](../architecture/README.md)
+describes current behavior. [Decisions](../decisions/) explain why certain
+choices were made; [proposals](../proposals/index.md) may describe work that
+hasn't been adopted.
 
-Use GitHub's native planning features as described in
-[GitHub work management](./github-work-management.md). Current concepts live
-in `docs/architecture/`; decisions and proposals are kept separately in
-`docs/decisions/` and `docs/proposals/`.
+Issues and project planning use GitHub's native features, as described in
+[GitHub work management](./github-work-management.md). Keep your change tied
+to its issue, and leave unrelated behavior alone.
 
-## Checks
+## Before opening a PR
 
-Always run:
+Read the diff as if someone else had written it. Check that the code and
+documentation agree, that tests exercise the changed behavior, and that
+private data or provenance hasn't been exposed. An automated review is useful
+evidence, not a replacement for that check.
 
-- `pnpm format:write` after edits.
-- `pnpm review --changed-only` before handoff.
+Run `pnpm format:write`, `pnpm lint`, and `pnpm review --changed-only`.
+Then run the checks for what you touched. For documentation work, that
+includes:
 
-Run the checks for the area you changed. For example, use
-`pnpm validate-deepwiki` after editing `.devin/wiki.json`, `pnpm build:wiki`
-for public wiki source or staging changes, and focused tests for behavior that
-could be affected. The root instructions list checks for API contracts,
-annotation tags, and deployable runtime packaging.
+- `pnpm --filter @footnote/web build:wiki` for wiki source or staging
+  changes.
+- `pnpm validate-deepwiki` after changing `.devin/wiki.json`.
 
-Do not substitute a passing formatting or review check for a behavior test.
-Report exactly which checks ran and whether any result is unverified.
+The root instructions cover API contract checks, module annotations,
+deployable packaging, and other specialized tests. In your PR, say what
+passed and what you couldn't verify. Formatting and review checks do not
+replace behavior tests.
