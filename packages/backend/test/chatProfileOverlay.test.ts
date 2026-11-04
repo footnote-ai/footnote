@@ -333,6 +333,56 @@ test('duplicate configured persona IDs preserve ordinary chat fallback while Voi
     }
 });
 
+test('duplicate configured persona IDs matching the runtime profile use catalog fallback', () => {
+    const previousBots = runtimeConfig.settings.discordBots;
+    const previousProfile = { ...runtimeConfig.profile };
+    const warnings: Array<{ message: string; requestedPersonaId?: string }> =
+        [];
+    runtimeConfig.settings.discordBots = [
+        { id: 'one', profile: { id: 'danny', displayName: 'First Danny' } },
+        { id: 'two', profile: { id: 'danny', displayName: 'Second Danny' } },
+    ];
+    Object.assign(runtimeConfig.profile, {
+        id: 'danny',
+        displayName: 'Runtime Danny',
+        promptOverlay: {
+            source: 'inline',
+            text: 'PRIVATE_RUNTIME_DANNY_OVERLAY',
+            path: null,
+            length: 28,
+        },
+    });
+    try {
+        const profile = resolveChatPersonaProfile(
+            { surface: 'discord', botPersonaId: 'danny' },
+            {
+                warn: (message, meta) =>
+                    warnings.push({
+                        message,
+                        requestedPersonaId: meta?.requestedPersonaId,
+                    }),
+            }
+        );
+
+        assert.equal(profile.displayName, 'Danny');
+        assert.equal(profile.promptOverlay.source, 'file');
+        assert.notEqual(
+            profile.promptOverlay.text,
+            'PRIVATE_RUNTIME_DANNY_OVERLAY'
+        );
+        assert.deepEqual(warnings, [
+            {
+                message:
+                    'chat persona configuration is ambiguous; retaining fallback routing',
+                requestedPersonaId: 'danny',
+            },
+        ]);
+    } finally {
+        runtimeConfig.settings.discordBots = previousBots;
+        Object.assign(runtimeConfig.profile, previousProfile);
+    }
+});
+
 test('Voice preserves custom and built-in operator overlays and expression overrides', () => {
     for (const id of ['operator', 'footnote', 'danny', 'myuri', 'winter']) {
         const configured = parseBotProfileConfig({

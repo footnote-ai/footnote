@@ -234,7 +234,16 @@ export const resolveChatPersonaProfile = (
             ) ?? [];
         // Ordinary chat has no node identity; ambiguous configurations retain catalog routing.
         let configured: BotProfileConfig | null = null;
-        if (matches.length === 1) {
+        if (matches.length > 1) {
+            logger.warn(
+                'chat persona configuration is ambiguous; retaining fallback routing',
+                {
+                    runtimeProfileId: runtimeConfig.profile.id,
+                    surface: request.surface,
+                    requestedPersonaId,
+                }
+            );
+        } else if (matches.length === 1) {
             try {
                 configured = resolveInvokingBotProfile(runtimeConfig.profile, {
                     botPersonaId: requestedPersonaId,
@@ -256,15 +265,6 @@ export const resolveChatPersonaProfile = (
         } else if (requestedPersonaId === runtimeConfig.profile.id) {
             configured = runtimeConfig.profile;
         }
-        if (matches.length > 1)
-            logger.warn(
-                'chat persona configuration is ambiguous; retaining fallback routing',
-                {
-                    runtimeProfileId: runtimeConfig.profile.id,
-                    surface: request.surface,
-                    requestedPersonaId,
-                }
-            );
         if (configured)
             return resolveConfiguredPersonaProfile(configured, logger);
     }
