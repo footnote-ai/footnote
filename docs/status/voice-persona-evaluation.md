@@ -109,23 +109,50 @@ Unknown PCM must not be treated as 24 kHz audio.
 
 ### Authorization, privacy, and cost
 
-**Preflight on 2026-11-05: no paid requests have been made.** The authorized
-up-to-$1 audition requires a dedicated OpenRouter key with a lifetime cap and
-no reset. The authenticated `GET /api/v1/key` response for the available key
-reported no key limit or effective budget, so it does not meet that condition.
-The privacy page redirected to sign-in, and no management key was available to
-read the Guardrail settings. ZDR-only routing for Google, SpaceXAI, and All
-other models, plus disabled Safety Retention for Google and All other models,
-could not be verified. No synthesis or metadata requests were made: 0 of 40
-requests and 0 metadata lookups, with $0.00 spend. No candidates were
-attempted, so availability, synthesis duration, and provider-reported billing
-and timing remain unknown; no listening was done. There is not enough evidence
-to recommend a new default. Resume only after the operator provides a
-dedicated key whose metadata confirms a $1 limit with no reset, and verifies
-`enforce_zdr_google`, `enforce_zdr_xai`, and `enforce_zdr_other` are true while
-`allow_safety_retention_google` and `allow_safety_retention_other` are false.
-The helper's confirmation flags are attestations; they do not verify these
-controls.
+An earlier preflight stopped because the process-scoped key had no cap. For
+this run, the distinct Windows user-scoped `OPENROUTER_API_KEY` returned
+`limit: 1`, `limit_reset: null`, and `$1.00` remaining. Its effective budget
+was `key_limit` with a $1.00 limit and no reset. The audition subprocess used
+that value without changing the process or user environment. After the run,
+OpenRouter reported `$0.06710352` spent and `$0.93289648` remaining.
+
+The operator confirmed ZDR-only routing and disabled Safety Retention. Those
+settings could not be independently read: the key was not a management key,
+`GET /api/v1/guardrails` returned 401, and the privacy page required sign-in
+on the earlier attempt. The confirmation is recorded as an attestation. The
+harness set `provider.zdr: true` on all 22 requests. No conflicting
+configuration surfaced, but the account settings remain unverified.
+
+#### Audition results
+
+The serial run made 22 of 40 possible synthesis requests: 20 completed and 2
+model-availability 404s; no other requests failed. The unavailable candidates
+were Gemini 3.8 Flash Lite TTS and Grok Voice TTS 1.0. Each returned a 404 on
+its first request, so the remaining requests for that model were skipped.
+Neither produced audio or a generation ID. This establishes unavailability
+for this route while ZDR was requested; it does not establish why no eligible
+endpoint was found.
+
+- **MAI-Voice-2.1-Flash:** 10 MP3 (`audio/mpeg`) samples from Azure; actual
+  reported cost `$0.064440`. Full response synthesis time had a 1.347 s median
+  (0.875–1.764 s range). OpenRouter metadata `latency` was 264.5 ms median
+  (233–378 ms range).
+- **Kokoro 82M:** 10 MP3 (`audio/mpeg`) samples from DeepInfra; actual
+  reported cost `$0.002664`. Full response synthesis time had a 22.828 s
+  median (7.106–35.989 s range). OpenRouter metadata `latency` was 83 ms
+  median (64–452 ms range).
+
+The 22 per-request full response durations sum to 243.092 s. This is not
+Discord playback latency. The 20 successful generation IDs and their provider
+metadata are in the local `manifest.json` and `generation-metadata.json`.
+Metadata was available for all 20 IDs; its `generationTime` field was null in
+all 20 records. It reported `$0.067104` total generation cost and `$0.00`
+upstream inference cost. The key's recorded spend was `$0.06710352`; the
+difference is rounding. The two 404s had no generation IDs or cost metadata.
+
+All 20 audio files and the randomized 20-row rating sheet remain local and
+uncommitted. The subjective rating cells are blank; no listening assessment
+was performed, so there is no voice-default recommendation yet.
 
 Every synthesis request includes `provider.zdr: true`. OpenRouter applies
 that setting alongside the account or guardrail configuration; it does not
@@ -144,12 +171,12 @@ verification. Strict ZDR routing may leave Gemini without an eligible
 endpoint. OpenRouter describes ZDR as no routine storage after processing,
 subject to its documented CSAM/legal-preservation exception.
 
-At published character rates, the planned text costs approximately
-**$0.06444 for MAI**, **$0.06444 for Grok**, and **$0.00266 for Kokoro**
-(4,296 characters per model), about **$0.1316 combined**. Gemini is billed
-by input and generated audio tokens, so its actual cost is unknown until
-metadata is available. The $1 provider-side limit is the ceiling, not a cost
-estimate; reaching it may end the run early.
+At published character rates, the planned 4,296-character text estimates
+were **$0.06444 for MAI**, **$0.06444 for Grok**, and **$0.00266 for Kokoro**,
+about **$0.1316 combined**. These are estimates, not observed charges; Grok
+was unavailable. Gemini is billed by input and generated audio tokens, but
+returned no generation ID or cost metadata. The $1 provider-side limit is a
+ceiling, not a cost estimate.
 
 ### Run and review the samples
 
@@ -160,8 +187,9 @@ pnpm test:voice-audition
 pnpm voice:audition
 ```
 
-After separate authorization and verification of the key cap and ZDR
-configuration, the execution command is:
+Verify the key inherited by the command shell before running; a stale
+process-scoped variable may differ from the Windows user-scoped value. After
+the $1 lifetime cap is confirmed, the authorized execution command is:
 
 ```powershell
 pnpm voice:audition -- --execute --confirm-openrouter-key-limit-usd=1 --confirm-openrouter-zdr-only
@@ -182,8 +210,8 @@ original text, and spaces to rate naturalness, intelligibility, persona
 delivery, spoken-content fidelity, pronunciation, expressiveness, and repeat
 consistency. Listen in the sheet's `order` and record scores before opening
 `manifest.json`. The test is **partially blinded**: Gemini's WAV filenames
-are distinguishable from the MP3 samples. Keep audio out of the evaluation
-notes and delete the temporary files after recording the ratings.
+are distinguishable from the MP3 samples. Keep the audio local and
+uncommitted until listening and rating are complete.
 
 The manifest records each model and voice, HTTP status, generation ID,
 `Content-Type`, and time spent waiting for the full synthesis response. It
@@ -239,7 +267,11 @@ Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multi
 
 ## What comes next
 
-Once provider testing is approved, run the private listening comparison and
-record what people actually hear. Keep #974 open until those checks are
-complete, and report model behavior separately from the verified startup and
-Workflow wiring.
+Listen to the 20 successful samples in `rating-sheet.csv` order and fill its
+subjective columns before opening `manifest.json` or
+`generation-metadata.json`. Keep the audio local and uncommitted. Use the
+ratings to compare MAI and Kokoro; request success alone is not evidence of
+voice quality. Gemini and Grok were unavailable on this route, and Discord
+playback, live persona consistency, interruption behavior, and the OpenAI
+control remain untested. Keep PR #987 open and production defaults unchanged
+until those evaluations are complete.
