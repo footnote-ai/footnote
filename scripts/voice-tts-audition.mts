@@ -460,14 +460,15 @@ const runAudition = async (
             activeResponse = response;
             const controller = new AbortController();
             activeController = controller;
-            const result = await synthesizeSample(
-                request,
-                response,
-                service,
-                outputDirectory,
-                controller,
-                () => interrupted
-            );
+            const result =
+                await /* NOSONAR - Keep provider requests serial to enforce the one-in-flight and spend limits. */ synthesizeSample(
+                    request,
+                    response,
+                    service,
+                    outputDirectory,
+                    controller,
+                    () => interrupted
+                );
             activeController = null;
             activeResponse = null;
             records.push(result.record);

@@ -105,30 +105,20 @@ export const readBoundedJsonResponse = async (
         await response.body?.cancel();
         throw new TypeError('Generation metadata response was not JSON.');
     }
-    const reader = response.body?.getReader();
-    if (!reader)
-        throw new TypeError('Generation metadata response had no body.');
+    const body = response.body;
+    if (!body) throw new TypeError('Generation metadata response had no body.');
 
     const chunks: Buffer[] = [];
     let bytesRead = 0;
-    try {
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            bytesRead += value.byteLength;
-            if (bytesRead > maximumBytes) {
-                await reader.cancel();
-                throw new TypeError(
-                    'Generation metadata exceeded the response limit.'
-                );
-            }
-            chunks.push(Buffer.from(value));
-        }
-        return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
-    } catch (error) {
-        await reader.cancel().catch(() => undefined);
-        throw error;
+    for await (const value of body) {
+        bytesRead += value.byteLength;
+        if (bytesRead > maximumBytes)
+            throw new TypeError(
+                'Generation metadata exceeded the response limit.'
+            );
+        chunks.push(Buffer.from(value));
     }
+    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 };
 
 export const parseAuditionArguments = (
@@ -271,15 +261,12 @@ export const createAuditionMatrix = (
         throw new TypeError('Audition fixture IDs must be unique.');
 
     for (const id of AUDITION_FIXTURE_IDS) {
-        const item = byId.get(id);
-        if (
-            !item?.originalAnswer ||
-            item.originalAnswer.trim() !== item.originalAnswer
-        )
+        const originalAnswer = byId.get(id)?.originalAnswer;
+        if (!originalAnswer || originalAnswer.trim() !== originalAnswer)
             throw new TypeError(
                 `Audition fixture ${id} is missing exact source text.`
             );
-        if (item.originalAnswer.length > 8_192)
+        if (originalAnswer.length > 8_192)
             throw new TypeError(
                 `Audition fixture ${id} exceeds the speech input limit.`
             );

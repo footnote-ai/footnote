@@ -88,12 +88,12 @@ const lookupOne = async (
         }
         if (!response.ok) {
             await response.body?.cancel();
-            const reason =
-                response.status === 401 || response.status === 403
-                    ? 'authorization-failed'
-                    : response.status === 402
-                      ? 'account-limit-or-balance'
-                      : `http-${response.status}`;
+            let reason: string;
+            if (response.status === 401 || response.status === 403)
+                reason = 'authorization-failed';
+            else if (response.status === 402)
+                reason = 'account-limit-or-balance';
+            else reason = `http-${response.status}`;
             return {
                 record: unavailableRecord(target, reason),
                 stop: true,
