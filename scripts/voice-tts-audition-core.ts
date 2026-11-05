@@ -262,7 +262,7 @@ export const createAuditionMatrix = (
 
     for (const id of AUDITION_FIXTURE_IDS) {
         const originalAnswer = byId.get(id)?.originalAnswer;
-        if (!originalAnswer || originalAnswer.trim() !== originalAnswer)
+        if (originalAnswer?.trim() !== originalAnswer || !originalAnswer)
             throw new TypeError(
                 `Audition fixture ${id} is missing exact source text.`
             );
