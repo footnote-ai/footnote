@@ -93,14 +93,56 @@ export const MAX_AUDITION_REQUESTS = 40;
 export const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 export const REQUEST_TIMEOUT_MS = 60_000;
 export const SPEND_LIMIT_USD = 1;
+export const MAX_GENERATION_METADATA_LOOKUPS = 40;
+export const MAX_GENERATION_METADATA_BYTES = 64 * 1024;
+export const GENERATION_METADATA_TIMEOUT_MS = 10_000;
+
+export const readBoundedJsonResponse = async (
+    response: Response,
+    maximumBytes: number
+): Promise<unknown> => {
+    if (!response.headers.get('content-type')?.includes('json')) {
+        await response.body?.cancel();
+        throw new TypeError('Generation metadata response was not JSON.');
+    }
+    const reader = response.body?.getReader();
+    if (!reader)
+        throw new TypeError('Generation metadata response had no body.');
+
+    const chunks: Buffer[] = [];
+    let bytesRead = 0;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            bytesRead += value.byteLength;
+            if (bytesRead > maximumBytes) {
+                await reader.cancel();
+                throw new TypeError(
+                    'Generation metadata exceeded the response limit.'
+                );
+            }
+            chunks.push(Buffer.from(value));
+        }
+        return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+    } catch (error) {
+        await reader.cancel().catch(() => undefined);
+        throw error;
+    }
+};
 
 export const parseAuditionArguments = (
     args: readonly string[]
-): { execute: boolean; confirmSpendLimit: boolean } => {
+): {
+    execute: boolean;
+    confirmSpendLimit: boolean;
+    confirmZdrOnly: boolean;
+} => {
     const accepted = new Set([
         '--execute',
         '--dry-run',
         `--confirm-openrouter-key-limit-usd=${SPEND_LIMIT_USD}`,
+        '--confirm-openrouter-zdr-only',
     ]);
     const unknown = args.filter((arg) => !accepted.has(arg));
     if (unknown.length > 0)
@@ -110,15 +152,115 @@ export const parseAuditionArguments = (
     const confirmSpendLimit = args.includes(
         `--confirm-openrouter-key-limit-usd=${SPEND_LIMIT_USD}`
     );
-    if (args.includes('--execute') && !confirmSpendLimit)
+    const confirmZdrOnly = args.includes('--confirm-openrouter-zdr-only');
+    if (args.includes('--execute') && (!confirmSpendLimit || !confirmZdrOnly))
         throw new TypeError(
-            `Execution requires --confirm-openrouter-key-limit-usd=${SPEND_LIMIT_USD}.`
+            `Execution requires --confirm-openrouter-key-limit-usd=${SPEND_LIMIT_USD} and --confirm-openrouter-zdr-only.`
         );
-    if (confirmSpendLimit && !args.includes('--execute'))
+    if ((confirmSpendLimit || confirmZdrOnly) && !args.includes('--execute'))
         throw new TypeError(
-            'The key-limit confirmation is only valid with --execute.'
+            'Execution confirmations are only valid with --execute.'
         );
-    return { execute: args.includes('--execute'), confirmSpendLimit };
+    return {
+        execute: args.includes('--execute'),
+        confirmSpendLimit,
+        confirmZdrOnly,
+    };
+};
+
+export const isModelAvailabilityFailure = (
+    status: number | undefined,
+    message: string | null
+): boolean =>
+    status === 404 &&
+    message !== null &&
+    /no endpoints? (?:found|available)|(?:model|endpoint).{0,80}(?:not found|unavailable)|not found for model/i.test(
+        message
+    );
+
+export type GenerationLookupTarget = {
+    sampleId: string;
+    generationId: string | null;
+};
+
+export type GenerationMetadata = {
+    model: string | null;
+    providerName: string | null;
+    totalCostUsd: number | null;
+    upstreamInferenceCostUsd: number | null;
+    generationTime: number | null;
+    latency: number | null;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const boundedString = (value: unknown, maximumLength: number): string | null =>
+    typeof value === 'string' && value.length <= maximumLength ? value : null;
+
+const nonNegativeNumber = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0
+        ? value
+        : null;
+
+export const generationLookupTargets = (
+    manifest: unknown
+): GenerationLookupTarget[] => {
+    if (!isRecord(manifest) || !Array.isArray(manifest.samples))
+        throw new TypeError('Audition manifest has no sample list.');
+    if (manifest.samples.length > MAX_GENERATION_METADATA_LOOKUPS)
+        throw new TypeError(
+            'Audition manifest exceeds the metadata lookup limit.'
+        );
+
+    const seen = new Set<string>();
+    return manifest.samples.map((sample): GenerationLookupTarget => {
+        if (!isRecord(sample))
+            throw new TypeError(
+                'Audition manifest contains an invalid sample.'
+            );
+        const sampleId = boundedString(sample.sampleId, 32);
+        if (!sampleId || seen.has(sampleId))
+            throw new TypeError(
+                'Audition manifest contains an invalid sample ID.'
+            );
+        seen.add(sampleId);
+
+        const generationId = sample.generationId;
+        if (generationId === undefined) return { sampleId, generationId: null };
+        if (
+            typeof generationId !== 'string' ||
+            generationId.length > 128 ||
+            !/^gen-[0-9A-Za-z-]+$/.test(generationId)
+        )
+            throw new TypeError(
+                'Audition manifest contains an invalid generation ID.'
+            );
+        return { sampleId, generationId };
+    });
+};
+
+export const generationMetadataFromResponse = (
+    payload: unknown,
+    expectedGenerationId: string
+): GenerationMetadata => {
+    if (!isRecord(payload) || !isRecord(payload.data))
+        throw new TypeError('OpenRouter returned invalid generation metadata.');
+    const data = payload.data;
+    if (data.id !== expectedGenerationId)
+        throw new TypeError(
+            'OpenRouter returned metadata for a different generation.'
+        );
+    return {
+        model: boundedString(data.model, 128),
+        providerName: boundedString(data.provider_name, 128),
+        totalCostUsd: nonNegativeNumber(data.total_cost),
+        upstreamInferenceCostUsd: nonNegativeNumber(
+            data.upstream_inference_cost
+        ),
+        generationTime: nonNegativeNumber(data.generation_time),
+        latency: nonNegativeNumber(data.latency),
+    };
 };
 
 export const createAuditionMatrix = (
@@ -131,8 +273,7 @@ export const createAuditionMatrix = (
     for (const id of AUDITION_FIXTURE_IDS) {
         const item = byId.get(id);
         if (
-            !item ||
-            !item.originalAnswer ||
+            !item?.originalAnswer ||
             item.originalAnswer.trim() !== item.originalAnswer
         )
             throw new TypeError(

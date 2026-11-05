@@ -1,9 +1,9 @@
 /**
- * @description: Runs the fixed synthetic Standard Voice audition only after an explicit spend gate.
+ * @description: Runs the fixed synthetic Standard Voice audition only after explicit spend and data-policy gates.
  * @footnote-scope: utility
  * @footnote-module: VoiceTtsAudition
  * @footnote-risk: high - Provider requests spend money and return audio that must retain its verified format.
- * @footnote-ethics: high - The script permits only approved synthetic fixture text and applies ZDR routing.
+ * @footnote-ethics: high - The script permits only approved synthetic fixture text and requests ZDR routing.
  */
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -13,7 +13,9 @@ import { createOpenRouterVoiceService } from '../packages/backend/src/services/o
 import {
     AUDITION_CANDIDATES,
     createAuditionMatrix,
+    isModelAvailabilityFailure,
     MAX_AUDITION_REQUESTS,
+    MAX_RESPONSE_BYTES,
     parseAuditionArguments,
     pcm16MonoToWav,
     randomizedOrder,
@@ -26,7 +28,9 @@ import {
 type FixtureFile = { cases: AuditionCase[] };
 type CapturedResponse = {
     status?: number;
-    headers: Record<string, string>;
+    contentType?: string;
+    generationId?: string;
+    modelUnavailable: boolean;
 };
 type SampleRecord = {
     sampleId: string;
@@ -36,16 +40,27 @@ type SampleRecord = {
     model: string;
     voice: string;
     provider: 'openrouter';
-    upstreamProvider: string | null;
     responseFormat: AuditionRequest['responseFormat'];
     formatStatus: 'verified' | 'unresolved';
     requestDurationMs: number;
-    status: 'completed' | 'failed' | 'cancelled' | 'timeout';
+    status: 'completed' | 'unavailable' | 'failed' | 'cancelled' | 'timeout';
+    responseStatus?: number;
+    responseHeaders: Record<string, string>;
     audioFile?: string;
     generationId?: string;
-    responseHeaders: Record<string, string>;
-    billingMetadata: Record<string, string>;
-    error?: string;
+    failureKind?:
+        | 'model-unavailable'
+        | 'authorization'
+        | 'spend-limit'
+        | 'http-failure'
+        | 'local-or-synthesis-failure'
+        | 'cancelled'
+        | 'timeout';
+};
+type SynthesisResult = {
+    record: SampleRecord;
+    skipModel: boolean;
+    stop: boolean;
 };
 
 const fixtureUrl = new URL(
@@ -62,6 +77,11 @@ const ratingColumns = [
     'repeat_consistency_1_to_5',
     'notes',
 ];
+const MAX_ERROR_BODY_BYTES = 4 * 1024;
+const isGenerationId = (value: string | undefined): value is string =>
+    value !== undefined &&
+    value.length <= 128 &&
+    /^gen-[0-9A-Za-z-]+$/.test(value);
 
 const readFixtureCases = async (): Promise<AuditionCase[]> => {
     const fixture = JSON.parse(
@@ -106,36 +126,62 @@ const buildRatingSheet = (
     return `${rows.join('\n')}\n`;
 };
 
-const extractBillingMetadata = (
-    headers: Record<string, string>
-): Record<string, string> =>
-    Object.fromEntries(
-        Object.entries(headers).filter(([name]) =>
-            /cost|billing|usage|token|price/i.test(name)
-        )
-    );
+const readModelErrorMessage = async (
+    response: Response
+): Promise<string | null> => {
+    if (!response.headers.get('content-type')?.includes('json')) return null;
+    const reader = response.body?.getReader();
+    if (!reader) return null;
 
-const readResponseHeaders = (response: Response): Record<string, string> => {
-    const entries = [...response.headers.entries()].filter(
-        ([name]) => name !== 'set-cookie'
-    );
-    if (
-        entries.length > 64 ||
-        entries.some(([, value]) => value.length > 1_024)
-    )
-        throw new TypeError(
-            'OpenRouter response headers exceeded the audit limit.'
+    const chunks: Buffer[] = [];
+    let bytesRead = 0;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            bytesRead += value.byteLength;
+            if (bytesRead > MAX_ERROR_BODY_BYTES) {
+                await reader.cancel();
+                return null;
+            }
+            chunks.push(Buffer.from(value));
+        }
+        const payload: unknown = JSON.parse(
+            Buffer.concat(chunks).toString('utf8')
         );
-    const headers = Object.fromEntries(entries);
-    if (JSON.stringify(headers).length > 8_192)
-        throw new TypeError(
-            'OpenRouter response headers exceeded the audit limit.'
-        );
-    return headers;
+        if (
+            typeof payload === 'object' &&
+            payload !== null &&
+            'error' in payload &&
+            typeof payload.error === 'object' &&
+            payload.error !== null &&
+            'message' in payload.error &&
+            typeof payload.error.message === 'string'
+        )
+            return payload.error.message.slice(0, 512);
+    } catch {
+        await reader.cancel().catch(() => undefined);
+    }
+    return null;
 };
 
-const getUpstreamProvider = (headers: Record<string, string>): string | null =>
-    headers['x-provider'] ?? headers['x-openrouter-provider'] ?? null;
+const captureResponse = async (
+    response: Response,
+    captured: CapturedResponse
+): Promise<void> => {
+    captured.status = response.status;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.length <= 128)
+        captured.contentType = contentType;
+    const generationId = response.headers.get('x-generation-id');
+    if (generationId && isGenerationId(generationId))
+        captured.generationId = generationId;
+    if (response.status === 404)
+        captured.modelUnavailable = isModelAvailabilityFailure(
+            response.status,
+            await readModelErrorMessage(response.clone())
+        );
+};
 
 const printPlan = (matrix: readonly AuditionRequest[]): void => {
     console.log(
@@ -152,8 +198,10 @@ const printPlan = (matrix: readonly AuditionRequest[]): void => {
                 serial: true,
                 automaticRetries: false,
                 timeoutMsPerRequest: REQUEST_TIMEOUT_MS,
-                maxResponseBytes: 10 * 1024 * 1024,
+                maxResponseBytes: MAX_RESPONSE_BYTES,
                 spendLimitUsd: SPEND_LIMIT_USD,
+                zdrRequested: true,
+                requiresOperatorZdrOnlyConfiguration: true,
                 candidates: AUDITION_CANDIDATES.map((candidate) => ({
                     model: candidate.model,
                     voices: candidate.voices,
@@ -161,7 +209,9 @@ const printPlan = (matrix: readonly AuditionRequest[]): void => {
                     deliveryInstructions: candidate.supportsInstructions,
                 })),
                 executionCommand:
-                    'pnpm voice:audition -- --execute --confirm-openrouter-key-limit-usd=1',
+                    'pnpm voice:audition -- --execute --confirm-openrouter-key-limit-usd=1 --confirm-openrouter-zdr-only',
+                metadataCommand:
+                    'pnpm voice:audition:metadata -- "<audition-directory>"',
             },
             null,
             2
@@ -169,177 +219,144 @@ const printPlan = (matrix: readonly AuditionRequest[]): void => {
     );
 };
 
-const runAudition = async (
-    matrix: readonly AuditionRequest[]
-): Promise<void> => {
-    const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-    if (!apiKey)
-        throw new TypeError(
-            'Set OPENROUTER_API_KEY to the dedicated capped key.'
-        );
+const failureDetails = (
+    response: CapturedResponse,
+    interrupted: boolean,
+    timedOut: boolean
+): Pick<SampleRecord, 'status' | 'failureKind'> => {
+    if (response.modelUnavailable)
+        return { status: 'unavailable', failureKind: 'model-unavailable' };
+    if (interrupted) return { status: 'cancelled', failureKind: 'cancelled' };
+    if (timedOut) return { status: 'timeout', failureKind: 'timeout' };
+    if (response.status === 401 || response.status === 403)
+        return { status: 'failed', failureKind: 'authorization' };
+    if (response.status === 402)
+        return { status: 'failed', failureKind: 'spend-limit' };
+    if (response.status !== undefined && response.status >= 400)
+        return { status: 'failed', failureKind: 'http-failure' };
+    return { status: 'failed', failureKind: 'local-or-synthesis-failure' };
+};
 
-    const baseUrl = 'https://openrouter.ai/api/v1';
-    const outputDirectory = await mkdtemp(
-        join(tmpdir(), 'footnote-tts-audition-')
-    );
-    let captured: CapturedResponse | null = null;
-    let activeController: AbortController | null = null;
-    let interrupted = false;
-    const onInterrupt = (): void => {
-        interrupted = true;
-        activeController?.abort(new Error('Audition cancelled by operator.'));
-    };
-    process.on('SIGINT', onInterrupt);
-
-    const service = createOpenRouterVoiceService({
-        apiKey,
-        baseUrl,
-        fetchFn: async (input, init) => {
-            const response = await fetch(input, init);
-            if (captured) {
-                captured.status = response.status;
-                try {
-                    captured.headers = readResponseHeaders(response);
-                } catch (error) {
-                    await response.body?.cancel();
-                    throw error;
-                }
-            }
-            return response;
-        },
-    });
-
-    const records: SampleRecord[] = [];
-    let stopped = false;
+const synthesizeSample = async (
+    request: AuditionRequest,
+    response: CapturedResponse,
+    service: ReturnType<typeof createOpenRouterVoiceService>,
+    outputDirectory: string,
+    controller: AbortController,
+    interrupted: () => boolean
+): Promise<SynthesisResult> => {
+    const sampleId = randomUUID().replaceAll('-', '').slice(0, 10);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+        timedOut = true;
+        controller.abort(new Error('Audition request timed out.'));
+    }, REQUEST_TIMEOUT_MS);
+    const startedAt = performance.now();
+    let requestDurationMs = 0;
     try {
-        for (const request of matrix) {
-            if (interrupted) break;
-
-            const sampleId = randomUUID().replaceAll('-', '').slice(0, 10);
-            const response: CapturedResponse = { headers: {} };
-            captured = response;
-            const controller = new AbortController();
-            activeController = controller;
-            let timedOut = false;
-            const timeout = setTimeout(() => {
-                timedOut = true;
-                controller.abort(new Error('Audition request timed out.'));
-            }, REQUEST_TIMEOUT_MS);
-            const startedAt = performance.now();
-            let generationId: string | undefined;
-            let record: SampleRecord;
-
-            try {
-                const result = await service.synthesize(
-                    request.text,
-                    {
-                        model: request.model,
-                        voice: request.voice,
-                        responseFormat: request.responseFormat,
-                        zdr: true,
-                        ...(request.instructions && {
-                            instructions: request.instructions,
-                        }),
-                    },
-                    controller.signal
-                );
-                generationId = result.generationId;
-                const requestDurationMs = Math.round(
-                    performance.now() - startedAt
-                );
-                const extension =
-                    request.responseFormat === 'mp3' ? 'mp3' : 'wav';
-                const audio =
-                    request.responseFormat === 'pcm'
-                        ? pcm16MonoToWav(
-                              result.audio,
-                              request.pcmContract ?? {
-                                  sampleRateHz: 0,
-                                  channels: 0,
-                                  bitsPerSample: 16,
-                                  encoding: 'signed-integer-little-endian',
-                              }
-                          )
-                        : result.audio;
-                const audioFile = `sample-${sampleId}.${extension}`;
-                await writeFile(join(outputDirectory, audioFile), audio, {
-                    flag: 'wx',
-                });
-                record = {
-                    sampleId,
-                    fixtureId: request.fixtureId,
-                    sampleKind: request.sampleKind,
-                    persona: request.persona,
-                    model: request.model,
-                    voice: request.voice,
-                    provider: 'openrouter',
-                    upstreamProvider: getUpstreamProvider(response.headers),
-                    responseFormat: request.responseFormat,
-                    formatStatus: 'verified',
-                    requestDurationMs,
-                    status: 'completed',
-                    audioFile,
-                    ...(result.generationId && {
-                        generationId: result.generationId,
-                    }),
-                    responseHeaders: response.headers,
-                    billingMetadata: extractBillingMetadata(response.headers),
-                };
-            } catch (error) {
-                record = {
-                    sampleId,
-                    fixtureId: request.fixtureId,
-                    sampleKind: request.sampleKind,
-                    persona: request.persona,
-                    model: request.model,
-                    voice: request.voice,
-                    provider: 'openrouter',
-                    upstreamProvider: getUpstreamProvider(response.headers),
-                    responseFormat: request.responseFormat,
-                    formatStatus: 'unresolved',
-                    requestDurationMs: Math.round(
-                        performance.now() - startedAt
-                    ),
-                    status: interrupted
-                        ? 'cancelled'
-                        : timedOut
-                          ? 'timeout'
-                          : 'failed',
-                    responseHeaders: response.headers,
-                    billingMetadata: extractBillingMetadata(response.headers),
-                    ...(generationId && { generationId }),
-                    error:
-                        error instanceof Error
-                            ? error.message.slice(0, 160)
-                            : 'Synthesis failed.',
-                };
-                stopped = true;
-            } finally {
-                clearTimeout(timeout);
-                activeController = null;
-                captured = null;
-            }
-
-            records.push(record);
-            if (record.status !== 'completed' || interrupted || stopped) break;
-        }
+        const result = await service.synthesize(
+            request.text,
+            {
+                model: request.model,
+                voice: request.voice,
+                responseFormat: request.responseFormat,
+                zdr: true,
+                ...(request.instructions && {
+                    instructions: request.instructions,
+                }),
+            },
+            controller.signal
+        );
+        requestDurationMs = Math.round(performance.now() - startedAt);
+        const audio =
+            request.responseFormat === 'pcm'
+                ? pcm16MonoToWav(
+                      result.audio,
+                      request.pcmContract ?? {
+                          sampleRateHz: 0,
+                          channels: 0,
+                          bitsPerSample: 16,
+                          encoding: 'signed-integer-little-endian',
+                      }
+                  )
+                : result.audio;
+        const extension = request.responseFormat === 'mp3' ? 'mp3' : 'wav';
+        const audioFile = `sample-${sampleId}.${extension}`;
+        await writeFile(join(outputDirectory, audioFile), audio, {
+            flag: 'wx',
+        });
+        const generationId = isGenerationId(result.generationId)
+            ? result.generationId
+            : response.generationId;
+        return {
+            record: {
+                sampleId,
+                fixtureId: request.fixtureId,
+                sampleKind: request.sampleKind,
+                persona: request.persona,
+                model: request.model,
+                voice: request.voice,
+                provider: 'openrouter',
+                responseFormat: request.responseFormat,
+                formatStatus: 'verified',
+                requestDurationMs,
+                status: 'completed',
+                ...(response.status !== undefined && {
+                    responseStatus: response.status,
+                }),
+                responseHeaders: response.contentType
+                    ? { 'content-type': response.contentType }
+                    : {},
+                audioFile,
+                ...(generationId && { generationId }),
+            },
+            skipModel: false,
+            stop: false,
+        };
+    } catch {
+        const details = failureDetails(response, interrupted(), timedOut);
+        const generationId = response.generationId;
+        return {
+            record: {
+                sampleId,
+                fixtureId: request.fixtureId,
+                sampleKind: request.sampleKind,
+                persona: request.persona,
+                model: request.model,
+                voice: request.voice,
+                provider: 'openrouter',
+                responseFormat: request.responseFormat,
+                formatStatus: 'unresolved',
+                requestDurationMs: Math.round(performance.now() - startedAt),
+                ...details,
+                ...(response.status !== undefined && {
+                    responseStatus: response.status,
+                }),
+                responseHeaders: response.contentType
+                    ? { 'content-type': response.contentType }
+                    : {},
+                ...(generationId && { generationId }),
+            },
+            skipModel: response.modelUnavailable,
+            stop: !response.modelUnavailable,
+        };
     } finally {
-        process.off('SIGINT', onInterrupt);
-        activeController?.abort();
+        clearTimeout(timeout);
     }
+};
 
+const writeAuditionFiles = async (
+    outputDirectory: string,
+    matrix: readonly AuditionRequest[],
+    records: readonly SampleRecord[],
+    skippedModels: ReadonlySet<string>,
+    overallStatus: string
+): Promise<void> => {
     const successful = records.filter(
         (record) => record.status === 'completed'
     );
-    const status = interrupted
-        ? 'interrupted'
-        : stopped
-          ? 'partial'
-          : successful.length === MAX_AUDITION_REQUESTS
-            ? 'completed'
-            : 'incomplete';
     const manifest = {
-        status,
+        status: overallStatus,
         createdAt: new Date().toISOString(),
         spendLimitUsd: SPEND_LIMIT_USD,
         requestCountMaximum: MAX_AUDITION_REQUESTS,
@@ -352,23 +369,28 @@ const runAudition = async (
             const candidateSamples = records.filter(
                 (sample) => sample.model === candidate.model
             );
-            const offlineFormatVerified =
+            const unavailable = skippedModels.has(candidate.model);
+            let candidateStatus: string;
+            if (unavailable) candidateStatus = 'unavailable';
+            else if (
                 candidateSamples.length === 10 &&
                 candidateSamples.every(
-                    (sample) => sample.formatStatus === 'verified'
-                );
+                    (sample) => sample.status === 'completed'
+                )
+            )
+                candidateStatus = 'ready-for-listening';
+            else if (candidateSamples.length > 0) candidateStatus = 'partial';
+            else candidateStatus = 'not-run';
             return {
                 model: candidate.model,
-                status:
-                    offlineFormatVerified &&
+                status: candidateStatus,
+                offlineAudioFormatStatus:
+                    candidateSamples.length === 10 &&
                     candidateSamples.every(
-                        (sample) => sample.status === 'completed'
+                        (sample) => sample.formatStatus === 'verified'
                     )
-                        ? 'ready-for-listening'
+                        ? 'verified'
                         : 'unresolved',
-                offlineAudioFormatStatus: offlineFormatVerified
-                    ? 'verified'
-                    : 'unresolved',
                 discordPcmContractStatus: candidate.pcmContract
                     ? 'documented; playback still untested'
                     : 'unresolved',
@@ -380,6 +402,8 @@ const runAudition = async (
         serial: true,
         automaticRetries: false,
         zdrRequested: true,
+        zdrOnlyConfigurationAttested: true,
+        generationMetadata: 'not collected; use the separate metadata command',
         samples: records,
     };
     await writeFile(
@@ -392,34 +416,113 @@ const runAudition = async (
         buildRatingSheet(successful, matrix),
         { flag: 'wx' }
     );
+};
+
+const runAudition = async (
+    matrix: readonly AuditionRequest[]
+): Promise<void> => {
+    const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+    if (!apiKey)
+        throw new TypeError(
+            'Set OPENROUTER_API_KEY to the dedicated capped key.'
+        );
+
+    const outputDirectory = await mkdtemp(
+        join(tmpdir(), 'footnote-tts-audition-')
+    );
+    let activeResponse: CapturedResponse | null = null;
+    let activeController: AbortController | null = null;
+    let interrupted = false;
+    const onInterrupt = (): void => {
+        interrupted = true;
+        activeController?.abort(new Error('Audition cancelled by operator.'));
+    };
+    const service = createOpenRouterVoiceService({
+        apiKey,
+        baseUrl: 'https://openrouter.ai/api/v1',
+        fetchFn: async (input, init) => {
+            const response = await fetch(input, init);
+            if (activeResponse) await captureResponse(response, activeResponse);
+            return response;
+        },
+    });
+
+    const records: SampleRecord[] = [];
+    const skippedModels = new Set<string>();
+    let stop = false;
+    process.on('SIGINT', onInterrupt);
+    try {
+        for (const request of matrix) {
+            if (interrupted || stop) break;
+            if (skippedModels.has(request.model)) continue;
+
+            const response: CapturedResponse = { modelUnavailable: false };
+            activeResponse = response;
+            const controller = new AbortController();
+            activeController = controller;
+            const result = await synthesizeSample(
+                request,
+                response,
+                service,
+                outputDirectory,
+                controller,
+                () => interrupted
+            );
+            activeController = null;
+            activeResponse = null;
+            records.push(result.record);
+            if (result.skipModel) skippedModels.add(request.model);
+            if (result.stop) stop = true;
+        }
+    } finally {
+        process.off('SIGINT', onInterrupt);
+        activeController?.abort();
+    }
+
+    let overallStatus = 'completed';
+    if (interrupted) overallStatus = 'interrupted';
+    else if (stop) overallStatus = 'partial';
+    else if (skippedModels.size > 0)
+        overallStatus = 'completed-with-unavailable-candidates';
+    await writeAuditionFiles(
+        outputDirectory,
+        matrix,
+        records,
+        skippedModels,
+        overallStatus
+    );
     console.log(`Audition directory: ${outputDirectory}`);
     console.log(
-        `Status: ${status}; requests attempted: ${records.length}/${MAX_AUDITION_REQUESTS}`
+        `Status: ${overallStatus}; synthesis requests attempted: ${records.length}/${MAX_AUDITION_REQUESTS}`
     );
     console.log(
-        'Use rating-sheet.csv for blind listening scores; manifest.json maps samples after listening.'
+        'Listening is partially blinded: the WAV extension identifies Gemini; the other candidates use MP3.'
     );
-    if (status !== 'completed') process.exitCode = 1;
+    console.log(
+        'Use rating-sheet.csv for randomized scoring, then run the separate generation-metadata command before revealing sample mappings.'
+    );
+    if (stop || interrupted) process.exitCode = 1;
 };
 
 const main = async (args: readonly string[]): Promise<void> => {
-    const fixtureCases = await readFixtureCases();
-    const matrix = createAuditionMatrix(fixtureCases);
+    const matrix = createAuditionMatrix(await readFixtureCases());
     const options = parseAuditionArguments(args);
     if (!options.execute) {
         printPlan(matrix);
         return;
     }
-    if (!options.confirmSpendLimit)
+    if (!options.confirmSpendLimit || !options.confirmZdrOnly)
         throw new TypeError(
-            'Execution requires --confirm-openrouter-key-limit-usd=1 after the provider-side key cap is active.'
+            'Execution requires an active $1 key cap and ZDR-only provider settings for all audition model groups.'
         );
     await runAudition(matrix);
 };
 
-void main(process.argv.slice(2)).catch((error: unknown) => {
+try {
+    await main(process.argv.slice(2));
+} catch (error) {
     const message =
         error instanceof Error ? error.message : 'Audition setup failed.';
     console.error(message);
     process.exitCode = 1;
-});
+}
