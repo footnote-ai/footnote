@@ -203,7 +203,11 @@ not configure the current call modes.
 | `REALTIME_VAD_INTERRUPT_RESPONSE` | provider default   | Boolean (`true` or `false`)            | When true, new user speech can interrupt an in-flight response.                                                                      |
 | `REALTIME_VAD_EAGERNESS`          | provider default   | Enum (`low`, `medium`, `high`, `auto`) | Optional semantic VAD eagerness for `semantic_vad`.                                                                                  |
 
-## Legacy OpenAI Realtime system breakdown
+## Discord and backend call flow
+
+The next sections describe the Discord and backend parts of the current `/call`
+path. The retained OpenAI realtime adapter is covered separately in section 6;
+it is not used by Standard or Live calls.
 
 ## 1. Discord Entry and Session Start
 
@@ -239,11 +243,12 @@ This is intentionally not the provider boundary. It is only the Discord-to-backe
 
 Discord audio capture lives in [AudioCaptureHandler.ts](../../packages/discord-bot/src/voice/AudioCaptureHandler.ts). It subscribes to Discord voice receiver streams, decodes Opus to PCM, resamples the audio, and emits `audioChunk` events to the session manager.
 
-Discord voice activity mode can stop sending audio immediately when the user stops speaking. That means the provider may not observe enough trailing silence to close a turn on its own.
-
-To compensate, [VoiceSessionManager.ts](../../packages/discord-bot/src/voice/VoiceSessionManager.ts) listens for `speakerSilence` events and appends a short silence tail when `server_vad` is active. The silence length is derived from `REALTIME_VAD_SILENCE_MS`, clamped to a safe range. That design lets provider-side VAD stay authoritative while adapting to Discord's voice-activity behavior.
-
-Discord streams audio while someone speaks. The provider still decides when their turn has ended.
+Discord may stop sending audio as soon as the caller stops speaking. The
+[VoiceSessionManager](../../packages/discord-bot/src/voice/VoiceSessionManager.ts)
+forwards the caller's audio while they speak and calls `commitAudio()` after a
+nonempty turn's `speakerSilence` event. The selected backend mode then handles
+that turn. The older silence-tail and VAD settings described above belong to
+the retained legacy adapter, not this current session-manager path.
 
 ## 4. Backend Trusted Boundary
 
@@ -325,23 +330,29 @@ consistency with delegated Workflow. They do not show how faithfully GPT-Live
 will follow the persona in a real conversation. Live also does not use normal
 text chat's full request context or model-input assembly.
 
-## 6. Provider Runtime Adapter
+## 6. Retained legacy OpenAI realtime adapter (not used by `/call`)
 
-The provider adapter lives in [openAiRealtimeVoiceRuntime.ts](../../packages/agent-runtime/src/openAiRealtimeVoiceRuntime.ts). This adapter is responsible for:
+[openAiRealtimeVoiceRuntime.ts](../../packages/agent-runtime/src/openAiRealtimeVoiceRuntime.ts)
+still exports an adapter for the older OpenAI Realtime path. It handles that
+provider's WebSocket, session setup, turn-detection settings and events, but
+current Discord calls do not instantiate it.
 
-- opening the OpenAI realtime websocket
-- sending the initial `session.update`
-- applying the configured voice and turn-detection settings
-- waiting for the provider session to become ready
-- translating provider events into Footnote-owned normalized events
-
-This is the only place that should know the provider websocket details for realtime voice. Discord and the backend boundary work in Footnote-owned contracts, not provider-native payloads.
+Standard uses its OpenRouter transcription and TTS paths. Live uses the
+backend-owned GPT-Live session in
+[openAiLiveVoice.ts](../../packages/backend/src/services/openAiLiveVoice.ts).
+Provider-specific messages remain behind those boundaries; Discord uses
+Footnote's own session and event contracts.
 
 ## 7. Event Return Path and Playback
 
-Provider events are normalized by the runtime, forwarded through the backend websocket handler, and consumed by Discord's realtime event layer in [RealtimeEventHandler.ts](../../packages/discord-bot/src/realtime/RealtimeEventHandler.ts).
-
-That event layer emits streamed audio chunks immediately so playback can begin before the full response completes. Playback is then handled by [AudioPlaybackHandler.ts](../../packages/discord-bot/src/voice/AudioPlaybackHandler.ts), which keeps a guild-local playback pipeline alive long enough to avoid clipping between chunks or turns.
+The backend turns Standard or Live provider events into Footnote session events,
+then forwards them to Discord's
+[RealtimeEventHandler.ts](../../packages/discord-bot/src/realtime/RealtimeEventHandler.ts).
+Discord passes received audio to
+[AudioPlaybackHandler.ts](../../packages/discord-bot/src/voice/AudioPlaybackHandler.ts).
+Standard plays synthesized approved-answer audio; Live can stream model audio
+before the response has finished. The playback handler manages the guild's
+audio queue so chunks and turns are not clipped.
 
 Audio streams in both directions:
 
@@ -368,8 +379,10 @@ The current system is built around a few explicit constraints:
 - Discord owns Discord UX, not provider session semantics.
 - Backend owns the trusted voice control-plane boundary.
 - Provider-specific websocket logic stays inside the runtime adapter.
-- Server VAD remains authoritative for turn completion in the normal path.
-- Discord voice-activity behavior is accommodated with silence-tail injection instead of moving turn closure back into Discord logic.
+- The current Discord session manager commits a nonempty caller turn when it
+  receives a silence event; the selected backend mode handles the turn.
+- The legacy adapter's VAD configuration does not define the current Standard
+  or Live call contract.
 
 These boundaries keep provider-specific details out of Discord and Footnote's shared contracts.
 

@@ -43,7 +43,7 @@ const manifest = parseProjectContextManifest(
 );
 
 test('representative project-context questions retain curated source coverage', () => {
-    assert.equal(evaluationCases.length, 10);
+    assert.equal(evaluationCases.length, 13);
     const manifestByPath = new Map(
         manifest.map((entry) => [entry.path, entry])
     );

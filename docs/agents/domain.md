@@ -1,31 +1,19 @@
 # Domain Docs
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+Use the repository's current architecture and code to understand its terms.
+There is no single glossary or ADR directory; the maintained material is
+organized by purpose:
 
-## Before exploring, read these
+- `docs/architecture/` describes current system behavior and boundaries.
+- `docs/status/` records implementation state and remaining verification.
+- `docs/decisions/` records decisions and their rationale.
+- `docs/proposals/` holds ideas that are exploratory or not adopted.
 
-- **`docs/ai/CONTEXT.md`**: the shared domain glossary for this repo.
-- **`docs/ai/adr/`**: record decisions that are hard to reverse here, read ADRs that touch the area you're about to work in.
+Start with the relevant page in
+[the architecture guide](../architecture/README.md), then follow its links to
+the owning package, contracts, and tests. Treat proposals as proposals and
+status documents as snapshots, not as a replacement for current code.
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
-
-## File structure
-
-```
-/
-├── docs/ai/
-│   ├── CONTEXT.md         ← shared domain glossary
-│   └── adr/               ← system-wide decisions
-```
-
-## Use the glossary's vocabulary
-
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
-
-If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
-
-## Flag ADR conflicts
-
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
-
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+When terminology differs across sources, use the current contract and
+implementation for behavior, and call out a genuine documentation conflict
+rather than silently inventing a new term or decision.

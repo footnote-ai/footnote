@@ -1,95 +1,39 @@
-# AI Assistance Guide (For Contributors)
+# Contributor Guide
 
-This page is for people working in the Footnote repo.
-It explains how to use AI tools responsibly and how to review AI-generated changes.
+Footnote uses AI assistance in development, but generated changes still need
+human review. The person submitting a change is responsible for understanding
+what it does, checking its assumptions, and reporting what they actually
+tested. The [AI use disclosure](./ai-use-disclosure.md) explains how the
+maintainer approaches this work.
 
-For a public account of how AI is used to build Footnote, including the limits
-of human review, see the [AI use disclosure](./ai-use-disclosure.md).
+## Getting oriented
 
-## Audience
+Start with the root [AGENTS.md](../../AGENTS.md) and any instructions near the
+files you're changing. The [architecture guide](../architecture/README.md)
+describes current behavior. [Decisions](https://github.com/footnote-ai/footnote/tree/main/docs/decisions) explain why certain
+choices were made; [proposals](../proposals/index.md) may describe work that
+hasn't been adopted.
 
-- New contributors
-- Junior developers
-- Maintainers reviewing AI-assisted PRs
+Issues and project planning use GitHub's native features, as described in
+[GitHub work management](./github-work-management.md). Keep your change tied
+to its issue, and leave unrelated behavior alone.
 
-## Where Rules Live
+## Before opening a PR
 
-- `AGENTS.md` is the main instruction file for agent behavior.
-- Tool-specific files (`cursor.rules`, `.codexrules`, `.github/copilot-instructions.md`) are thin adapters.
+Read the diff as if someone else had written it. Check that the code and
+documentation agree, that tests exercise the changed behavior, and that
+private data or provenance hasn't been exposed. An automated review is useful
+evidence, not a replacement for that check.
 
-If you see conflicting guidance, trust `AGENTS.md`.
+Run `pnpm format:write`, `pnpm lint`, and `pnpm review --changed-only`.
+Then run the checks for what you touched. For documentation work, that
+includes:
 
-## Practical Workflow
+- `pnpm --filter @footnote/web build:wiki` for wiki source or staging
+  changes.
+- `pnpm validate-deepwiki` after changing `.devin/wiki.json`.
 
-1. Start with a small, focused change.
-2. Ask AI for implementation help or review help.
-3. Validate the result with project checks.
-4. Do a human pass before opening a PR.
-
-## GitHub Work Management
-
-Use GitHub's native planning features instead of rebuilding them with labels or
-issue templates. See [GitHub work management](./github-work-management.md) for
-the intended shape and examples.
-
-## Checks to Run
-
-Always:
-
-- `pnpm format:write` after edits
-- `pnpm lint` before final handoff or PR
-- `pnpm review --changed-only` before final handoff or PR
-
-When relevant:
-
-- `pnpm validate-footnote-tags`
-    - Run when you add or edit module headers, or create new modules.
-- `pnpm validate-openapi-links`
-    - Run when you change API boundary code, `@api.operationId`/`@api.path` annotations, or `docs/api/openapi.yaml` `x-codeRefs`.
-- `pnpm review`
-    - Run for cross-cutting changes (multiple packages, shared contracts, validators, or policy-sensitive paths).
-- `pnpm test:build`
-    - Run when a change can affect deployable runtime packaging (service startup, build/deploy config, runtime dependencies).
-
-## Refactor/Design Example Lookup
-
-Use `pnpm refactor:lookup` when making non-trivial structural changes and you want example-backed guidance.
-
-Example:
-
-- `pnpm refactor:lookup --kind technique --query \"extract method\"`
-- `pnpm refactor:lookup --kind pattern --query \"strategy\" --format md`
-- `pnpm refactor:lookup --kind pattern --query \"strategy\" --format md --quiet-notes`
-
-Intent routing:
-
-- `smell` and `technique` queries prioritize `RefactoringGuru/refactoring-examples`.
-- `pattern` and `typescript-design` queries prioritize `RefactoringGuru/design-patterns-typescript`.
-- The lookup automatically falls back to the secondary repo when primary confidence is low.
-- Routing and aliases are versioned in `docs/ai/refactor_lookup_map.json`.
-
-## Human Review Checklist
-
-Use this quick checklist before merge:
-
-- The change solves the intended problem.
-- The diff is scoped and understandable.
-- The backend still hosts the public web and Discord runtime.
-- Backend remains the authority for LLM cost recording.
-- Logging, provenance, and fail-open behavior are preserved.
-- Provenance comments and license headers are preserved.
-- Module headers use the required `@footnote-*` format and order.
-- PR summary does not claim checks that were not run.
-
-## Common Mistakes to Catch
-
-- AI adds broad refactors when a small fix is enough.
-- AI introduces compatibility layers, migrations, or backfills that were not requested.
-- AI updates behavior without updating validation or tests.
-- AI writes summaries that imply checks passed when they were not run.
-
-## Keeping This Guide Healthy
-
-- Keep this page short and human-friendly.
-- Put policy changes in `AGENTS.md`, not here.
-- Update this page only when onboarding or review flow changes.
+The root instructions cover API contract checks, module annotations,
+deployable packaging, and other specialized tests. In your PR, say what
+passed and what you couldn't verify. Formatting and review checks do not
+replace behavior tests.

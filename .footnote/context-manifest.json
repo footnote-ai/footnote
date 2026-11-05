@@ -65,6 +65,21 @@
         "priority": 100
     },
     {
+        "path": "docs/architecture/realtime-voice.md",
+        "category": "documented_behavior",
+        "priority": 95
+    },
+    {
+        "path": "docs/status/realtime-voice-alignment.md",
+        "category": "current_state",
+        "priority": 90
+    },
+    {
+        "path": "docs/status/voice-persona-evaluation.md",
+        "category": "current_state",
+        "priority": 95
+    },
+    {
         "path": "docs/architecture/context-integrations/github.md",
         "category": "documented_behavior",
         "priority": 95

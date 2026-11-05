@@ -22,8 +22,8 @@
         "expectedCategories": ["current_state"]
     },
     {
-        "question": "What is currently happening on GitHub?",
-        "expectedPaths": ["docs/status/github-context-status.md"],
+        "question": "Where is current project work tracked?",
+        "expectedPaths": ["docs/status/index.md"],
         "expectedCategories": ["current_state"]
     },
     {
@@ -51,6 +51,21 @@
         "expectedPaths": [
             "docs/status/web-search-grounding-recovery-status.md"
         ],
+        "expectedCategories": ["current_state"]
+    },
+    {
+        "question": "How do Standard and Live Voice differ?",
+        "expectedPaths": ["docs/architecture/realtime-voice.md"],
+        "expectedCategories": ["documented_behavior"]
+    },
+    {
+        "question": "What is implemented for Voice persona parity, and what still needs listening tests?",
+        "expectedPaths": ["docs/status/voice-persona-evaluation.md"],
+        "expectedCategories": ["current_state"]
+    },
+    {
+        "question": "What is the current status of Realtime Voice alignment?",
+        "expectedPaths": ["docs/status/realtime-voice-alignment.md"],
         "expectedCategories": ["current_state"]
     }
 ]

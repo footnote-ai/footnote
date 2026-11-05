@@ -1,203 +1,63 @@
 # Repository Context and TrustGraph Status
 
-Status: repository context selection, preview, one-time TrustGraph loading,
-guided setup, and the guarded multi-target Graph RAG chat integration are
-implemented. Bounded revision-aware source-code retrieval is a separate follow-up in
-[#539](https://github.com/footnote-ai/footnote/issues/539).
+Last reviewed: 2026-11-04.
 
-Last updated: 2026-10-07.
+Footnote has several ways to use project material. The local `project_context`
+lookup searches approved documents during chat; a separate loader sends
+selected files to TrustGraph; bounded GitHub metadata helps with current-state
+questions. The local document lookup is not a general code-search index.
+[GitHub source retrieval](../architecture/context-integrations/github.md)
+has its own scope and implementation (see
+[#539](https://github.com/footnote-ai/footnote/issues/539)).
 
-## Goal
+## What is implemented
 
-Let a repository define the files Footnote may use as project context, then make
-it easy to load those files into TrustGraph and use them during chat.
+- `.footnote/context-files` lists repository documents that the local lookup
+  may read. The resolver uses tracked files and enforces path and size limits.
+- `pnpm context:repo:list` previews selected paths without reading their
+  contents or contacting TrustGraph. `pnpm context:repo:load` submits the
+  approved files to the configured TrustGraph Librarian API.
+- Guided `/setup` can review and load the prepared document bundle when an
+  operator has configured a TrustGraph destination.
+- `repo_explainer` can request local project-document retrieval and, for
+  current-state questions, separate bounded GitHub metadata. The backend fixes
+  the repository identity to `footnote-ai/footnote`.
+- Retrieved documents are advisory. Their source status and commit-pinned
+  citations are carried into response details; the documents cannot change
+  system instructions or policy.
 
-The setup should stay understandable for someone new to the project. Product
-docs and setup screens should say things like:
+See [Project Context](../architecture/context-integrations/project-context.md)
+and [TrustGraph](../architecture/context-integrations/trustgraph.md) for the
+request paths and configuration.
 
-- repository context
-- connect TrustGraph
-- review files
-- load context
-- refresh context
+## Default and evidence limits
 
-Internal code may still use more specific architecture terms where they are
-needed, but users should not have to learn them to finish setup.
+Local project-document retrieval is **off by default**. The checked-in
+configuration test confirms that default; enabling it requires an explicit
+`CHAT_CONTEXT_PROJECT_DOCS_ENABLED=true` setting and a working embedding
+provider. A failed or unavailable lookup is reported as such and does not block
+chat.
 
-## Current State
+The 13-question offline evaluation checks that expected documents and
+categories appear in the curated manifest. It also runs a synthetic
+retriever: its documents contain only file paths, and deterministic fake
+embeddings rank the expected path first. That exercises the retrieval
+interface, but it does not read or index the actual document contents or
+verify that those files are selected from the allowlist.
 
-Footnote already has a guarded TrustGraph lookup path. It can call an outside
-service for extra context, record what happened, and continue without that
-context if the service is unavailable.
+Separate routing tests check how an explicit `repo_explainer` intent maps to
+Footnote's repository. Neither test establishes that a live planner will
+choose retrieval, that real embeddings will find the right passage, or that
+an answer will use and cite it correctly.
 
-Repositories define eligible context files through `.footnote/context-files`
-and preview the safe, tracked selection with `pnpm context:repo:list`.
-Repository context is not loaded by default. The preview resolver does not read
-file contents or contact TrustGraph.
+No live model or embedding provider was called for this status review. Live
+planner selection, provider-backed retrieval quality, answer wording, source
+use, citations, and traces remain unverified in default and intentionally
+enabled deployments. Do not read the synthetic evaluation as a live readiness
+claim.
 
-Developers working from a repository checkout can load the selected text files with
-`pnpm context:repo:load`. For normal deployment setup, operators can use `/setup` to load the already-prepared bundle without YAML edits or CLI use; see [Setup and Settings Flow](../architecture/first-setup-flow.md). The CLI uses TrustGraph's Librarian API directly,
-keeps the repository-relative path and SHA-256 content hash with every
-document, and reports added, changed, unchanged, skipped, and failed files.
-The earlier hand-written snapshot and seed loader have been removed.
+Run the focused offline checks with:
 
-The backend Graph RAG adapter calls TrustGraph 2.8's flow-scoped endpoint with
-bounded retrieval limits and requires returned source URIs before consuming a
-generated response. The current deployment supplies three explicitly
-configured targets. Responses are bounded per target and across that set:
-oversized generated responses are retained as explicitly marked excerpts,
-while oversized HTTP bodies still fail open. Each successful target becomes
-one aggregate advisory evidence item with target identity, collection, source
-URIs, and titles retained in provenance. A shared 60-second default retrieval
-timeout covers the target set, and partial target failures preserve successful
-results. TrustGraph derives authorization from the bearer token; an optional
-workspace reference only routes the request.
-
-## Interim Project Context Path
-
-Issue #490 adds a direct local document lookup for Footnote explanations and
-discovery. It reads the `.footnote/context-files` allowlist, splits approved
-documents into excerpts, reuses an index when the content still matches, and
-uses a separately configured embedding model to find relevant excerpts. It
-serves `project_context` without TrustGraph. Current-state questions can also
-use a limited set of live GitHub results. TrustGraph remains the longer-term
-external retrieval option. See
-[Project Context](../architecture/context-integrations/project-context.md).
-
-## Repository Context File
-
-The agreed location is:
-
-```text
-.footnote/context-files
+```sh
+pnpm exec tsx --test packages/backend/test/projectContextEvaluation.test.ts packages/backend/test/projectContextRouting.test.ts packages/backend/test/config.projectDocs.test.ts
 ```
-
-The file will use familiar include and exclude patterns:
-
-```gitignore
-# Files selected if repository context is enabled
-README.md
-AGENTS.md
-SECURITY.md
-MIT_LICENSE.md
-HIPPOCRATIC_LICENSE.md
-docs/**/*.md
-
-# Exclude files matched above by prefixing a pattern with !
-# Example: !docs/archive/**
-```
-
-The first version now does the following:
-
-- use `globby` for pattern matching
-- consider Git-tracked files only
-- respect `.gitignore`
-- return files only, not directories
-- avoid following links outside the repository
-- sort paths for stable output
-- enforce clear file-count and file-size limits
-- provide a preview before anything is sent to TrustGraph
-
-This file becomes the repo-owned source for previews, loading, refreshes, and
-source links.
-
-## Load into TrustGraph
-
-Start a local TrustGraph instance, choose an existing processing flow, then
-preview and load the repository selection:
-
-```powershell
-$env:TRUSTGRAPH_URL = "http://localhost:8888"
-$env:TRUSTGRAPH_WORKSPACE = "default"
-$env:TRUSTGRAPH_FLOW_ID = "<local-flow-id>"
-$env:TRUSTGRAPH_COLLECTION = "footnote-repository-context"
-
-pnpm context:repo:list
-pnpm context:repo:load
-```
-
-Set `TRUSTGRAPH_TOKEN` when the local Librarian endpoint requires bearer
-authentication. The token is read only from the environment and is not included
-in logs or results. Run `pnpm context:repo:load -- --help` for equivalent
-command-line options.
-
-The loader sends one `add-document` request per selected file. The existing
-1 MiB per-file limit keeps each file below TrustGraph's chunking threshold.
-Every request includes the chosen workspace. Processing uses the Librarian API's
-`add-processing` and `remove-processing` operations.
-
-Document and processing IDs are stable for a repository ID and relative path.
-On a repeat load:
-
-- the same content hash and existing processing submission are unchanged
-- a missing processing submission is repaired
-- changed content replaces the old document and processing submission
-- a failure for one file is reported while the loader continues with other
-  files
-- remote documents that are no longer selected are reported and left unchanged
-
-An `added` or `changed` result means the document was stored and processing was
-submitted. TrustGraph may still be processing it asynchronously.
-
-## Completed and planned work
-
-### 1. Choose repository context files
-
-Implemented on `feature/repository-context-files`: `.footnote/context-files`,
-the file resolver, tests, and a command that lists the selected files. This
-work does not contact TrustGraph.
-
-Done when a contributor can review one stable list of repository context files.
-
-### 2. Load repository context into TrustGraph
-
-Implemented by the setup-time Librarian loader and
-`pnpm context:repo:load`. It records the repository-relative path and content
-hash and supports repeatable reconciliation without adding runtime authority.
-
-Done when the selected Footnote docs can be loaded into a local TrustGraph
-instance and inspected there. Multiple explicitly configured collections may
-be used by the runtime; unconfigured collections are not discovered.
-
-### 3. Use TrustGraph context in chat
-
-Implemented in the backend workflow context-step path. A scoped request runs
-deployment ownership validation, queries the explicitly configured target set
-under one shared timeout and aggregate source/response budget, and preserves
-successful results when one target fails. Generated Graph RAG text reaches
-final generation as labeled user-level advisory context, not as a system
-instruction or source fact. Target, collection, source, and failure details
-remain visible through governed provenance and metadata, while local chat
-continues when retrieval is unavailable.
-
-Done when a scoped chat request can use repository context from TrustGraph and
-show that use in its response details. This is complete; the three-target live
-deployment path is validated separately from this status document.
-
-### 4. Complete one-time guided setup
-
-The first-run `/setup` page now includes a repository-context flow. It lets the
-user:
-
-1. choose and test a deployment-configured TrustGraph destination
-2. review the already-approved file list and total size
-3. load the files and see added, changed, unchanged, skipped, and failed results
-
-Credentials remain backend-only. If the deployment has no TrustGraph
-connection, setup still shows the file preview and explains what must be
-configured before a load can run.
-
-Complete: a new user can review and load repository context from normal setup
-without editing YAML or running a manual loading command. The deployment still
-owns the TrustGraph connection and prepared context bundle; setup does not
-browse arbitrary checkouts or change deployment configuration.
-
-## Later Work
-
-Automatic refresh, background jobs, broader source-code loading, and hosted
-service billing are not part of the current one-time setup flow.
-
-## Related Docs
-
-- [TrustGraph architecture](../architecture/context-integrations/trustgraph.md)
-- [Context integrations](../architecture/context-integrations/README.md)

@@ -1,62 +1,40 @@
 # Security Policy
 
-Footnote is an assistant built for transparency and auditability.  
-Security, in this context, means protecting **technical integrity**, ensuring **ethical safety**, and preserving **data provenance**.
+A security problem in an AI assistant isn't always a compromised server.
+It might be a private message leaking, a tool running without permission, or
+a misleading record of what the assistant did. Footnote treats serious
+privacy, provenance, and ethical-safety failures as security concerns too.
 
-> “Honesty is the first chapter in the book of wisdom.” – Thomas Jefferson
+## Report a vulnerability
 
----
+Please email **footnote-security@protonmail.com** rather than opening a public
+issue if you've found a security or privacy vulnerability, or a safety problem
+that could put people at risk. Describe what happened, its possible impact,
+and how to reproduce it if you can. Don't include credentials or private
+conversation content unless that information is needed to explain the report.
 
-## Supported Versions
+Reports will be acknowledged within 72 hours. Investigation and remediation
+may take longer; please give the maintainer a chance to investigate before
+disclosing details publicly.
 
-Footnote is in **active development (pre-1.0)**.  
-Security updates are applied continuously on the `main` branch and deployed to Fly.io through verified GitHub Actions.
+For problems with an individual answer, Discord also has a **Report Issue**
+flow. It asks for consent before saving an incident report. The information
+retained and its privacy protections are described in
+[Incident Handling](docs/architecture/incident-handling.md). This is separate
+from private vulnerability reporting.
 
-| Version   | Supported | Notes                           |
-| --------- | --------- | ------------------------------- |
-| `main`    | ✅ Active | Live development and deployment |
-| `< 0.1.0` | ❌        | Deprecated (Daneel legacy code) |
+## Supported versions
 
----
+Footnote is pre-1.0 software in active development. The `main` branch is the
+supported development line; older releases do not have a guaranteed
+security-update schedule.
 
-## Reporting a Vulnerability
+## Protect local credentials
 
-If you discover a **security**, **privacy**, or **ethical-safety** issue (such as data leakage, unsafe behavior, or prompt injection):
+Keep `.env` files, API keys, and other secrets out of Git and public issue
+reports. If a secret may have been exposed, revoke or rotate it at the
+issuing service and follow its incident guidance. Deleting a local file
+doesn't revoke a compromised credential.
 
-1. **Do not open a public GitHub issue.**  
-   Instead, email the maintainer directly:  
-   **footnote-security@protonmail.com**
-
-2. Include:
-    - A clear description of the issue and potential impact.
-    - Steps to reproduce, if possible.
-
-3. You’ll receive an acknowledgment within **72 hours**.  
-   Responsible disclosures will be credited in release notes once resolved.
-
----
-
-## Deployment & Infrastructure Notes
-
-- **Hosting:** Fly.io (containerized Node.js app)
-- **Local development:** Uses a `.env` file for environment variables; **never commit this file** or share it outside your local machine.
-    - Add `.env` to `.gitignore` (already recommended).
-    - If secrets are ever leaked, rotate them immediately and delete the file from history using `git filter-repo` or GitHub's Secret Scanning guidance.
-- **Runtime isolation:** Each deployment runs as a single app VM with auto-scaling off by default.
-- **Secrets:** Managed via Fly secrets (`fly secrets set`) and never committed to version control.
-- **Dependencies:** Monitored by Dependabot on a cycle.
-- **Vulnerability scanning:** Performed automatically via GitHub's built-in advisories.
-- **Incident pseudonymization:** Discord identifiers (guild, channel, message, user) are HMAC-SHA256 hashed with a namespaced input (e.g., `guild:<id>`) using `INCIDENT_PSEUDONYMIZATION_SECRET`. Store the full 64-hex digest for uniqueness; only show short prefixes (10-12 chars) in logs or admin views. Rotate the secret if exposure is suspected and treat unhashed legacy rows as sensitive data until backfilled.
-
----
-
-## Ethical Safety & Incident Response
-
-Footnote treats **ethical failures as security incidents**.  
-If you encounter behavior that could cause real-world harm (e.g., unsafe advice, biased reasoning, coercive responses):
-
-- Report it via **“Report Issue”** button in Discord under each response.
-- Each confirmed case is logged in `docs/INCIDENTS.md` with anonymized context.
-- Recurrent failures trigger review and escalation to the Ethics Advisory process.
-
-Thank you for helping make Footnote safer, more trustworthy, and more accountable.
+Deployment and hosting details live in the
+[deployment guide](deploy/README.md), rather than in this reporting policy.

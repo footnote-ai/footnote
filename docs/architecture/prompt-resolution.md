@@ -61,7 +61,7 @@ composition](./realtime-voice.md#5-prompt-composition).
 offers a wording rewrite to the normal assessment/revision path and is disabled
 by default:
 
-```env
+```sh
 CHAT_PRESENTATION_ENABLED=false
 CHAT_PRESENTATION_PROFILE_ID=openrouter-deepseek-v4-flash-0731
 CHAT_PRESENTATION_TIMEOUT_MS=90000
