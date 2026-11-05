@@ -105,17 +105,19 @@ All synthesis calls use OpenRouter's `/api/v1/audio/speech`, the existing
 60-second per-request timeout, the adapter's 10 MiB response limit, and no
 client retries. `provider.zdr: true` follows account and guardrail settings;
 it can include Safety Retention endpoints when those settings allow them. For
-this audition, configure ZDR-only for the Google, SpaceXAI, and All other
-models groups, and disable Safety Retention for Google and All other models.
-Set this in account privacy settings, or attach the dedicated key to a
-guardrail configured with `enforce_zdr_google`, `enforce_zdr_xai`,
-`enforce_zdr_other`, `allow_safety_retention_google: false`, and
+this audition, configure ZDR-only for the Google and All other models groups,
+and disable Safety Retention for both groups. The xAI, Microsoft, and Kokoro
+models in this matrix fall under All other models; the current Guardrails API
+has no separate xAI enforcement field. Set this in account privacy settings,
+or attach the dedicated key to a guardrail configured with
+`enforce_zdr_google: true`, `enforce_zdr_other: true`,
+`allow_safety_retention_google: false`, and
 `allow_safety_retention_other: false`. Self-serve accounts allow Safety
 Retention by default when no choice is set. The execution flag only records an
 operator attestation; the helper cannot inspect these account or guardrail
 settings. OpenRouter describes ZDR as no routine storage after processing,
 with its documented CSAM/legal-preservation exception. [Current ZDR policy and
-settings](https://openrouter.ai/docs/guides/features/zdr).
+settings](https://openrouter.ai/docs/guides/features/zdr), [Guardrails API](https://openrouter.ai/docs/api/api-reference/guardrails/update-guardrail).
 
 The manifest records synthesis duration through complete response-body
 consumption, model, voice, OpenRouter as the route, generation ID, HTTP status,
