@@ -323,7 +323,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Local project-document retrieval is opt-in (`CHAT_CONTEXT_PROJECT_DOCS_ENABLED`, default false). File selection and preview, operator-initiated TrustGraph loading and refresh, and runtime `project_context` are separate paths; source-code retrieval remains a separate issue (#539). Keep retrieved documents advisory and preserve explicit unavailable or stale states.",
+                    "content": "Local project-document retrieval is opt-in (`CHAT_CONTEXT_PROJECT_DOCS_ENABLED`, default false). File selection and preview, operator-initiated TrustGraph loading and refresh, and runtime `project_context` are separate paths. Revision-aware `github_source` retrieval is implemented as its own opt-in integration (#539, closed). Keep retrieved documents advisory and preserve explicit unavailable or stale states.",
                     "author": "Maintainer"
                 }
             ]
