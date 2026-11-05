@@ -126,6 +126,98 @@ test('speech request asks OpenRouter for PCM and rejects non-audio responses', a
     );
 });
 
+test('speech can request MP3 with ZDR routing for the offline audition', async () => {
+    let body: Record<string, unknown> | undefined;
+    const service = createOpenRouterVoiceService({
+        apiKey: 'test-key',
+        baseUrl: 'https://openrouter.test/api/v1',
+        fetchFn: async (_url, init) => {
+            body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+            return new Response(Buffer.from('mp3-audio'), {
+                status: 200,
+                headers: {
+                    'Content-Type': 'audio/mpeg',
+                    'X-Generation-Id': 'gen-mp3-test',
+                },
+            });
+        },
+    });
+
+    const result = await service.synthesize(
+        'approved synthetic answer',
+        {
+            model: 'microsoft/mai-voice-2.1-flash',
+            voice: 'en-US-Harper:MAI-Voice-2.1-Flash',
+            responseFormat: 'mp3',
+            zdr: true,
+        },
+        AbortSignal.timeout(1_000)
+    );
+
+    assert.equal(body?.response_format, 'mp3');
+    assert.deepEqual(body?.provider, { zdr: true });
+    assert.equal(result.generationId, 'gen-mp3-test');
+    assert.equal(result.audio.toString(), 'mp3-audio');
+});
+
+test('speech synthesis forwards caller cancellation to the provider request', async () => {
+    let requestSignal: AbortSignal | null | undefined;
+    const service = createOpenRouterVoiceService({
+        apiKey: 'test-key',
+        baseUrl: 'https://openrouter.test/api/v1',
+        fetchFn: async (_url, init) => {
+            requestSignal = init?.signal;
+            return await new Promise<Response>((_resolve, reject) => {
+                init?.signal?.addEventListener(
+                    'abort',
+                    () => reject(new Error('request cancelled')),
+                    { once: true }
+                );
+            });
+        },
+    });
+    const controller = new AbortController();
+    const pending = service.synthesize(
+        'approved synthetic answer',
+        { model: 'google/gemini-3.8-flash-lite-tts', voice: 'Kore' },
+        controller.signal
+    );
+    controller.abort();
+
+    await assert.rejects(pending, /request cancelled/);
+    assert.equal(requestSignal, controller.signal);
+});
+
+test('speech synthesis cancels non-success response bodies before stopping', async () => {
+    let cancelled = false;
+    const body = new globalThis.ReadableStream<Uint8Array>({
+        start(controller) {
+            controller.enqueue(new Uint8Array([1, 2, 3]));
+        },
+        cancel() {
+            cancelled = true;
+        },
+    });
+    const service = createOpenRouterVoiceService({
+        apiKey: 'test-key',
+        baseUrl: 'https://openrouter.test/api/v1',
+        fetchFn: async () =>
+            new Response(body, {
+                status: 429,
+                headers: { 'Content-Type': 'text/plain' },
+            }),
+    });
+
+    await assert.rejects(
+        service.synthesize('approved synthetic answer', {
+            model: 'google/gemini-3.8-flash-lite-tts',
+            voice: 'Kore',
+        }),
+        /HTTP 429/
+    );
+    assert.equal(cancelled, true);
+});
+
 test('speech response cancels its stream as soon as the byte limit is exceeded', async () => {
     let cancelled = false;
     let chunkIndex = 0;

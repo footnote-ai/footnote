@@ -13,6 +13,8 @@ export type OpenRouterAudioUsage = {
     costUsd?: number;
 };
 
+export type OpenRouterSpeechFormat = 'mp3' | 'pcm';
+
 export type OpenRouterVoiceService = {
     transcribe(
         pcm24KhzMono: Buffer,
@@ -20,7 +22,13 @@ export type OpenRouterVoiceService = {
     ): Promise<{ text: string; usage?: OpenRouterAudioUsage }>;
     synthesize(
         text: string,
-        options: { model: string; voice: string; instructions?: string | null },
+        options: {
+            model: string;
+            voice: string;
+            instructions?: string | null;
+            responseFormat?: OpenRouterSpeechFormat;
+            zdr?: boolean;
+        },
         signal?: AbortSignal
     ): Promise<{ audio: Buffer; generationId?: string }>;
 };
@@ -178,23 +186,32 @@ export const createOpenRouterVoiceService = ({
                 model: options.model,
                 input,
                 voice: options.voice,
-                response_format: 'pcm',
+                response_format: options.responseFormat ?? 'pcm',
                 ...(options.instructions && {
                     instructions: options.instructions,
                 }),
+                ...(options.zdr && { provider: { zdr: true } }),
             }),
             signal,
         });
-        if (!response.ok)
+        if (!response.ok) {
+            await response.body?.cancel();
             throw new Error(
                 `OpenRouter speech synthesis failed (HTTP ${response.status}).`
             );
+        }
+        const expectedContentType =
+            (options.responseFormat ?? 'pcm') === 'pcm'
+                ? 'audio/pcm'
+                : 'audio/mpeg';
         if (
             response.headers.get('content-type')?.split(';', 1)[0].trim() !==
-            'audio/pcm'
+            expectedContentType
         ) {
             await response.body?.cancel();
-            throw new Error('OpenRouter speech response was not audio/pcm.');
+            throw new Error(
+                `OpenRouter speech response was not ${expectedContentType}.`
+            );
         }
         const body = response.body;
         if (!body)
