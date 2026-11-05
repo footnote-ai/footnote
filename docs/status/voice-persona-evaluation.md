@@ -103,21 +103,29 @@ the exact same approved text without substituted instructions.
 All synthesis calls use OpenRouter's `/api/v1/audio/speech`, the existing
 `OpenRouterVoiceService`, `provider.zdr: true`, one in-flight request, a
 60-second per-request timeout, the adapter's 10 MiB response limit, and no
-client retries. `provider.zdr: true` follows account and guardrail settings;
-it can include Safety Retention endpoints when those settings allow them. For
-this audition, configure ZDR-only for the Google and All other models groups,
-and disable Safety Retention for both groups. The xAI, Microsoft, and Kokoro
-models in this matrix fall under All other models; the current Guardrails API
-has no separate xAI enforcement field. Set this in account privacy settings,
-or attach the dedicated key to a guardrail configured with
+client retries. `provider.zdr: true` is sent on every synthesis request and
+follows account and guardrail settings; it does not by itself prevent Safety
+Retention endpoints when those settings allow them. OpenRouter documents
+Google, SpaceXAI, and All other models as distinct ZDR enforcement scopes.
+Configure ZDR-only for all three scopes used by this matrix. Safety Retention
+settings apply specifically to Google and All other models, so disable them
+for both groups; there is no separate SpaceXAI Safety Retention setting. The
+guide documents `enforce_zdr_xai` for SpaceXAI, but the linked Guardrails API
+reference is inconsistent: it lists the field in its schema and response
+example, while its generic update example does not exercise it. Do not assume
+that the live Guardrails API accepts and applies `enforce_zdr_xai` without
+verification. The documented guardrail settings for the other scopes are
 `enforce_zdr_google: true`, `enforce_zdr_other: true`,
 `allow_safety_retention_google: false`, and
-`allow_safety_retention_other: false`. Self-serve accounts allow Safety
-Retention by default when no choice is set. The execution flag only records an
-operator attestation; the helper cannot inspect these account or guardrail
-settings. OpenRouter describes ZDR as no routine storage after processing,
-with its documented CSAM/legal-preservation exception. [Current ZDR policy and
-settings](https://openrouter.ai/docs/guides/features/zdr), [Guardrails API](https://openrouter.ai/docs/api/api-reference/guardrails/update-guardrail).
+`allow_safety_retention_other: false`; verify `enforce_zdr_xai: true` before
+relying on it. The helper cannot inspect account or guardrail settings, and
+its execution flag only records operator attestation. Strict ZDR-only routing
+may make Gemini unavailable. If OpenRouter returns the recognized
+model-specific no-endpoint 404, the helper records it as unavailable and skips
+that model without retrying; other failure types stop the audition. OpenRouter
+describes ZDR as no routine storage after processing, with its documented
+CSAM/legal-preservation exception. [Current ZDR policy and
+settings](https://openrouter.ai/docs/guides/features/zdr), [Guardrails API](https://openrouter.ai/docs/api/api-reference/guardrails/update-a-guardrail).
 
 The manifest records synthesis duration through complete response-body
 consumption, model, voice, OpenRouter as the route, generation ID, HTTP status,
