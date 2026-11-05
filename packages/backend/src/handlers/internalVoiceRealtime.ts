@@ -293,6 +293,7 @@ export const createInternalVoiceRealtimeHandler = ({
                             model: cueSpeechSelection.model,
                             voice: cueSpeechSelection.voice,
                             instructions: cueSpeechSelection.delivery,
+                            zdr: true,
                         },
                         controller.signal
                     )

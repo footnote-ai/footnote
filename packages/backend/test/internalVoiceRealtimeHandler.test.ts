@@ -1441,7 +1441,8 @@ test('Standard emits one persona-aware progress cue after the delay before the a
             async transcribe() {
                 return { text: 'What is the answer?' };
             },
-            async synthesize(text) {
+            async synthesize(text, options) {
+                assert.equal(options.zdr, true);
                 synthesized.push(text);
                 return {
                     audio: Buffer.from(

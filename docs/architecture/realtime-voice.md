@@ -105,10 +105,12 @@ natural-language `instructions`, so the
 delivery guidance is not sent to MAI or treated as an effective control. This
 does not change GPT-Live voice settings or Chat TTS.
 
-Standard sends `provider.zdr: true` on MAI synthesis requests. This requests
-ZDR-compatible routing; deployment account guardrails and retention settings
-still need their own verification. It does not establish ZDR for transcription
-or other call processing. Synthesis logs include effective provider, model,
+Standard sends `provider.zdr: true` on MAI answer and progress-cue synthesis
+requests. Progress cues are best effort: synthesis failures are logged without
+failing the approved answer. The flag requests ZDR-compatible routing; deployment
+account guardrails and retention settings still need their own verification. It
+does not establish ZDR for transcription or other call processing. Synthesis
+logs include effective provider, model,
 voice, selection source, generation ID, response bytes, and duration. The TTS
 response has no inline usage or cost; reconcile those separately from the
 generation ID instead of recording missing values as zero.
