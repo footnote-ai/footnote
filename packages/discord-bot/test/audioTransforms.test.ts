@@ -10,7 +10,10 @@ import { once } from 'node:events';
 import { strict as assert } from 'node:assert';
 
 import { AUDIO_CONSTANTS } from '../src/constants/voice.js';
-import { createPlaybackResampler } from '../src/voice/audioTransforms.js';
+import {
+    createPlaybackResampler,
+    upsampleToDiscord,
+} from '../src/voice/audioTransforms.js';
 
 const BYTES_PER_SAMPLE = 2;
 
@@ -55,6 +58,23 @@ test('playback resampler flushes the full tail frame', async () => {
         upsampled,
         expectedUpsampledBytes(inputSamples),
         'flush should emit every interpolated 48kHz frame'
+    );
+});
+
+test('24kHz mono PCM16 fixture converts to 48kHz playback PCM without changing samples', () => {
+    const input = Buffer.alloc(3 * BYTES_PER_SAMPLE);
+    [0, 1_000, -1_000].forEach((sample, index) =>
+        input.writeInt16LE(sample, index * BYTES_PER_SAMPLE)
+    );
+
+    const output = upsampleToDiscord(input);
+
+    assert.equal(output.length, 6 * BYTES_PER_SAMPLE);
+    assert.deepEqual(
+        Array.from({ length: output.length / BYTES_PER_SAMPLE }, (_, index) =>
+            output.readInt16LE(index * BYTES_PER_SAMPLE)
+        ),
+        [0, 500, 1_000, 0, -1_000, -1_000]
     );
 });
 

@@ -503,7 +503,7 @@ test('discord-bots entries allow omitted credentials/profile blocks', () => {
     );
 });
 
-test('discord-bot profiles accept per-persona Voice progress phrase overrides', () => {
+test('discord-bot profiles accept per-persona TTS and progress phrase overrides', () => {
     const rawYaml = [
         'version: 1',
         'discord-bots:',
@@ -512,6 +512,9 @@ test('discord-bot profiles accept per-persona Voice progress phrase overrides', 
         '      id: myuri',
         '      display-name: Myuri',
         '      speech-presentation:',
+        '        tts-model: microsoft/mai-voice-2.1-flash',
+        '        tts-voice: en-US-Iris:MAI-Voice-2.1-Flash',
+        '        tts-delivery: lively and intelligible',
         '        progress-phrases:',
         '          - "Let me connect those pieces."',
         '          - "Give me a moment to untangle that."',
@@ -524,9 +527,38 @@ test('discord-bot profiles accept per-persona Voice progress phrase overrides', 
     });
 
     assert.deepEqual(
-        parsed.yamlSettings['discord-bots'][0]?.profile?.speechPresentation
-            ?.progressPhrases,
-        ['Let me connect those pieces.', 'Give me a moment to untangle that.']
+        parsed.yamlSettings['discord-bots'][0]?.profile?.speechPresentation,
+        {
+            ttsModel: 'microsoft/mai-voice-2.1-flash',
+            ttsVoice: 'en-US-Iris:MAI-Voice-2.1-Flash',
+            ttsDelivery: 'lively and intelligible',
+            progressPhrases: [
+                'Let me connect those pieces.',
+                'Give me a moment to untangle that.',
+            ],
+        }
+    );
+});
+
+test('discord-bot TTS overrides reject non-string YAML values', () => {
+    const rawYaml = [
+        'version: 1',
+        'discord-bots:',
+        '  - id: winter-bot',
+        '    profile:',
+        '      id: winter',
+        '      speech-presentation:',
+        '        tts-voice: 23',
+        '',
+    ].join('\n');
+
+    assert.throws(
+        () =>
+            parseServerSettingsYaml({
+                rawText: rawYaml,
+                settingsPath: 'footnote.yaml',
+            }),
+        /speech-presentation\.tts-voice must be a string/u
     );
 });
 

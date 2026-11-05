@@ -80,6 +80,39 @@ single-use delivery handoff, reports local start/completion/interruption/failure
 and stops stale playback on caller interruption. Synthesis is a complete PCM
 artifact; Discord streams it through the existing guild playback pipeline.
 
+Standard TTS defaults to `microsoft/mai-voice-2.1-flash`. The OpenRouter MAI
+route documents raw PCM as 24 kHz, mono, signed 16-bit little-endian audio,
+which matches the backend contract; Discord's existing playback resampler
+converts it to 48 kHz. The adapter requires `audio/pcm`, a non-empty even-byte
+response, and enforces the existing 10 MiB limit. No MP3 decoding is used.
+Synthetic fixtures verify sample decoding and the 24-to-48 kHz playback
+resampler; they do not verify an actual provider response or Discord sound.
+
+The provisional voice map is Footnote / Harper, Danny / Grant, Myuri / Iris,
+and Winter / Olivia. The fixed-text audition heard Harper for Footnote and
+Grant for Winter. Grant is a provisional stable-male hypothesis for Danny;
+Iris and Olivia were not auditioned, and Olivia is an untested expressive-
+female direction for Winter. Configure per-bot overrides under
+`discord-bots[].profile.speech-presentation` (`tts-model`, `tts-voice`, and
+`tts-delivery`); the deployment profile also accepts the corresponding
+`BOT_PROFILE_TTS_*` environment settings. Unset per-bot Standard TTS fields
+inherit their deployment values. A custom model needs a matching configured
+voice; if it would inherit a MAI voice ID, Standard keeps the MAI model and
+persona voice. MAI selections reject generic voice IDs before provider
+dispatch; MAI-shaped but unavailable IDs retain the provider failure behavior.
+Selection and delivery guidance are retained as metadata. MAI ignores
+natural-language `instructions`, so the
+delivery guidance is not sent to MAI or treated as an effective control. This
+does not change GPT-Live voice settings or Chat TTS.
+
+Standard sends `provider.zdr: true` on MAI synthesis requests. This requests
+ZDR-compatible routing; deployment account guardrails and retention settings
+still need their own verification. It does not establish ZDR for transcription
+or other call processing. Synthesis logs include effective provider, model,
+voice, selection source, generation ID, response bytes, and duration. The TTS
+response has no inline usage or cost; reconcile those separately from the
+generation ID instead of recording missing values as zero.
+
 If Workflow is still pending after two seconds, Standard can speak one brief
 progress cue. The call-pinned persona and expression strength choose its phrase
 pool; application code selects uniformly with `crypto.randomInt`. The phrases

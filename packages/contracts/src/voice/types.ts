@@ -180,7 +180,10 @@ export type InternalVoiceRealtimeOptions = {
 };
 
 export type SpeechSelectionSource =
-    'request_or_session' | 'operator_profile' | 'deployment_fallback';
+    | 'request_or_session'
+    | 'operator_profile'
+    | 'bundled_persona_default'
+    | 'deployment_fallback';
 
 /**
  * @api.operationId: postInternalVoiceTts

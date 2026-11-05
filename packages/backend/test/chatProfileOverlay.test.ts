@@ -104,6 +104,27 @@ test('a configured bot overlay path takes precedence over matching backend inlin
     }
 });
 
+test('voice persona pins TTS overrides without changing realtime voice settings', () => {
+    const resolved = resolveVoicePersona(
+        parseBotProfileConfig({
+            profileId: 'winter',
+            speechPresentation: {
+                ttsModel: 'operator/model',
+                ttsVoice: 'operator-voice',
+                ttsDelivery: 'operator delivery',
+                realtimeVoice: 'cedar',
+            },
+        }),
+        logger
+    );
+
+    assert.deepEqual(resolved.profile.speechPresentation, {
+        ttsModel: 'operator/model',
+        ttsVoice: 'operator-voice',
+        ttsDelivery: 'operator delivery',
+    });
+});
+
 test('an invalid unique configured chat profile falls through to the catalog', () => {
     const previousBots = runtimeConfig.settings.discordBots;
     runtimeConfig.settings.discordBots = [
@@ -122,7 +143,7 @@ test('an invalid unique configured chat profile falls through to the catalog', (
     }
 });
 
-test('Voice admission pins bundled identity and expression defaults without acoustic settings', () => {
+test('Voice admission pins identity and expression defaults with Standard TTS settings only', () => {
     for (const [id, displayName, strength, overlaySelection] of [
         ['footnote', 'Footnote', 'balanced', 'default'],
         ['danny', 'Danny', 'balanced', 'catalog'],
@@ -140,7 +161,9 @@ test('Voice admission pins bundled identity and expression defaults without acou
         assert.equal(resolved.expression.strength, strength);
         assert.equal(resolved.expression.source, 'persona_default');
         assert.equal(resolved.overlaySelection, overlaySelection);
-        assert.equal(resolved.profile.speechPresentation, undefined);
+        assert.deepEqual(resolved.profile.speechPresentation, {
+            ttsVoice: 'alloy',
+        });
         if (id !== 'footnote') assert.ok(resolved.profile.promptOverlay.text);
         configured.displayName = 'Changed after admission';
         assert.equal(resolved.profile.displayName, displayName);
@@ -175,7 +198,9 @@ test('Voice selects the invoking Discord node from existing server configuration
             profileId: 'footnote',
             speechPresentation: {
                 progressPhrases: ['The deployment phrase.'],
-                ttsVoice: 'deployment-voice-must-stay-separate',
+                ttsModel: 'deployment/model',
+                ttsVoice: 'deployment-voice',
+                ttsDelivery: 'deployment delivery',
             },
         });
         const danny = resolveVoicePersona(backend, logger, {
@@ -192,13 +217,39 @@ test('Voice selects the invoking Discord node from existing server configuration
         assert.deepEqual(danny.profile.speechPresentation?.progressPhrases, [
             'I’ll work through that carefully.',
         ]);
-        assert.equal(danny.profile.speechPresentation?.ttsVoice, undefined);
+        assert.equal(
+            danny.profile.speechPresentation?.ttsModel,
+            'deployment/model'
+        );
+        assert.equal(
+            danny.profile.speechPresentation?.ttsVoice,
+            'profile-voice-must-stay-separate'
+        );
+        assert.equal(
+            danny.profile.speechPresentation?.ttsDelivery,
+            'deployment delivery'
+        );
+        assert.equal(
+            danny.profile.speechPresentation?.realtimeVoice,
+            undefined
+        );
         assert.equal(winter.profile.id, 'winter');
         assert.equal(winter.expression.strength, 'strong');
         assert.deepEqual(winter.profile.speechPresentation?.progressPhrases, [
             'The deployment phrase.',
         ]);
-        assert.equal(winter.profile.speechPresentation?.ttsVoice, undefined);
+        assert.equal(
+            winter.profile.speechPresentation?.ttsModel,
+            'deployment/model'
+        );
+        assert.equal(
+            winter.profile.speechPresentation?.ttsVoice,
+            'deployment-voice'
+        );
+        assert.equal(
+            winter.profile.speechPresentation?.ttsDelivery,
+            'deployment delivery'
+        );
         assert.equal(
             resolveVoicePersona(backend, logger, {
                 discordNodeId: 'winter-bot',

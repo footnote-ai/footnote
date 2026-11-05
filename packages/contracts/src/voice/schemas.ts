@@ -28,6 +28,7 @@ const InternalVoiceOutputFormatSchema = z.enum([
 const SpeechSelectionSourceSchema = z.enum([
     'request_or_session',
     'operator_profile',
+    'bundled_persona_default',
     'deployment_fallback',
 ]);
 

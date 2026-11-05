@@ -25,7 +25,7 @@ The remaining Live and Discord listening comparison should look closely at four 
 - **Persona:** Do Footnote, Danny, Myuri and Winter sound distinct and recognizable, especially when GPT-Live speaks without delegating?
 - **Reviewed answers:** Standard sends approved text to TTS. GPT-Live can paraphrase approved commentary or answer on its own, and listeners currently have no reliable indication of which happened.
 - **Cancellation:** A new turn may arrive while the previous Workflow still occupies the process-wide execution slot, causing the replacement to be rejected as `occupied`. We haven't measured when a real provider stops after cancellation.
-- **Usage:** Workflow records usage and cost when available. Transcription logs usage if the provider supplies it; Standard TTS returns no usage data, and GPT-Live records duration. We still can't reconcile the full cost of a call.
+- **Usage:** Workflow records usage and cost when available. Transcription logs usage if the provider supplies it. Standard TTS now logs OpenRouter's generation ID and selection metadata, but the speech response has no inline usage or cost; those need a separate generation lookup. GPT-Live records duration. Full call cost is still unavailable in Footnote.
 
 The delivery ceilings are 400 estimated tokens for Live and 1,600 estimated tokens plus 3,686 code points for Standard. We'll need to check whether the resulting answers sound natural and fit within the call.
 
@@ -101,8 +101,9 @@ are also excluded to keep the source text identical.
 For offline listening, Gemini's raw PCM is wrapped as WAV using the documented
 24 kHz mono, 16-bit signed little-endian contract. Google's format guidance
 covers the preceding model and WAV/PCM output for Gemini 3.8; the actual
-OpenRouter response still needs to be heard and checked. MAI documents 24 kHz
-mono PCM but not enough encoding detail for the existing Discord path. Grok
+OpenRouter response still needs to be heard and checked. The OpenRouter MAI
+route documents raw 24 kHz mono signed 16-bit little-endian PCM, so no paid
+format probe is needed before selecting PCM. Grok
 supports several PCM sample rates, and Kokoro has no verified PCM rate/channel
 contract through this route. Those three models use MP3 for this audition;
 the helper accepts their files only when OpenRouter responds with
@@ -265,18 +266,25 @@ listening; do not add samples or raw provider responses to the repository.
 
 ### What remains unresolved
 
-The configured Standard Voice fallback,
-`openai/gpt-4o-mini-tts-2025-12-15`, remains absent from OpenRouter's live
-speech catalog and its live availability is unconfirmed; no paid route check
-or OpenAI control was run. The provisional MAI decision does not change
-production defaults. MAI returned MP3, and this audition did not verify a PCM
-contract or a decoding path for Discord. Individual voices for all four
-personas, playback, cancellation, fallback, and provenance still need testing
-under #534.
+The implementation now selects MAI by default for Standard Voice and includes
+provisional per-persona voices and operator overrides. OpenRouter documents the
+MAI route's raw 24 kHz mono PCM16 contract; the adapter checks the media type,
+non-empty/even-byte boundary, and response size, while Discord uses its
+existing 24-to-48 kHz resampler. Synthetic coverage verifies those boundaries
+and the sample conversion. No production configuration was changed, and no
+paid MAI request or real Discord call was made.
 
-The audition also does not verify the PCM contracts needed for Discord,
-persona consistency during live conversation, or interruption behavior.
-Those belong to the later Voice evaluation.
+The four defaults are provisional: only Footnote/Harper and
+Winter/Grant were heard in the fixed-text audition. Danny/Grant is a
+stable-male hypothesis; Myuri/Iris and Winter/Olivia are untested, with Olivia
+chosen as an expressive-female direction. MAI ignores natural-language
+delivery instructions, so the stored guidance remains metadata only.
+
+Real MAI response format, intelligibility, persona fit, approval-to-audible
+latency, playback acknowledgments, and interruption timing remain unverified.
+Synthesis logs OpenRouter's generation ID, but does not retrieve usage or cost
+automatically. The request's ZDR flag does not prove deployment guardrails or
+retention settings. These are the remaining #534 canary gates.
 
 Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multimodal/tts),
 [live speech catalog](https://openrouter.ai/api/v1/models?output_modalities=speech),
@@ -294,11 +302,25 @@ Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multi
 
 ## What comes next
 
-Under #534, select provisional MAI voice IDs for all four personas, connect
-them to the existing speech-presentation configuration, verify an MP3-to-PCM
-playback path or supported PCM output, then test synthesis, playback,
-cancellation, fallback, and provenance in a controlled Discord environment.
+Under #534, run a small canary in a private Discord server with one consenting
+caller and listener. First complete one Standard call for each persona:
+Footnote/Harper, Danny/Grant, Myuri/Iris, and Winter/Olivia. Confirm that input
+reaches Workflow, only its approved answer is synthesized, the audio is
+intelligible, and Discord reports playback. Compare the spoken content with
+the approved text. Record the effective provider/model/voice,
+approval-to-first-audible latency, playback outcomes, listener notes, and cost
+from each logged generation ID; keep audio and transcripts out of the
+evaluation record.
+
+Then exercise follow-ups, corrections, interruption during synthesis and
+playback, cancellation, a controlled synthesis failure, and recovery. Confirm
+that stale audio is suppressed, a failure leaves the call usable, and the
+approved text remains available. Mark unobserved outcomes plainly. Stop on
+unexpected voice/format, content mismatch, missing delivery provenance, or
+unverified privacy settings. Keep the test deployment isolated and capped;
+production rollout and paid canary calls require separate authorization.
+
 Keep Live on GPT-Live. #975 can use these fixed-text results as a baseline for
-its feasibility work on alternatives or speech transformation; no additional
-provider or Live audio pipeline was evaluated here. PR #987 remains limited
-to the audition harness and its findings.
+future provider comparisons or speech transformation; no additional provider
+or Live audio pipeline was evaluated here. PR #987 remains limited to the
+audition harness and its findings.

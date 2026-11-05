@@ -563,7 +563,14 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
             : undefined;
         if (speechPresentationRecord) {
             for (const key of Object.keys(speechPresentationRecord)) {
-                if (key !== 'progress-phrases') {
+                if (
+                    ![
+                        'tts-model',
+                        'tts-voice',
+                        'tts-delivery',
+                        'progress-phrases',
+                    ].includes(key)
+                ) {
                     throw new ServerSettingsValidationError({
                         message: `Invalid server settings YAML at ${settingsPath}: ${botPointer}.profile.speech-presentation contains unsupported key "${key}".`,
                         category: 'unsupported_key',
@@ -572,6 +579,19 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
                 }
             }
         }
+        for (const key of ['tts-model', 'tts-voice', 'tts-delivery'] as const) {
+            const value = speechPresentationRecord?.[key];
+            if (value !== undefined && typeof value !== 'string') {
+                throw new ServerSettingsValidationError({
+                    message: `Invalid server settings YAML at ${settingsPath}: ${botPointer}.profile.speech-presentation.${key} must be a string.`,
+                    category: 'type_mismatch',
+                    pointer: `${botPointer}.profile.speech-presentation.${key}`,
+                });
+            }
+        }
+        const ttsModel = speechPresentationRecord?.['tts-model'];
+        const ttsVoice = speechPresentationRecord?.['tts-voice'];
+        const ttsDelivery = speechPresentationRecord?.['tts-delivery'];
         const progressPhrases = speechPresentationRecord?.['progress-phrases'];
         if (
             progressPhrases !== undefined &&
@@ -585,9 +605,17 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
             });
         }
         const speechPresentation =
+            ttsModel === undefined &&
+            ttsVoice === undefined &&
+            ttsDelivery === undefined &&
             progressPhrases === undefined
                 ? undefined
                 : normalizeSpeechPresentation({
+                      ...(typeof ttsModel === 'string' && { ttsModel }),
+                      ...(typeof ttsVoice === 'string' && { ttsVoice }),
+                      ...(typeof ttsDelivery === 'string' && {
+                          ttsDelivery,
+                      }),
                       progressPhrases: progressPhrases as string[],
                   });
 

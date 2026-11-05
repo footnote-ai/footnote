@@ -68,7 +68,7 @@ test('transcription sends mono 24 kHz PCM as WAV and returns only bounded text a
     });
 });
 
-test('speech request asks OpenRouter for PCM and rejects non-audio responses', async () => {
+test('OpenRouter MAI PCM preserves bounded signed 16-bit little-endian audio', async () => {
     let request:
         { url: string; authorization: string | null; body: string } | undefined;
     const service = createOpenRouterVoiceService({
@@ -80,7 +80,7 @@ test('speech request asks OpenRouter for PCM and rejects non-audio responses', a
                 authorization: new Headers(init?.headers).get('authorization'),
                 body: String(init?.body),
             };
-            return new Response(Buffer.from([1, 2, 3, 4]), {
+            return new Response(Buffer.from([0x00, 0x80, 0xff, 0x7f]), {
                 status: 200,
                 headers: {
                     'Content-Type': 'audio/pcm',
@@ -91,18 +91,20 @@ test('speech request asks OpenRouter for PCM and rejects non-audio responses', a
     });
 
     const result = await service.synthesize('approved answer', {
-        model: 'x-ai/grok-voice-tts-1.0',
-        voice: 'eve',
+        model: 'microsoft/mai-voice-2.1-flash',
+        voice: 'en-US-Harper:MAI-Voice-2.1-Flash',
     });
 
     assert.equal(request?.url, 'https://openrouter.test/api/v1/audio/speech');
     assert.deepEqual(JSON.parse(String(request?.body)), {
-        model: 'x-ai/grok-voice-tts-1.0',
+        model: 'microsoft/mai-voice-2.1-flash',
         input: 'approved answer',
-        voice: 'eve',
+        voice: 'en-US-Harper:MAI-Voice-2.1-Flash',
         response_format: 'pcm',
     });
-    assert.deepEqual(result.audio, Buffer.from([1, 2, 3, 4]));
+    assert.deepEqual(result.audio, Buffer.from([0x00, 0x80, 0xff, 0x7f]));
+    assert.equal(result.audio.readInt16LE(0), -32768);
+    assert.equal(result.audio.readInt16LE(2), 32767);
     assert.equal(result.generationId, 'gen-test');
 
     const invalid = createOpenRouterVoiceService({
@@ -116,8 +118,8 @@ test('speech request asks OpenRouter for PCM and rejects non-audio responses', a
     });
     await assert.rejects(
         invalid.synthesize('approved answer', {
-            model: 'x-ai/grok-voice-tts-1.0',
-            voice: 'eve',
+            model: 'microsoft/mai-voice-2.1-flash',
+            voice: 'en-US-Harper:MAI-Voice-2.1-Flash',
         }),
         (error: unknown) =>
             error instanceof Error &&
@@ -126,18 +128,39 @@ test('speech request asks OpenRouter for PCM and rejects non-audio responses', a
     );
 });
 
-test('speech can request MP3 with ZDR routing for the offline audition', async () => {
+test('PCM speech rejects incomplete signed 16-bit samples', async () => {
+    const service = createOpenRouterVoiceService({
+        apiKey: 'test-key',
+        baseUrl: 'https://openrouter.test/api/v1',
+        fetchFn: async () =>
+            new Response(Buffer.from([0, 0, 1]), {
+                status: 200,
+                headers: { 'Content-Type': 'audio/pcm' },
+            }),
+    });
+
+    await assert.rejects(
+        service.synthesize('approved answer', {
+            model: 'microsoft/mai-voice-2.1-flash',
+            voice: 'en-US-Harper:MAI-Voice-2.1-Flash',
+            responseFormat: 'pcm',
+        }),
+        /out of bounds/
+    );
+});
+
+test('speech can request PCM with ZDR routing', async () => {
     let body: Record<string, unknown> | undefined;
     const service = createOpenRouterVoiceService({
         apiKey: 'test-key',
         baseUrl: 'https://openrouter.test/api/v1',
         fetchFn: async (_url, init) => {
             body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-            return new Response(Buffer.from('mp3-audio'), {
+            return new Response(Buffer.from([1, 0, 2, 0]), {
                 status: 200,
                 headers: {
-                    'Content-Type': 'audio/mpeg',
-                    'X-Generation-Id': 'gen-mp3-test',
+                    'Content-Type': 'audio/pcm',
+                    'X-Generation-Id': 'gen-pcm-test',
                 },
             });
         },
@@ -148,16 +171,16 @@ test('speech can request MP3 with ZDR routing for the offline audition', async (
         {
             model: 'microsoft/mai-voice-2.1-flash',
             voice: 'en-US-Harper:MAI-Voice-2.1-Flash',
-            responseFormat: 'mp3',
+            responseFormat: 'pcm',
             zdr: true,
         },
         AbortSignal.timeout(1_000)
     );
 
-    assert.equal(body?.response_format, 'mp3');
+    assert.equal(body?.response_format, 'pcm');
     assert.deepEqual(body?.provider, { zdr: true });
-    assert.equal(result.generationId, 'gen-mp3-test');
-    assert.equal(result.audio.toString(), 'mp3-audio');
+    assert.equal(result.generationId, 'gen-pcm-test');
+    assert.deepEqual(result.audio, Buffer.from([1, 0, 2, 0]));
 });
 
 test('speech synthesis forwards caller cancellation to the provider request', async () => {
