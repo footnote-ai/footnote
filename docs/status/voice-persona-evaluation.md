@@ -64,148 +64,152 @@ Testing will need the configured OpenAI, OpenRouter, Workflow and search credent
 
 ## Fixed-text Standard TTS audition (#534 and #975)
 
-The separate Standard TTS comparison reuses the synthetic
+This smaller audition compares four OpenRouter text-to-speech models before we
+choose new defaults for Standard Voice. It uses temporary voice selections for
+Footnote and Winter, with the same text sent to every candidate. The output is
+for offline listening; this does not test Discord playback or change production
+voice settings.
+
+The text comes from the synthetic
 [`voiceCondensationEvaluation.json`](../../packages/backend/test/fixtures/voiceCondensationEvaluation.json)
-answers. It sends the `originalAnswer` text byte-for-byte after checking that
-the fixtures have no leading or trailing whitespace. It does not create new
-answers, add speech tags, or change production approval state.
+fixture. The helper sends each `originalAnswer` exactly as stored and rejects
+unexpected leading or trailing whitespace. These are synthetic reference
+answers, not records of actual Workflow approval. The four passages are
+`simple-factual`, `evidence-limits`, `rationale-extent`, and
+`caution-tradeoff`. Each persona also repeats `caution-tradeoff` once to check
+consistency. That makes ten requests per model, or **40 at most** across four
+models.
 
-The matrix uses `simple-factual`, `evidence-limits`, `rationale-extent`, and
-`caution-tradeoff` for Footnote and Winter, then repeats `caution-tradeoff`
-once per persona/model. That is ten serial requests per model and **40 maximum
-requests** across four alternatives. The current OpenAI Standard fallback is
-not included as a control: its configured model is absent from the live
-OpenRouter speech catalog, its model page is unavailable, and OpenRouter's
-current guide and tutorial still include examples using that model. The live
-catalog, OpenRouter's statement that no OpenAI speech model was listed in
-September 2026, and those examples conflict, so the fallback is **not
-confirmed operational** without a paid route check. Do not replace it with an
-unauditioned candidate. No production correction is safe before a route is
-verified and a control is obtained. If a separate authorized route check
-confirms failure, recover the operational path under #534/#975 without
-changing the audition's production default. The comparison remains incomplete
-until a control is obtained under separate authorization; no direct OpenAI
-request is part of this helper.
+### Models and audio formats
 
-| Candidate                        | Footnote / Winter voice                                                | Audition format and delivery guidance                                                                       | PCM compatibility evidence                                                                                                                                                                                                                                                   | Current published price                           |
-| -------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| Google Gemini 3.8 Flash Lite TTS | `Kore` / `Charon`                                                      | PCM only; persona instructions are supported and used                                                       | Google documents raw 16-bit, 24 kHz mono PCM for the predecessor and WAV/PCM 16-bit, 24 kHz mono for 3.8; OpenRouter's endpoint documents PCM-only for Gemini TTS. The helper wraps that verified contract as WAV for listening. Confirm actual Discord playback separately. | $0.50/M input tokens and $6/M output audio tokens |
-| Microsoft MAI-Voice-2.1-Flash    | `en-US-Harper:MAI-Voice-2.1-Flash` / `en-US-Grant:MAI-Voice-2.1-Flash` | MP3; natural-language delivery instructions are ignored, so none are sent                                   | The model page documents PCM at 24 kHz mono, but not sample encoding/endianness. Discord playback remains unverified.                                                                                                                                                        | $15/M characters                                  |
-| Grok Voice TTS 1.0               | `eve` / `rex`                                                          | MP3; delivery instructions are ignored. Inline speech tags are deliberately omitted.                        | PCM is available at selectable/provider-supported rates spanning 8–48 kHz, but OpenRouter does not document a fixed rate for this request. Unresolved for Discord.                                                                                                           | $15/M characters                                  |
-| Kokoro 82M                       | `af_heart` / `am_onyx`                                                 | MP3 requested; only save when the response is `audio/mpeg`; natural-language instructions are not supported | The OpenRouter route does not document a reliable PCM sample-rate/channel contract. Unresolved for Discord.                                                                                                                                                                  | $0.62/M characters                                |
+| Candidate                 | Footnote / Winter voice                                                | Listening format   | Delivery guidance      | Published price                         |
+| ------------------------- | ---------------------------------------------------------------------- | ------------------ | ---------------------- | --------------------------------------- |
+| Gemini 3.8 Flash Lite TTS | `Kore` / `Charon`                                                      | PCM wrapped as WAV | Supported; included    | $0.50/M text tokens + $6/M audio tokens |
+| MAI-Voice-2.1-Flash       | `en-US-Harper:MAI-Voice-2.1-Flash` / `en-US-Grant:MAI-Voice-2.1-Flash` | MP3                | Not supported; omitted | $15/M characters                        |
+| Grok Voice TTS 1.0        | `eve` / `rex`                                                          | MP3                | Not supported; omitted | $15/M characters                        |
+| Kokoro 82M                | `af_heart` / `am_onyx`                                                 | MP3                | Not supported; omitted | $0.62/M characters                      |
 
-Voice identifiers are model-specific. These are temporary audition settings,
-not persona defaults. Only Gemini receives the existing short delivery
-guidance: Footnote (“Clear, calm, grounded, conversational”) and Winter
-(“Dry, direct, controlled, understated”). The other three candidates receive
-the exact same approved text without substituted instructions.
+These voice IDs are audition choices, not bundled persona defaults. Gemini
+receives the short delivery guidance already proposed for Footnote ("Clear,
+calm, grounded, conversational") and Winter ("Dry, direct, controlled,
+understated"). The other models ignore OpenRouter's natural-language
+`instructions` field, so the helper leaves it out. Grok's inline speech tags
+are also excluded to keep the source text identical.
 
-All synthesis calls use OpenRouter's `/api/v1/audio/speech`, the existing
-`OpenRouterVoiceService`, `provider.zdr: true`, one in-flight request, a
-60-second per-request timeout, the adapter's 10 MiB response limit, and no
-client retries. `provider.zdr: true` is sent on every synthesis request and
-follows account and guardrail settings; it does not by itself prevent Safety
-Retention endpoints when those settings allow them. OpenRouter documents
-Google, SpaceXAI, and All other models as distinct ZDR enforcement scopes.
-Configure ZDR-only for all three scopes used by this matrix. Safety Retention
-settings apply specifically to Google and All other models, so disable them
-for both groups; there is no separate SpaceXAI Safety Retention setting. The
-guide documents `enforce_zdr_xai` for SpaceXAI, but the linked Guardrails API
-reference is inconsistent: it lists the field in its schema and response
-example, while its generic update example does not exercise it. Do not assume
-that the live Guardrails API accepts and applies `enforce_zdr_xai` without
-verification. The documented guardrail settings for the other scopes are
-`enforce_zdr_google: true`, `enforce_zdr_other: true`,
-`allow_safety_retention_google: false`, and
-`allow_safety_retention_other: false`; verify `enforce_zdr_xai: true` before
-relying on it. The helper cannot inspect account or guardrail settings, and
-its execution flag only records operator attestation. Strict ZDR-only routing
-may make Gemini unavailable. If OpenRouter returns the recognized
-model-specific no-endpoint 404, the helper records it as unavailable and skips
-that model without retrying; other failure types stop the audition. OpenRouter
-describes ZDR as no routine storage after processing, with its documented
-CSAM/legal-preservation exception. [Current ZDR policy and
-settings](https://openrouter.ai/docs/guides/features/zdr), [Guardrails API](https://openrouter.ai/docs/api/api-reference/guardrails/update-a-guardrail).
+For offline listening, Gemini's raw PCM is wrapped as WAV using the documented
+24 kHz mono, 16-bit signed little-endian contract. Google's format guidance
+covers the preceding model and WAV/PCM output for Gemini 3.8; the actual
+OpenRouter response still needs to be heard and checked. MAI documents 24 kHz
+mono PCM but not enough encoding detail for the existing Discord path. Grok
+supports several PCM sample rates, and Kokoro has no verified PCM rate/channel
+contract through this route. Those three models use MP3 for this audition;
+the helper accepts their files only when OpenRouter responds with
+`audio/mpeg`. **None of these candidates has passed a Discord playback test.**
+Unknown PCM must not be treated as 24 kHz audio.
 
-The manifest records synthesis duration through complete response-body
-consumption, model, voice, OpenRouter as the route, generation ID, HTTP status,
-and only the `Content-Type` response header. OpenRouter documents
-`X-Generation-Id` for correlation with a separate metadata lookup. Response
-headers do not establish PCM rate/channels, selected upstream provider, or
-billing. Synthesis time is not Discord playback time or approval-to-audible
-latency. The fixed-text script has no Workflow approval event; actual Discord
-playback is a separate check after a PCM contract is established.
+### Authorization, privacy, and cost
 
-After synthesis, run the separate metadata lookup against the existing
-generation IDs:
+**No paid requests have been made or authorized.** Before running the
+audition, explicitly approve it and verify a dedicated OpenRouter key with a
+**$1 lifetime spending limit and no reset**. Set `OPENROUTER_API_KEY`
+privately. The script requires confirmation flags, but cannot read or enforce
+the key's limit or account privacy settings itself.
 
-```powershell
-pnpm voice:audition:metadata -- "<audition-directory>"
-```
+Every synthesis request includes `provider.zdr: true`. OpenRouter applies
+that setting alongside the account or guardrail configuration; it does not
+exclude Safety Retention endpoints when those settings permit them. This
+audition requires ZDR-only routing for **Google, SpaceXAI, and All other
+models**. Disable Safety Retention for Google and All other models. There is no
+separate SpaceXAI Safety Retention switch.
 
-It makes at most 40 `GET /api/v1/generation?id=...` requests, each with a
-10-second timeout, a 64 KiB response cap, and no retry. It writes only `model`,
-`provider_name`, actual `total_cost`, `upstream_inference_cost`, generation
-time, and latency to `generation-metadata.json`; it never stores the endpoint's
-prompt/completion content or full response. Missing generation IDs, a 404, or
-missing cost/provider fields stay explicitly unavailable (`null`), not
-estimated. The command does not synthesize audio or modify the source
-manifest. [OpenRouter generation metadata API](https://openrouter.ai/docs/api/api-reference/generations/get-request-%26-usage-metadata-for-a-generation).
+The documented guardrail fields are `enforce_zdr_google: true`,
+`enforce_zdr_other: true`, `allow_safety_retention_google: false`, and
+`allow_safety_retention_other: false`. OpenRouter's ZDR guide also documents
+`enforce_zdr_xai: true`, but its Guardrails API examples are inconsistent.
+Verify that the live API accepts and applies that setting before relying on
+it. The execution flag records the operator's confirmation, not independent
+verification. Strict ZDR routing may leave Gemini without an eligible
+endpoint. OpenRouter describes ZDR as no routine storage after processing,
+subject to its documented CSAM/legal-preservation exception.
 
-The provider-side spending limit is **$1.00 total** on a dedicated OpenRouter
-key with no automatic reset. The three character-priced models account for
-about **$0.1316** as a published-rate estimate for 4,296 characters/model:
-$0.06444 for MAI, $0.06444 for Grok, and $0.00266 for Kokoro. These are not
-actual audition charges; use generation metadata where OpenRouter returns it.
-Gemini's cost depends on input and generated audio tokens, and the synthesis
-response does not guarantee usage metadata, so the key's $1.00 provider-side
-limit is the hard ceiling. Reaching it can stop the matrix early. The helper
-also fixes the request maximum at 40 and requires an execution flag plus
-confirmation of the active key cap; it cannot inspect or enforce the account's
-key setting by itself.
+At published character rates, the planned text costs approximately
+**$0.06444 for MAI**, **$0.06444 for Grok**, and **$0.00266 for Kokoro**
+(4,296 characters per model), about **$0.1316 combined**. Gemini is billed
+by input and generated audio tokens, so its actual cost is unknown until
+metadata is available. The $1 provider-side limit is the ceiling, not a cost
+estimate; reaching it may end the run early.
 
-**No provider calls have been made.** Before synthesis, an operator must
-explicitly authorize execution, create/check the dedicated $1.00 capped key,
-set `OPENROUTER_API_KEY`, confirm the cap is active, and configure the
-ZDR-only settings above. OpenRouter lists DeepInfra and Together as Kokoro
-endpoints; provider routing may fail over inside one request, and the helper
-makes no client-side retry. Only these synthetic fixture answers are sent.
-Audio is written to an OS temporary directory with random sample names. The
-listening order is randomized, but the comparison is **partially blinded**:
-the WAV extension identifies Gemini while the other candidates use MP3. The
-sheet does not include model or voice names. It contains the intended persona,
-fixture ID, exact reference text, and scores for naturalness, intelligibility,
-persona delivery, spoken fidelity, pronunciation, expressiveness, and repeat
-consistency. Follow its `order` column, open each listed file with the system
-audio player, and fill the scores. Do not inspect `manifest.json` or
-`generation-metadata.json` until scoring is complete. Then join scores to the
-manifest and metadata. Remove the temporary directory after recording the
-synthetic ratings.
+### Run and review the samples
 
-If OpenRouter returns a 404 whose bounded error message confirms that the
-requested model has no endpoints or is unavailable, the helper records that
-candidate as unavailable, skips its remaining samples, and continues to the
-next model. It does not retry. Authorization, spending-limit, format, and
-other errors stop the whole run and preserve partial results. Synthesis
-attempts can therefore be fewer than 40, but cannot exceed 40.
-
-Local, no-provider commands:
+The local checks and dry run use no provider calls:
 
 ```powershell
 pnpm test:voice-audition
 pnpm voice:audition
 ```
 
-Only after separate authorization, active key-cap confirmation, and
-ZDR-only account/guardrail configuration, use:
+After separate authorization and verification of the key cap and ZDR
+configuration, the execution command is:
 
 ```powershell
 pnpm voice:audition -- --execute --confirm-openrouter-key-limit-usd=1 --confirm-openrouter-zdr-only
 ```
 
-The helper skips only a confirmed model-specific 404 and stops on other
-failures. It does not set an approval timestamp or send audio through the
-Discord playback path.
+The helper sends requests to OpenRouter's `/api/v1/audio/speech` one at a time,
+with no client retries, a 60-second timeout per request, and a 10 MiB audio
+response limit. If a model returns a 404 specifically confirming that no
+endpoint is available, the helper skips its remaining samples and continues.
+Authorization, spending-limit, format, and other failures stop the run and
+leave partial results. OpenRouter itself may route or fail over between
+eligible upstream endpoints within one request; for Kokoro, the listed
+providers include DeepInfra and Together.
+
+Successful samples go into an OS temporary directory with anonymous
+filenames. The randomized `rating-sheet.csv` includes the persona, fixture,
+original text, and spaces to rate naturalness, intelligibility, persona
+delivery, spoken-content fidelity, pronunciation, expressiveness, and repeat
+consistency. Listen in the sheet's `order` and record scores before opening
+`manifest.json`. The test is **partially blinded**: Gemini's WAV filenames
+are distinguishable from the MP3 samples. Keep audio out of the evaluation
+notes and delete the temporary files after recording the ratings.
+
+The manifest records each model and voice, HTTP status, generation ID,
+`Content-Type`, and time spent waiting for the full synthesis response. It
+does not store provider text responses or raw audio in metadata. That timing
+is not time to first audio, Discord playback latency, or the delay after
+Workflow approval. This fixed-text audition has no approval event.
+
+After synthesis, retrieve any available provider and cost information using
+the saved generation IDs:
+
+```powershell
+pnpm voice:audition:metadata -- "<audition-directory>"
+```
+
+This separate command performs at most 40 serial `GET
+/api/v1/generation?id=...` lookups, with a 10-second timeout, 64 KiB
+response limit, and no retries. It writes only available model, provider,
+actual cost, upstream inference cost, generation time, and latency fields to
+`generation-metadata.json`; missing values stay `null`. It neither
+synthesizes new audio nor saves prompts or completions. Review this file and
+the manifest after blind scoring, then delete the temporary audio directory
+once the ratings and relevant synthetic observations are recorded.
+
+### What remains unresolved
+
+The configured Standard Voice fallback,
+`openai/gpt-4o-mini-tts-2025-12-15`, is absent from OpenRouter's live speech
+catalog and has no available model page. OpenRouter's older guide and tutorial
+still use it as an example, despite the provider's September 2026 statement
+that no OpenAI speech models were listed. Its live availability therefore
+remains **unconfirmed**; there has been no paid route check. The production
+default stays unchanged while that route is investigated, and a separate
+authorization is needed for an OpenAI control. We should not choose a
+permanent replacement based on these samples alone.
+
+The audition also does not verify the PCM contracts needed for Discord,
+persona consistency during live conversation, or interruption behavior.
+Those belong to the later Voice evaluation.
 
 Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multimodal/tts),
 [live speech catalog](https://openrouter.ai/api/v1/models?output_modalities=speech),
@@ -217,6 +221,7 @@ Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multi
 [Gemini TTS format documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/text-to-speech/migration-guide),
 [OpenRouter API-key spending limits](https://openrouter.ai/docs/api/api-reference/api-keys/create-keys),
 [OpenRouter ZDR routing](https://openrouter.ai/docs/guides/features/zdr),
+[OpenRouter Guardrails API](https://openrouter.ai/docs/api/api-reference/guardrails/update-a-guardrail),
 [OpenRouter generation metadata API](https://openrouter.ai/docs/api/api-reference/generations/get-request-%26-usage-metadata-for-a-generation),
 [pnpm argument forwarding](https://pnpm.io/cli/run).
 
