@@ -1443,6 +1443,8 @@ test('Standard emits one persona-aware progress cue after the delay before the a
             },
             async synthesize(text, options) {
                 assert.equal(options.zdr, true);
+                assert.equal(options.responseFormat, 'pcm');
+                assert.equal(options.instructions, undefined);
                 synthesized.push(text);
                 return {
                     audio: Buffer.from(

@@ -91,8 +91,10 @@ models.
 | Grok Voice TTS 1.0        | `eve` / `rex`                                                          | MP3                | Not supported; omitted | $15/M characters                        |
 | Kokoro 82M                | `af_heart` / `am_onyx`                                                 | MP3                | Not supported; omitted | $0.62/M characters                      |
 
-These voice IDs are audition choices, not bundled persona defaults. Gemini
-receives the short delivery guidance already proposed for Footnote ("Clear,
+These voice IDs were temporary audition choices, not selected bundled defaults
+at the time. PR #988 separately assigns provisional defaults for all four
+personas; only Harper and Grant received listening evaluation. Gemini receives
+the short delivery guidance already proposed for Footnote ("Clear,
 calm, grounded, conversational") and Winter ("Dry, direct, controlled,
 understated"). The other models ignore OpenRouter's natural-language
 `instructions` field, so the helper leaves it out. Grok's inline speech tags
@@ -171,14 +173,15 @@ no per-sample written notes, and its repeat-consistency score is blank for all
 20 samples, so that qualitative observation cannot be attributed to a
 particular voice or summarized as a consistency score.
 
-**Provisional decision:** use MAI-Voice-2.1-Flash as the Standard TTS model
-for Footnote, Danny, Myuri, and Winter. This is a practical starting point
-based on the reported listening quality, faster measured synthesis, modest
-cost, and available presets. The audition rated only Harper for Footnote and
-Grant for Winter; it did not select individual MAI voices for Danny or Myuri,
-or finalize any persona's voice. MAI's OpenRouter route ignores natural-
-language delivery instructions, so fine-grained presentation control remains
-limited. This is not a production integration or compatibility decision.
+**PR #988's provisional defaults:** use MAI-Voice-2.1-Flash for Standard TTS,
+with Harper for Footnote, Grant for Danny, Iris for Myuri, and Olivia for
+Winter. The historical audition listened to Harper with Footnote and Grant
+with Winter; only those two voices received listening evaluation. Grant's
+current Danny assignment, and the Iris and Olivia assignments, were not
+evaluated. These are provisional starting points, not validated persona-fit
+findings. MAI's OpenRouter route ignores natural-language delivery
+instructions, so fine-grained presentation control remains limited. This is
+not a production integration or compatibility decision.
 
 All audio samples, the randomized rating sheet, manifest, and generation
 metadata remain local and uncommitted.
@@ -274,9 +277,10 @@ existing 24-to-48 kHz resampler. Synthetic coverage verifies those boundaries
 and the sample conversion. No production configuration was changed, and no
 paid MAI request or real Discord call was made.
 
-The four defaults are provisional: only Footnote/Harper and
-Winter/Grant were heard in the fixed-text audition. Danny/Grant is a
-stable-male hypothesis; Myuri/Iris and Winter/Olivia are untested, with Olivia
+Only Harper and Grant received listening evaluation: Harper was heard with
+Footnote and Grant with Winter. PR #988 provisionally assigns Footnote/Harper,
+Danny/Grant, Myuri/Iris, and Winter/Olivia. Grant's assignment to Danny was
+not evaluated in that persona; Iris and Olivia have not been heard. Olivia was
 chosen as an expressive-female direction. MAI ignores natural-language
 delivery instructions, so the stored guidance remains metadata only.
 
