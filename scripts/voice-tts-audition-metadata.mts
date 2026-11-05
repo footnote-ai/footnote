@@ -14,6 +14,7 @@ import {
     MAX_GENERATION_METADATA_BYTES,
     MAX_GENERATION_METADATA_LOOKUPS,
     readBoundedJsonResponse,
+    stripScriptArgumentSeparator,
     type GenerationLookupTarget,
 } from './voice-tts-audition-core.js';
 
@@ -138,11 +139,12 @@ const readTargets = async (
 };
 
 const run = async (args: readonly string[]): Promise<void> => {
-    if (args.length !== 1)
+    const scriptArgs = stripScriptArgumentSeparator(args);
+    if (scriptArgs.length !== 1)
         throw new TypeError(
             'Pass exactly one existing audition directory containing manifest.json.'
         );
-    const directory = resolve(args[0]!);
+    const directory = resolve(scriptArgs[0]!);
     const targets = await readTargets(directory);
     if (targets.length > MAX_GENERATION_METADATA_LOOKUPS)
         throw new TypeError(

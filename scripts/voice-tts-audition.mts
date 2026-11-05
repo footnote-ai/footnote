@@ -12,6 +12,8 @@ import { join } from 'node:path';
 import { createOpenRouterVoiceService } from '../packages/backend/src/services/openRouterVoice.js';
 import {
     AUDITION_CANDIDATES,
+    AUDITION_EXECUTION_COMMAND,
+    AUDITION_METADATA_COMMAND,
     createAuditionMatrix,
     isModelAvailabilityFailure,
     MAX_AUDITION_REQUESTS,
@@ -21,6 +23,7 @@ import {
     randomizedOrder,
     REQUEST_TIMEOUT_MS,
     SPEND_LIMIT_USD,
+    stripScriptArgumentSeparator,
     type AuditionCase,
     type AuditionRequest,
 } from './voice-tts-audition-core.js';
@@ -208,10 +211,8 @@ const printPlan = (matrix: readonly AuditionRequest[]): void => {
                     responseFormat: candidate.responseFormat,
                     deliveryInstructions: candidate.supportsInstructions,
                 })),
-                executionCommand:
-                    'pnpm voice:audition -- --execute --confirm-openrouter-key-limit-usd=1 --confirm-openrouter-zdr-only',
-                metadataCommand:
-                    'pnpm voice:audition:metadata -- "<audition-directory>"',
+                executionCommand: AUDITION_EXECUTION_COMMAND,
+                metadataCommand: AUDITION_METADATA_COMMAND,
             },
             null,
             2
@@ -507,7 +508,7 @@ const runAudition = async (
 
 const main = async (args: readonly string[]): Promise<void> => {
     const matrix = createAuditionMatrix(await readFixtureCases());
-    const options = parseAuditionArguments(args);
+    const options = parseAuditionArguments(stripScriptArgumentSeparator(args));
     if (!options.execute) {
         printPlan(matrix);
         return;

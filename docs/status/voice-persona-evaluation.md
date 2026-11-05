@@ -16,9 +16,11 @@ the default answer limits and recovery budget.
 Synthetic tests check which persona reaches each path, along with approval,
 speech handoff, corrections, interruptions and cleanup. They cannot tell us
 whether the model actually follows that persona or how either mode sounds in
-Discord. No paid-provider or listening tests have been run for this issue.
+Discord. The broader Live and Discord evaluation remains incomplete. The
+fixed-text Standard TTS audition below is complete, but does not test playback
+or live persona behavior.
 
-The listening comparison should look closely at four areas:
+The remaining Live and Discord listening comparison should look closely at four areas:
 
 - **Persona:** Do Footnote, Danny, Myuri and Winter sound distinct and recognizable, especially when GPT-Live speaks without delegating?
 - **Reviewed answers:** Standard sends approved text to TTS. GPT-Live can paraphrase approved commentary or answer on its own, and listeners currently have no reliable indication of which happened.
@@ -56,9 +58,9 @@ The full plan allows up to **12 GPT-Live calls (52 minutes)**, **54 Whisper tran
 
 ### Cost and access
 
-No paid testing is approved yet. The earlier estimate of **$6.54–$15.43** covers Live, Whisper, TTS text input and assumed Workflow charges. It excludes TTS audio output and depends on the selected routes. The proposed **$20 budget** is a planning figure; Footnote doesn't enforce a total-dollar cap.
+The fixed-text Standard TTS audition below used a dedicated OpenRouter key with a verified $1 lifetime cap and reported $0.06710352 in spend. No paid Live, Whisper, or OpenAI control test is included here. The earlier estimate of **$6.54–$15.43** covers those future Live, Whisper, TTS text-input, and assumed Workflow charges. It excludes TTS audio output and depends on the selected routes. The proposed **$20 budget** is a planning figure; Footnote doesn't enforce a total-dollar cap.
 
-Before any provider calls, check the actual model and route prices, search costs, retry behavior, provider retention settings and available spending controls. The relevant published rates are [GPT-Live](https://developers.openai.com/api/docs/models/gpt-live-1), [Whisper](https://openrouter.ai/openai/whisper-1/pricing) and [OpenAI TTS](https://developers.openai.com/api/docs/models/gpt-4o-mini-tts). The current TTS route may be overridden by the configured profile. If we cannot limit spending and execution counts before dispatch, keep the evaluation on hold.
+Before any further provider calls, check the actual model and route prices, search costs, retry behavior, provider retention settings and available spending controls. The relevant published rates are [GPT-Live](https://developers.openai.com/api/docs/models/gpt-live-1), [Whisper](https://openrouter.ai/openai/whisper-1/pricing) and [OpenAI TTS](https://developers.openai.com/api/docs/models/gpt-4o-mini-tts). The current TTS route may be overridden by the configured profile. If we cannot limit spending and execution counts before dispatch, keep the evaluation on hold.
 
 Testing will need the configured OpenAI, OpenRouter, Workflow and search credentials, an authorized operator session, and access to the private Discord test channel. Load credentials privately after approval. Do not log or commit them.
 
@@ -150,9 +152,35 @@ all 20 records. It reported `$0.067104` total generation cost and `$0.00`
 upstream inference cost. The key's recorded spend was `$0.06710352`; the
 difference is rounding. The two 404s had no generation IDs or cost metadata.
 
-All 20 audio files and the randomized 20-row rating sheet remain local and
-uncommitted. The subjective rating cells are blank; no listening assessment
-was performed, so there is no voice-default recommendation yet.
+The operator rated all 20 samples on naturalness, intelligibility, persona
+delivery, spoken-content fidelity, pronunciation, and expressiveness. The
+table gives the mean for each five-sample voice set, calculated from the local
+randomized rating sheet; scores are on a 1–5 scale.
+
+| Model / voice                          | Persona  | Naturalness | Intelligibility | Persona delivery | Text fidelity | Pronunciation | Expressiveness |
+| -------------------------------------- | -------- | ----------: | --------------: | ---------------: | ------------: | ------------: | -------------: |
+| MAI `en-US-Harper:MAI-Voice-2.1-Flash` | Footnote |         3.2 |             4.2 |              3.2 |           4.0 |           4.0 |            4.0 |
+| MAI `en-US-Grant:MAI-Voice-2.1-Flash`  | Winter   |         2.6 |             4.2 |              3.2 |           4.0 |           3.8 |            2.6 |
+| Kokoro `af_heart`                      | Footnote |         2.2 |             4.0 |              3.2 |           4.0 |           3.8 |            3.0 |
+| Kokoro `am_onyx`                       | Winter   |         2.2 |             3.0 |              2.2 |           3.0 |           3.0 |            2.2 |
+
+The operator reported that most samples were acceptable, one was noticeably
+weaker, and the voices varied in expressiveness and consistency. The sheet has
+no per-sample written notes, and its repeat-consistency score is blank for all
+20 samples, so that qualitative observation cannot be attributed to a
+particular voice or summarized as a consistency score.
+
+**Provisional decision:** use MAI-Voice-2.1-Flash as the Standard TTS model
+for Footnote, Danny, Myuri, and Winter. This is a practical starting point
+based on the reported listening quality, faster measured synthesis, modest
+cost, and available presets. The audition rated only Harper for Footnote and
+Grant for Winter; it did not select individual MAI voices for Danny or Myuri,
+or finalize any persona's voice. MAI's OpenRouter route ignores natural-
+language delivery instructions, so fine-grained presentation control remains
+limited. This is not a production integration or compatibility decision.
+
+All audio samples, the randomized rating sheet, manifest, and generation
+metadata remain local and uncommitted.
 
 Every synthesis request includes `provider.zdr: true`. OpenRouter applies
 that setting alongside the account or guardrail configuration; it does not
@@ -187,12 +215,12 @@ pnpm test:voice-audition
 pnpm voice:audition
 ```
 
-Verify the key inherited by the command shell before running; a stale
-process-scoped variable may differ from the Windows user-scoped value. After
-the $1 lifetime cap is confirmed, the authorized execution command is:
+Before a future execution, verify the key inherited by the command shell; a
+stale process-scoped variable may differ from the Windows user-scoped value.
+The prior run used a verified $1 lifetime cap. Its execution command was:
 
 ```powershell
-pnpm voice:audition -- --execute --confirm-openrouter-key-limit-usd=1 --confirm-openrouter-zdr-only
+pnpm voice:audition --execute --confirm-openrouter-key-limit-usd=1 --confirm-openrouter-zdr-only
 ```
 
 The helper sends requests to OpenRouter's `/api/v1/audio/speech` one at a time,
@@ -223,7 +251,7 @@ After synthesis, retrieve any available provider and cost information using
 the saved generation IDs:
 
 ```powershell
-pnpm voice:audition:metadata -- "<audition-directory>"
+pnpm voice:audition:metadata "<audition-directory>"
 ```
 
 This separate command performs at most 40 serial `GET
@@ -232,20 +260,19 @@ response limit, and no retries. It writes only available model, provider,
 actual cost, upstream inference cost, generation time, and latency fields to
 `generation-metadata.json`; missing values stay `null`. It neither
 synthesizes new audio nor saves prompts or completions. Review this file and
-the manifest after blind scoring, then delete the temporary audio directory
-once the ratings and relevant synthetic observations are recorded.
+the manifest after blind scoring. Keep audio local and uncommitted for
+listening; do not add samples or raw provider responses to the repository.
 
 ### What remains unresolved
 
 The configured Standard Voice fallback,
-`openai/gpt-4o-mini-tts-2025-12-15`, is absent from OpenRouter's live speech
-catalog and has no available model page. OpenRouter's older guide and tutorial
-still use it as an example, despite the provider's September 2026 statement
-that no OpenAI speech models were listed. Its live availability therefore
-remains **unconfirmed**; there has been no paid route check. The production
-default stays unchanged while that route is investigated, and a separate
-authorization is needed for an OpenAI control. We should not choose a
-permanent replacement based on these samples alone.
+`openai/gpt-4o-mini-tts-2025-12-15`, remains absent from OpenRouter's live
+speech catalog and its live availability is unconfirmed; no paid route check
+or OpenAI control was run. The provisional MAI decision does not change
+production defaults. MAI returned MP3, and this audition did not verify a PCM
+contract or a decoding path for Discord. Individual voices for all four
+personas, playback, cancellation, fallback, and provenance still need testing
+under #534.
 
 The audition also does not verify the PCM contracts needed for Discord,
 persona consistency during live conversation, or interruption behavior.
@@ -267,11 +294,11 @@ Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multi
 
 ## What comes next
 
-Listen to the 20 successful samples in `rating-sheet.csv` order and fill its
-subjective columns before opening `manifest.json` or
-`generation-metadata.json`. Keep the audio local and uncommitted. Use the
-ratings to compare MAI and Kokoro; request success alone is not evidence of
-voice quality. Gemini and Grok were unavailable on this route, and Discord
-playback, live persona consistency, interruption behavior, and the OpenAI
-control remain untested. Keep PR #987 open and production defaults unchanged
-until those evaluations are complete.
+Under #534, select provisional MAI voice IDs for all four personas, connect
+them to the existing speech-presentation configuration, verify an MP3-to-PCM
+playback path or supported PCM output, then test synthesis, playback,
+cancellation, fallback, and provenance in a controlled Discord environment.
+Keep Live on GPT-Live. #975 can use these fixed-text results as a baseline for
+its feasibility work on alternatives or speech transformation; no additional
+provider or Live audio pipeline was evaluated here. PR #987 remains limited
+to the audition harness and its findings.

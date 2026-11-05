@@ -96,6 +96,13 @@ export const SPEND_LIMIT_USD = 1;
 export const MAX_GENERATION_METADATA_LOOKUPS = 40;
 export const MAX_GENERATION_METADATA_BYTES = 64 * 1024;
 export const GENERATION_METADATA_TIMEOUT_MS = 10_000;
+export const AUDITION_EXECUTION_COMMAND = `pnpm voice:audition --execute --confirm-openrouter-key-limit-usd=${SPEND_LIMIT_USD} --confirm-openrouter-zdr-only`;
+export const AUDITION_METADATA_COMMAND =
+    'pnpm voice:audition:metadata "<audition-directory>"';
+
+export const stripScriptArgumentSeparator = (
+    args: readonly string[]
+): readonly string[] => (args[0] === '--' ? args.slice(1) : args);
 
 export const readBoundedJsonResponse = async (
     response: Response,

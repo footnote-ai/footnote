@@ -11,6 +11,8 @@ import test from 'node:test';
 import { resolve } from 'node:path';
 import {
     AUDITION_CANDIDATES,
+    AUDITION_EXECUTION_COMMAND,
+    AUDITION_METADATA_COMMAND,
     createAuditionMatrix,
     generationLookupTargets,
     generationMetadataFromResponse,
@@ -20,6 +22,8 @@ import {
     pcm16MonoToWav,
     randomizedOrder,
     readBoundedJsonResponse,
+    SPEND_LIMIT_USD,
+    stripScriptArgumentSeparator,
     type AuditionCase,
 } from './voice-tts-audition-core.js';
 
@@ -137,6 +141,31 @@ test('paid execution requires explicit authorization, a $1 key cap, and ZDR-only
         ]),
         { execute: true, confirmSpendLimit: true, confirmZdrOnly: true }
     );
+});
+
+test('pnpm shorthand commands work without a separator and accept one forwarded by callers', () => {
+    assert.equal(
+        AUDITION_EXECUTION_COMMAND,
+        `pnpm voice:audition --execute --confirm-openrouter-key-limit-usd=${SPEND_LIMIT_USD} --confirm-openrouter-zdr-only`
+    );
+    assert.equal(
+        AUDITION_METADATA_COMMAND,
+        'pnpm voice:audition:metadata "<audition-directory>"'
+    );
+    assert.deepEqual(
+        parseAuditionArguments(
+            stripScriptArgumentSeparator([
+                '--',
+                '--execute',
+                `--confirm-openrouter-key-limit-usd=${SPEND_LIMIT_USD}`,
+                '--confirm-openrouter-zdr-only',
+            ])
+        ),
+        { execute: true, confirmSpendLimit: true, confirmZdrOnly: true }
+    );
+    assert.deepEqual(stripScriptArgumentSeparator(['--', 'C:\\audition']), [
+        'C:\\audition',
+    ]);
 });
 
 test('only confirmed model-specific 404 routing failures are skippable', () => {
