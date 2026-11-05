@@ -298,11 +298,15 @@ Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multi
 ## What comes next
 
 The next step under #534 is a small canary in a private Discord server,
-with a consenting caller and listener. Make one Standard Voice call for
-each provisional persona and voice: Footnote/Harper, Danny/Grant,
-Myuri/Iris, and Winter/Olivia. Check that the caller reaches Workflow,
-that TTS receives only its approved answer, and that Discord plays the
-audio. Compare what was heard with the approved text. Record the effective
+with one consenting human in the voice channel. The caller may also be the
+listener; keep exactly one human in the channel. Make one Standard Voice call
+for each provisional persona and voice: Footnote/Harper, Danny/Grant,
+Myuri/Iris, and Winter/Olivia. Check that the caller reaches Workflow. For
+the approved answer, verify that TTS receives only the approved Workflow text.
+If a supported progress cue is emitted while Workflow is pending, record it
+separately; compare approved text only with the answer synthesis. Confirm that
+Discord plays the audio. Compare what was heard with the approved text. Record
+the effective
 provider, model and voice, time from approval to first audible speech,
 playback outcome, listener notes, and cost where generation metadata is
 available. Keep audio and transcripts out of the evaluation record.
