@@ -1,9 +1,9 @@
 # Footnote Documentation
 
-AI can give you a convincing answer without showing much of what went into
-it. Footnote is an attempt to make that easier to question. Its traces show
-what's available about the sources, tools, and steps behind a response, so you
-can see what happened and where there may be gaps.
+AI answers can sound convincing even when you can't tell what they relied on.
+Footnote tries to make that easier to question. Its traces bring together the
+available sources, tools, and steps behind a response. They give you a place
+to start checking an answer, though they can't prove it's right.
 
 If you want to see Footnote before reading about it, [open the web
 app](https://ai.jordanmakes.dev). The homepage has prepared examples that don't
@@ -12,9 +12,10 @@ call a model; live chat is separate. To run your own instance, start with the
 
 ## Find your way around
 
-[Workflow](architecture/workflow.md) explains how a request moves from
-planning through review. The [philosophy](Philosophy.md) explains why we're
-interested in provenance and keeping people in control.
+If you want to understand how a particular answer was made, start with
+[Workflow](architecture/workflow.md). It explains how requests move through
+planning, context, and review. The [philosophy](Philosophy.md) explains why
+provenance and user control matter to the project.
 
 If you use Discord, the [Voice guide](architecture/realtime-voice.md) explains
 the differences between Standard and Live, including why independently spoken
