@@ -109,11 +109,23 @@ Unknown PCM must not be treated as 24 kHz audio.
 
 ### Authorization, privacy, and cost
 
-**No paid requests have been made or authorized.** Before running the
-audition, explicitly approve it and verify a dedicated OpenRouter key with a
-**$1 lifetime spending limit and no reset**. Set `OPENROUTER_API_KEY`
-privately. The script requires confirmation flags, but cannot read or enforce
-the key's limit or account privacy settings itself.
+**Preflight on 2026-11-05: no paid requests have been made.** The authorized
+up-to-$1 audition requires a dedicated OpenRouter key with a lifetime cap and
+no reset. The authenticated `GET /api/v1/key` response for the available key
+reported no key limit or effective budget, so it does not meet that condition.
+The privacy page redirected to sign-in, and no management key was available to
+read the Guardrail settings. ZDR-only routing for Google, SpaceXAI, and All
+other models, plus disabled Safety Retention for Google and All other models,
+could not be verified. No synthesis or metadata requests were made: 0 of 40
+requests and 0 metadata lookups, with $0.00 spend. No candidates were
+attempted, so availability, synthesis duration, and provider-reported billing
+and timing remain unknown; no listening was done. There is not enough evidence
+to recommend a new default. Resume only after the operator provides a
+dedicated key whose metadata confirms a $1 limit with no reset, and verifies
+`enforce_zdr_google`, `enforce_zdr_xai`, and `enforce_zdr_other` are true while
+`allow_safety_retention_google` and `allow_safety_retention_other` are false.
+The helper's confirmation flags are attestations; they do not verify these
+controls.
 
 Every synthesis request includes `provider.zdr: true`. OpenRouter applies
 that setting alongside the account or guardrail configuration; it does not
