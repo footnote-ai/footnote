@@ -211,10 +211,12 @@ audible speech, playback outcome, available cost, and short listening notes.
 Mark anything you couldn't observe. Hear all four personas before deciding
 whether to change their voices.
 
-Limit this first test to six MAI synthesis requests in total: four initial
-answers and up to two replacement answers for the interruption checks.
-Progress cues count toward the same limit, so skip a later check if a cue
-uses up the remaining allowance. Do not retry requests or exceed six.
+Start with four persona answers and two interruption checks. Progress cues and
+replacement answers also incur synthesis requests. The earlier six-request
+ceiling is no longer a hard stop: the operator will monitor OpenRouter costs
+manually during the live Discord test. Keep the first pass short, avoid
+unnecessary retries, and stop to investigate unexpected charges or repeated
+synthesis failures.
 
 ### Choosing other models later
 
@@ -365,19 +367,21 @@ listening; do not add samples or raw provider responses to the repository.
   Synthetic tests check response type, size, and even-byte boundaries;
   they cannot confirm the actual provider's sample rate or channel count.
   The audition requested MP3, so real PCM output remains untested.
-- Before a paid request, restore and recheck the previously verified Windows
-  user-scoped key with `GET /api/v1/key`: its cap must be $1 or less, its reset
-  must be null, and its remaining balance must cover the planned requests. The
-  current environment did not expose that key; do not use the uncapped
-  inherited process key.
-- For Discord, verify the cap on the backend process that will make the MAI
-  request. A Windows user-scoped key does not automatically cap a remote bot's
-  backend; do not use an uncapped backend key.
-- Use an existing Discord bot instance confirmed to run the code merged in
-  #989 in a private voice channel with one consenting participant. A separate
-  deployment is not required, and no production configuration change is
-  authorized by this plan. This checkout had no Discord session or credentials
-  for the call.
+- **Updated operator decision (2026-11-06):** A $1 key cap is no longer
+  required for this manual Discord test. The operator will monitor OpenRouter
+  spending directly. Confirm that the Fly backend has the intended
+  OpenRouter credential without exposing its value; check available credit,
+  request volume, and actual charges where visible. No automated unlimited
+  load, retry loop, or provider stress testing is authorized.
+- Deploy the #989-merged Standard Voice runtime to the existing Fly app using
+  the repository's deployment workflow. Verify the target revision, backend
+  health, Discord bot readiness, and a rollback path. Avoid changing unrelated
+  production settings. The draft #990 can remain open while the operator
+  tests and records findings.
+- The operator will call an existing bot in a private Discord voice channel
+  with one consenting human (the caller can also be the listener). The
+  November 6 preflight had no authenticated Discord session and did not run
+  a call. The operator will provide listening results after deployment.
 - Verify account-side ZDR and retention settings. Speech requests set
   `provider.zdr: true`, but the account settings remain operator-attested.
 
