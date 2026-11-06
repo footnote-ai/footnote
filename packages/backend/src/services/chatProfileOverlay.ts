@@ -400,8 +400,25 @@ const resolveConfiguredDiscordBotProfile = (
         projectRoot: runtimeConfig.runtime.projectRoot,
         warn: () => undefined,
     });
-    profile.speechPresentation =
-        selected.speechPresentation ?? fallback.speechPresentation;
+    const selectedSpeech = selected.speechPresentation;
+    const fallbackSpeech = fallback.speechPresentation;
+    profile.speechPresentation = selectedSpeech
+        ? {
+              ...selectedSpeech,
+              ...(selectedSpeech.ttsModel === undefined &&
+                  fallbackSpeech?.ttsModel !== undefined && {
+                      ttsModel: fallbackSpeech.ttsModel,
+                  }),
+              ...(selectedSpeech.ttsVoice === undefined &&
+                  fallbackSpeech?.ttsVoice !== undefined && {
+                      ttsVoice: fallbackSpeech.ttsVoice,
+                  }),
+              ...(selectedSpeech.ttsDelivery === undefined &&
+                  fallbackSpeech?.ttsDelivery !== undefined && {
+                      ttsDelivery: fallbackSpeech.ttsDelivery,
+                  }),
+          }
+        : fallbackSpeech;
     // Overlay precedence applies within an identity, never across different bots.
     if (
         selected.id === fallback.id &&
@@ -438,11 +455,22 @@ export const resolveVoicePersona = (
         mentionAliases: [...effective.mentionAliases],
         promptOverlay: { ...effective.promptOverlay },
         personaExpressionStrength: effective.personaExpressionStrength,
-        ...(effective.speechPresentation?.progressPhrases && {
+        ...(effective.speechPresentation && {
             speechPresentation: {
-                progressPhrases: [
-                    ...effective.speechPresentation.progressPhrases,
-                ],
+                ...(effective.speechPresentation.ttsModel !== undefined && {
+                    ttsModel: effective.speechPresentation.ttsModel,
+                }),
+                ...(effective.speechPresentation.ttsVoice !== undefined && {
+                    ttsVoice: effective.speechPresentation.ttsVoice,
+                }),
+                ...(effective.speechPresentation.ttsDelivery !== undefined && {
+                    ttsDelivery: effective.speechPresentation.ttsDelivery,
+                }),
+                ...(effective.speechPresentation.progressPhrases && {
+                    progressPhrases: [
+                        ...effective.speechPresentation.progressPhrases,
+                    ],
+                }),
             },
         }),
     };
@@ -458,6 +486,8 @@ export const resolveVoicePersona = (
     );
     Object.freeze(profile.mentionAliases);
     Object.freeze(profile.promptOverlay);
+    Object.freeze(profile.speechPresentation?.progressPhrases);
+    Object.freeze(profile.speechPresentation);
     Object.freeze(profile);
     Object.freeze(expression);
     let overlaySelection: ResolvedVoicePersona['overlaySelection'];

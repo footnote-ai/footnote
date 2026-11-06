@@ -155,3 +155,7 @@ chat-workflow:
 #       overlay-path: ""
 #       persona-expression-strength: "balanced"
 #       mention-aliases: []
+#       speech-presentation:
+#         tts-model: "microsoft/mai-voice-2.1-flash"
+#         tts-voice: "en-US-Harper:MAI-Voice-2.1-Flash"
+#         tts-delivery: "Clear, calm, grounded, conversational" # MAI ignores this

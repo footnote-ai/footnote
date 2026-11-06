@@ -69,6 +69,22 @@ test('deployment fallback is retained when no profile override exists', () => {
     assert.equal(selection.delivery, null);
 });
 
+test('bundled persona voice defaults retain their selection source', () => {
+    const selection = resolveSpeechSelection({
+        profile: { ...profile, speechPresentation: {} },
+        provider: 'openrouter',
+        modality: 'tts',
+        fallback: {
+            model: 'microsoft/mai-voice-2.1-flash',
+            voice: 'en-US-Harper:MAI-Voice-2.1-Flash',
+            voiceSource: 'bundled_persona_default',
+        },
+    });
+
+    assert.equal(selection.selectionSource.model, 'deployment_fallback');
+    assert.equal(selection.selectionSource.voice, 'bundled_persona_default');
+});
+
 test('voice progress phrase selection follows the pinned persona and expression strength', () => {
     const selections = [
         {

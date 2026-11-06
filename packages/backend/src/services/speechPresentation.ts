@@ -11,7 +11,10 @@ import type { BotProfileConfig } from '../config/profile.js';
 
 export type SpeechModality = 'tts' | 'realtime';
 export type SpeechSelectionSource =
-    'request_or_session' | 'operator_profile' | 'deployment_fallback';
+    | 'request_or_session'
+    | 'operator_profile'
+    | 'bundled_persona_default'
+    | 'deployment_fallback';
 
 export type SpeechSelection = {
     profileId: string;
@@ -45,7 +48,12 @@ type ResolveSpeechSelectionInput = {
     provider: string;
     modality: SpeechModality;
     request?: { model?: string; voice?: string; delivery?: string };
-    fallback: { model: string; voice: string };
+    fallback: {
+        model: string;
+        voice: string;
+        modelSource?: SpeechSelectionSource;
+        voiceSource?: SpeechSelectionSource;
+    };
     ignoreOperatorModel?: boolean;
     ignoreOperatorVoice?: boolean;
     fallbackReason?: string | null;
@@ -153,7 +161,8 @@ export const selectVoiceProgressPhrase = ({
 const choose = (
     requested: string | undefined,
     operator: string | undefined,
-    fallback: string
+    fallback: string,
+    fallbackSource: SpeechSelectionSource = 'deployment_fallback'
 ): { value: string; source: SpeechSelectionSource } => {
     if (requested?.trim()) {
         return { value: requested.trim(), source: 'request_or_session' };
@@ -161,7 +170,7 @@ const choose = (
     if (operator?.trim()) {
         return { value: operator.trim(), source: 'operator_profile' };
     }
-    return { value: fallback, source: 'deployment_fallback' };
+    return { value: fallback, source: fallbackSource };
 };
 
 /** Resolve explicit settings before profile overrides and deployment fallbacks. */
@@ -183,7 +192,8 @@ export const resolveSpeechSelection = ({
             : modality === 'tts'
               ? operator.ttsModel
               : operator.realtimeModel,
-        fallback.model
+        fallback.model,
+        fallback.modelSource
     );
     const voice = choose(
         request?.voice,
@@ -192,7 +202,8 @@ export const resolveSpeechSelection = ({
             : modality === 'tts'
               ? operator.ttsVoice
               : operator.realtimeVoice,
-        fallback.voice
+        fallback.voice,
+        fallback.voiceSource
     );
     const delivery = choose(
         request?.delivery,

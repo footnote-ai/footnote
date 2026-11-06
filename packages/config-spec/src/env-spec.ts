@@ -904,11 +904,11 @@ export const envEntries = [
         [
             [
                 'BOT_PROFILE_TTS_MODEL',
-                'OpenAI TTS model override for this profile.',
+                'Text-to-speech model override for this profile.',
             ],
             [
                 'BOT_PROFILE_TTS_VOICE',
-                'OpenAI TTS voice override for this profile.',
+                'Text-to-speech voice override for this profile.',
             ],
             [
                 'BOT_PROFILE_TTS_DELIVERY',

@@ -66,8 +66,24 @@ const SESSION_SETUP_TIMEOUT_MS = 15_000;
 const STANDARD_PROGRESS_CUE_DELAY_MS = 2_000;
 const LIVE_TRANSCRIPT_SETTLE_MS = 500;
 const LIVE_CLOSE_GRACE_MS = 2_500;
-const STANDARD_TTS_MODEL = 'openai/gpt-4o-mini-tts-2025-12-15';
-const STANDARD_TTS_VOICE = 'alloy';
+const STANDARD_TTS_MODEL = 'microsoft/mai-voice-2.1-flash';
+const STANDARD_TTS_VOICE = 'en-US-Harper:MAI-Voice-2.1-Flash';
+const STANDARD_TTS_PERSONA_VOICES: Readonly<Record<string, string>> = {
+    footnote: 'en-US-Harper:MAI-Voice-2.1-Flash',
+    danny: 'en-US-Grant:MAI-Voice-2.1-Flash',
+    myuri: 'en-US-Iris:MAI-Voice-2.1-Flash',
+    winter: 'en-US-Olivia:MAI-Voice-2.1-Flash',
+};
+const isMaiVoice = (voice: string): boolean =>
+    voice.endsWith(':MAI-Voice-2.1-Flash');
+const speechSynthesisOptions = (selection: SpeechSelectionMetadata) => ({
+    model: selection.model,
+    voice: selection.voice,
+    instructions:
+        selection.model === STANDARD_TTS_MODEL ? undefined : selection.delivery,
+    responseFormat: 'pcm' as const,
+    zdr: true,
+});
 const MAX_STANDARD_UTTERANCE_BYTES = 2_880_000;
 let activeVoiceCall: symbol | undefined;
 
@@ -281,11 +297,7 @@ export const createInternalVoiceRealtimeHandler = ({
                 void openRouterVoiceService
                     .synthesize(
                         phrase,
-                        {
-                            model: cueSpeechSelection.model,
-                            voice: cueSpeechSelection.voice,
-                            instructions: cueSpeechSelection.delivery,
-                        },
+                        speechSynthesisOptions(cueSpeechSelection),
                         controller.signal
                     )
                     .then((result) => {
@@ -427,6 +439,32 @@ export const createInternalVoiceRealtimeHandler = ({
             });
         };
 
+        const reportSynthesisFailure = (
+            state: RealtimeConversationState,
+            deliveryId: string,
+            controller: AbortController,
+            synthesisStartedAt: number,
+            selection: SpeechSelectionMetadata,
+            error: unknown
+        ): void => {
+            if (controller.signal.aborted || closed) return;
+            state.reportPlayback(deliveryId, 'failed');
+            sendServerEvent(ws, {
+                type: 'error',
+                message: 'Approved answer speech could not be generated.',
+                code: 'speech_synthesis_failed',
+            });
+            realtimeLogger.warn('OpenRouter voice synthesis failed.', {
+                provider: selection.provider,
+                model: selection.model,
+                voice: selection.voice,
+                selectionSource: selection.selectionSource,
+                responseFormat: 'pcm',
+                synthesisMs: Date.now() - synthesisStartedAt,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        };
+
         const synthesizeApprovedDelivery = async (
             handle: RealtimeFreshnessHandle
         ): Promise<void> => {
@@ -465,14 +503,16 @@ export const createInternalVoiceRealtimeHandler = ({
             synthesisController = controller;
             currentDeliveryId = delivery.deliveryId;
             currentDeliveryText = delivery.text;
+            const synthesisStartedAt = Date.now();
             try {
+                if (
+                    speechSelection.model === STANDARD_TTS_MODEL &&
+                    !isMaiVoice(speechSelection.voice)
+                )
+                    throw new Error('MAI requires a MAI-specific voice ID.');
                 const result = await openRouterVoiceService.synthesize(
                     delivery.text,
-                    {
-                        model: speechSelection.model,
-                        voice: speechSelection.voice,
-                        instructions: speechSelection.delivery,
-                    },
+                    speechSynthesisOptions(speechSelection),
                     controller.signal
                 );
                 if (
@@ -483,27 +523,30 @@ export const createInternalVoiceRealtimeHandler = ({
                     state.deliveryStatus()?.status !== 'handed_off'
                 )
                     return;
+                realtimeLogger.info('Standard Voice TTS synthesis complete.', {
+                    provider: speechSelection.provider,
+                    model: speechSelection.model,
+                    voice: speechSelection.voice,
+                    selectionSource: speechSelection.selectionSource,
+                    generationId: result.generationId,
+                    responseFormat: 'pcm',
+                    audioBytes: result.audio.byteLength,
+                    synthesisMs: Date.now() - synthesisStartedAt,
+                });
                 sendServerEvent(ws, {
                     type: 'output_audio.delta',
                     audioBase64: result.audio.toString('base64'),
                     deliveryId: delivery.deliveryId,
                 });
             } catch (error) {
-                if (!controller.signal.aborted && !closed) {
-                    state.reportPlayback(delivery.deliveryId, 'failed');
-                    sendServerEvent(ws, {
-                        type: 'error',
-                        message:
-                            'Approved answer speech could not be generated.',
-                        code: 'speech_synthesis_failed',
-                    });
-                    realtimeLogger.warn('OpenRouter voice synthesis failed.', {
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                    });
-                }
+                reportSynthesisFailure(
+                    state,
+                    delivery.deliveryId,
+                    controller,
+                    synthesisStartedAt,
+                    speechSelection,
+                    error
+                );
             } finally {
                 if (synthesisController === controller)
                     synthesisController = undefined;
@@ -1613,15 +1656,66 @@ export const createInternalVoiceRealtimeHandler = ({
                     personaExpressionSource: persona.expression.source,
                 });
                 if (mode === 'standard') {
+                    const bundledVoice =
+                        STANDARD_TTS_PERSONA_VOICES[
+                            persona.profile.id.toLowerCase()
+                        ];
                     speechSelection = resolveSpeechSelection({
-                        profile,
+                        profile: persona.profile,
                         provider: 'openrouter',
                         modality: 'tts',
                         fallback: {
                             model: STANDARD_TTS_MODEL,
-                            voice: STANDARD_TTS_VOICE,
+                            voice: bundledVoice ?? STANDARD_TTS_VOICE,
+                            ...(bundledVoice && {
+                                voiceSource: 'bundled_persona_default',
+                            }),
                         },
                     });
+                    if (
+                        speechSelection.model !== STANDARD_TTS_MODEL &&
+                        (speechSelection.selectionSource.voice ===
+                            'bundled_persona_default' ||
+                            isMaiVoice(speechSelection.voice))
+                    ) {
+                        speechSelection = resolveSpeechSelection({
+                            profile: persona.profile,
+                            provider: 'openrouter',
+                            modality: 'tts',
+                            ignoreOperatorModel: true,
+                            fallbackReason:
+                                'A custom Standard TTS model needs a matching configured voice; using the MAI model and persona voice.',
+                            fallback: {
+                                model: STANDARD_TTS_MODEL,
+                                voice: bundledVoice ?? STANDARD_TTS_VOICE,
+                                ...(bundledVoice && {
+                                    voiceSource: 'bundled_persona_default',
+                                }),
+                            },
+                        });
+                    }
+                    if (
+                        speechSelection.model === STANDARD_TTS_MODEL &&
+                        !isMaiVoice(speechSelection.voice)
+                    ) {
+                        speechSelection.fallbackReason = [
+                            speechSelection.fallbackReason,
+                            'MAI requires a MAI-specific voice ID; synthesis will be rejected.',
+                        ]
+                            .filter(Boolean)
+                            .join(' ');
+                    }
+                    if (
+                        speechSelection.model === STANDARD_TTS_MODEL &&
+                        speechSelection.delivery
+                    ) {
+                        speechSelection.fallbackReason = [
+                            speechSelection.fallbackReason,
+                            'MAI ignores delivery instructions; guidance is metadata only.',
+                        ]
+                            .filter(Boolean)
+                            .join(' ');
+                    }
                     try {
                         conversationState = new RealtimeConversationState(
                             sessionCorrelationId

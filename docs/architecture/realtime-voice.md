@@ -80,6 +80,48 @@ single-use delivery handoff, reports local start/completion/interruption/failure
 and stops stale playback on caller interruption. Synthesis is a complete PCM
 artifact; Discord streams it through the existing guild playback pipeline.
 
+Standard now defaults to `microsoft/mai-voice-2.1-flash` for TTS.
+OpenRouter documents MAI output as raw 24 kHz mono, signed 16-bit
+little-endian PCM. The backend expects `audio/pcm` and rejects empty,
+odd-byte, or oversized responses (over 10 MiB). Discord uses its existing
+resampler to convert the audio to 48 kHz; no MP3 decoder is involved.
+Synthetic tests cover the PCM checks and resampling, but we have not yet
+tested a real MAI PCM response or heard it in Discord.
+
+The provisional voices are Harper for Footnote, Grant for Danny, Iris for
+Myuri, and Olivia for Winter. During the fixed-text audition, Harper was
+heard as Footnote and Grant as Winter. Grant is now a candidate for Danny's
+steady male voice, while Olivia is an untested, more expressive direction
+for Winter. Iris has not been auditioned either. These assignments are
+starting points for the private Discord test, not confirmed persona fits.
+
+Operators can override the TTS model, voice, and delivery guidance for each
+bot under `discord-bots[].profile.speech-presentation` (`tts-model`,
+`tts-voice`, `tts-delivery`). The deployment profile also supports the
+corresponding `BOT_PROFILE_TTS_*` environment settings. An unset per-bot
+field inherits the deployment value. A custom model needs a matching voice:
+if it would otherwise inherit a MAI voice ID, Standard falls back to MAI
+and the persona voice. The handler rejects generic voice IDs for MAI
+before dispatch; an MAI-shaped ID that the provider does not recognize
+can still fail at synthesis.
+
+The selected voice and delivery guidance remain in metadata, but
+OpenRouter's MAI route ignores natural-language `instructions`, so
+the handler does not send them as a presentation control. This change does
+not affect Chat TTS or GPT-Live.
+
+Both approved answers and progress cues request `provider.zdr: true`.
+That asks OpenRouter for ZDR-compatible routing; it does not verify
+deployment account guardrails or retention settings, nor does it establish
+ZDR for transcription. Progress cues are best effort: a synthesis failure
+is logged without failing the approved answer.
+
+Synthesis logs include the effective provider, model, voice, selection
+source, generation ID (when available), response size, and elapsed time.
+OpenRouter does not return usage or cost inline with speech, so those
+figures require a separate generation lookup. Missing values must not
+be recorded as zero.
+
 If Workflow is still pending after two seconds, Standard can speak one brief
 progress cue. The call-pinned persona and expression strength choose its phrase
 pool; application code selects uniformly with `crypto.randomInt`. The phrases

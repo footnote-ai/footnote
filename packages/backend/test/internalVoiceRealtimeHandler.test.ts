@@ -18,7 +18,10 @@ import { Duplex, Writable } from 'node:stream';
 import { format, transports } from 'winston';
 import type { IncomingMessage } from 'node:http';
 import WebSocket from 'ws';
-import type { InternalVoiceRealtimeServerEvent } from '@footnote/contracts/voice';
+import type {
+    InternalVoiceRealtimeServerEvent,
+    SpeechSelectionMetadata,
+} from '@footnote/contracts/voice';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import type {
     RealtimeVoiceRuntime,
@@ -583,7 +586,7 @@ const startRealtimeVoiceSession = async (
     ws: WebSocket,
     mode: 'standard' | 'live',
     initialAudio?: Buffer
-): Promise<void> => {
+): Promise<Record<string, unknown>> => {
     ws.send(
         JSON.stringify({
             type: 'session.start',
@@ -596,8 +599,9 @@ const startRealtimeVoiceSession = async (
             },
         })
     );
-    assert.equal((await waitForJsonMessage(ws, 1_000)).type, 'session.ready');
-    if (!initialAudio) return;
+    const ready = await waitForJsonMessage(ws, 1_000);
+    assert.equal(ready.type, 'session.ready');
+    if (!initialAudio) return ready;
     ws.send(
         JSON.stringify({
             type: 'input_audio.append',
@@ -607,6 +611,7 @@ const startRealtimeVoiceSession = async (
         })
     );
     ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+    return ready;
 };
 
 const closeWebSocket = async (ws: WebSocket): Promise<void> =>
@@ -786,6 +791,10 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
         id: 'custom',
         displayName: 'Custom operator',
         personaExpressionStrength: 'subtle',
+        speechPresentation: {
+            ...testProfile.speechPresentation,
+            ttsDelivery: 'clear and concise',
+        },
         promptOverlay: {
             source: 'inline',
             text: 'PRIVATE_OVERLAY',
@@ -805,11 +814,11 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
             },
             async synthesize(text, options) {
                 synthesized.push(text);
-                assert.equal(
-                    options.model,
-                    'openai/gpt-4o-mini-tts-2025-12-15'
-                );
-                assert.equal(options.voice, 'alloy');
+                assert.equal(options.model, 'microsoft/mai-voice-2.1-flash');
+                assert.equal(options.voice, 'en-US-Harper:MAI-Voice-2.1-Flash');
+                assert.equal(options.responseFormat, 'pcm');
+                assert.equal(options.zdr, true);
+                assert.equal(options.instructions, undefined);
                 return { audio: Buffer.from([0, 0, 1, 0]) };
             },
         },
@@ -846,7 +855,21 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
     let ws: WebSocket | undefined;
     try {
         ws = await harness.connect();
-        await startRealtimeVoiceSession(ws, 'standard');
+        const ready = await startRealtimeVoiceSession(ws, 'standard');
+        const speechSelection = ready[
+            'speechSelection'
+        ] as SpeechSelectionMetadata;
+        assert.equal(speechSelection.model, 'microsoft/mai-voice-2.1-flash');
+        assert.equal(speechSelection.voice, 'en-US-Harper:MAI-Voice-2.1-Flash');
+        assert.equal(
+            speechSelection.selectionSource.voice,
+            'deployment_fallback'
+        );
+        assert.equal(speechSelection.delivery, 'clear and concise');
+        assert.match(
+            speechSelection.fallbackReason ?? '',
+            /delivery.*metadata/i
+        );
         profile.id = 'changed-after-admission';
         profile.promptOverlay.text = 'changed-after-admission';
         profile.personaExpressionStrength = 'strong';
@@ -880,6 +903,524 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
     }
 });
 
+test('Standard playback completion records the exact approved answer for the next turn', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const snapshots: string[] = [];
+    let transcription = 0;
+    let workflow = 0;
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'standard',
+        openRouterVoiceService: {
+            async transcribe() {
+                transcription += 1;
+                return { text: `Question ${transcription}?` };
+            },
+            async synthesize() {
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+        workflowRunner: {
+            async runRealtimeConversation(snapshot, context) {
+                workflow += 1;
+                snapshots.push(JSON.stringify(snapshot));
+                context.onRunStarted(`workflow-${workflow}`);
+                const approvedText =
+                    workflow === 1
+                        ? 'The first approved answer.'
+                        : 'The second approved answer.';
+                return {
+                    responseId: `response-${workflow}`,
+                    runId: `workflow-${workflow}`,
+                    status: 'completed',
+                    finalResponse: {
+                        disposition: 'approved',
+                        responseId: `response-${workflow}`,
+                        runId: `workflow-${workflow}`,
+                        candidateId: `candidate-${workflow}`,
+                        generationStepId: `answer-${workflow}`,
+                        assessmentStepId: `review-${workflow}`,
+                        text: approvedText,
+                    },
+                };
+            },
+        },
+    });
+
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'standard');
+        for (let turn = 1; turn <= 2; turn += 1) {
+            ws.send(
+                JSON.stringify({
+                    type: 'input_audio.append',
+                    audioBase64: inputAudio.toString('base64'),
+                    speakerLabel: 'Alice',
+                    speakerId: 'user-1',
+                })
+            );
+            ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+            const audio = await waitForJsonMessage(ws, 1_000);
+            assert.equal(audio.type, 'output_audio.delta');
+            assert.equal(typeof audio.deliveryId, 'string');
+            if (turn === 1) {
+                ws.send(
+                    JSON.stringify({
+                        type: 'delivery.playback',
+                        deliveryId: audio.deliveryId,
+                        event: 'started',
+                    })
+                );
+                ws.send(
+                    JSON.stringify({
+                        type: 'delivery.playback',
+                        deliveryId: audio.deliveryId,
+                        event: 'completed',
+                    })
+                );
+            }
+        }
+        assert.equal(snapshots.length, 2);
+        assert.match(snapshots[1]!, /The first approved answer\./u);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard Voice uses distinct MAI defaults and keeps operator selection overrides', async () => {
+    const voiceDefaults = [
+        {
+            persona: 'footnote',
+            voice: 'en-US-Harper:MAI-Voice-2.1-Flash',
+        },
+        {
+            persona: 'danny',
+            voice: 'en-US-Grant:MAI-Voice-2.1-Flash',
+        },
+        {
+            persona: 'myuri',
+            voice: 'en-US-Iris:MAI-Voice-2.1-Flash',
+        },
+        {
+            persona: 'winter',
+            voice: 'en-US-Olivia:MAI-Voice-2.1-Flash',
+        },
+    ] as const;
+
+    for (const { persona, voice } of voiceDefaults) {
+        const harness = await createRealtimeHandlerHarness({
+            profile: {
+                ...testProfile,
+                id: persona,
+                displayName: persona,
+                speechPresentation: { ttsDelivery: 'intended delivery' },
+            },
+            defaultMode: 'standard',
+            openRouterVoiceService: {
+                async transcribe() {
+                    return { text: 'unused' };
+                },
+                async synthesize() {
+                    return { audio: Buffer.from([0, 0]) };
+                },
+            },
+        });
+        let ws: WebSocket | undefined;
+        try {
+            ws = await harness.connect();
+            const ready = await startRealtimeVoiceSession(ws, 'standard');
+            const selection = ready[
+                'speechSelection'
+            ] as SpeechSelectionMetadata;
+
+            assert.equal(selection.provider, 'openrouter');
+            assert.equal(selection.model, 'microsoft/mai-voice-2.1-flash');
+            assert.equal(selection.voice, voice);
+            assert.equal(
+                selection.selectionSource.model,
+                'deployment_fallback'
+            );
+            assert.equal(
+                selection.selectionSource.voice,
+                'bundled_persona_default'
+            );
+            assert.equal(selection.delivery, 'intended delivery');
+            assert.match(selection.fallbackReason ?? '', /metadata only/u);
+            ws.send(JSON.stringify({ type: 'session.close' }));
+            await closeWebSocket(ws);
+        } finally {
+            if (ws) await closeWebSocket(ws);
+            await harness.close();
+        }
+    }
+
+    const overrideHarness = await createRealtimeHandlerHarness({
+        profile: {
+            ...testProfile,
+            speechPresentation: {
+                ttsModel: 'operator/model',
+                ttsVoice: 'operator-voice',
+                ttsDelivery: 'operator delivery',
+            },
+        },
+        defaultMode: 'standard',
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'unused' };
+            },
+            async synthesize() {
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+    });
+    let overrideSocket: WebSocket | undefined;
+    try {
+        overrideSocket = await overrideHarness.connect();
+        const ready = await startRealtimeVoiceSession(
+            overrideSocket,
+            'standard'
+        );
+        const selection = ready['speechSelection'] as SpeechSelectionMetadata;
+        assert.equal(selection.model, 'operator/model');
+        assert.equal(selection.voice, 'operator-voice');
+        assert.deepEqual(selection.selectionSource, {
+            model: 'operator_profile',
+            voice: 'operator_profile',
+            delivery: 'operator_profile',
+        });
+        assert.equal(selection.delivery, 'operator delivery');
+        overrideSocket.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(overrideSocket);
+    } finally {
+        if (overrideSocket) await closeWebSocket(overrideSocket);
+        await overrideHarness.close();
+    }
+});
+
+test('Standard Voice applies the invoking Discord bot speech selection', async () => {
+    const previousBots = runtimeConfig.settings.discordBots;
+    runtimeConfig.settings.discordBots = [
+        {
+            id: 'danny-bot',
+            profile: {
+                id: 'danny',
+                displayName: 'Danny',
+                speechPresentation: {
+                    ttsModel: 'operator/model',
+                    ttsVoice: 'operator-voice',
+                    ttsDelivery: 'operator delivery',
+                },
+            },
+        },
+    ];
+    const harness = await createRealtimeHandlerHarness({
+        profile: testProfile,
+        defaultMode: 'standard',
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'unused' };
+            },
+            async synthesize() {
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+    });
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        ws.send(
+            JSON.stringify({
+                type: 'session.start',
+                mode: 'standard',
+                initiatorId: 'user-1',
+                botPersonaId: 'danny',
+                discordNodeId: 'danny-bot',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
+            })
+        );
+        const ready = await waitForJsonMessage(ws, 1_000);
+        assert.equal(ready.type, 'session.ready');
+        const selection = ready['speechSelection'] as SpeechSelectionMetadata;
+        assert.equal(selection.model, 'operator/model');
+        assert.equal(selection.voice, 'operator-voice');
+        assert.equal(selection.delivery, 'operator delivery');
+        assert.deepEqual(selection.selectionSource, {
+            model: 'operator_profile',
+            voice: 'operator_profile',
+            delivery: 'operator_profile',
+        });
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        runtimeConfig.settings.discordBots = previousBots;
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard Voice keeps a MAI persona voice paired with the default model', async () => {
+    const harness = await createRealtimeHandlerHarness({
+        profile: {
+            ...testProfile,
+            speechPresentation: { ttsModel: 'operator/model' },
+        },
+        defaultMode: 'standard',
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'unused' };
+            },
+            async synthesize() {
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+    });
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        const ready = await startRealtimeVoiceSession(ws, 'standard');
+        const selection = ready['speechSelection'] as SpeechSelectionMetadata;
+        assert.equal(selection.model, 'microsoft/mai-voice-2.1-flash');
+        assert.equal(selection.voice, 'en-US-Olivia:MAI-Voice-2.1-Flash');
+        assert.equal(selection.selectionSource.model, 'deployment_fallback');
+        assert.match(
+            selection.fallbackReason ?? '',
+            /matching configured voice/u
+        );
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard reports an unavailable voice and leaves the call open after approved text synthesis fails', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const synthesized: string[] = [];
+    const harness = await createRealtimeHandlerHarness({
+        profile: {
+            ...testProfile,
+            speechPresentation: {
+                ttsVoice: 'en-US-Missing:MAI-Voice-2.1-Flash',
+            },
+        },
+        defaultMode: 'standard',
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'Ask the Workflow.' };
+            },
+            async synthesize(text, options) {
+                synthesized.push(text);
+                assert.equal(options.model, 'microsoft/mai-voice-2.1-flash');
+                assert.equal(
+                    options.voice,
+                    'en-US-Missing:MAI-Voice-2.1-Flash'
+                );
+                throw new Error('Voice is unavailable.');
+            },
+        },
+    });
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'standard', inputAudio);
+        const error = await waitForJsonMessage(ws, 1_000);
+        assert.equal(error.type, 'error');
+        assert.equal(error.code, 'speech_synthesis_failed');
+        assert.deepEqual(synthesized, ['Test answer.']);
+
+        const closedEvent = waitForJsonMessage(ws, 1_000);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        const closed = await closedEvent;
+        assert.equal(closed.type, 'session.closed');
+        assert.equal(closed.reason, 'client_close');
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard rejects an inherited generic voice before sending it to MAI', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const synthesized: string[] = [];
+    const harness = await createRealtimeHandlerHarness({
+        profile: {
+            ...testProfile,
+            speechPresentation: { ttsVoice: 'alloy' },
+        },
+        defaultMode: 'standard',
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'Ask the Workflow.' };
+            },
+            async synthesize(text) {
+                synthesized.push(text);
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+    });
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        const ready = await startRealtimeVoiceSession(
+            ws,
+            'standard',
+            inputAudio
+        );
+        const selection = ready['speechSelection'] as SpeechSelectionMetadata;
+        assert.match(selection.fallbackReason ?? '', /MAI-specific voice ID/u);
+        const error = await waitForJsonMessage(ws, 1_000);
+        assert.equal(error.type, 'error');
+        assert.equal(error.code, 'speech_synthesis_failed');
+        assert.deepEqual(synthesized, []);
+        const closedEvent = waitForJsonMessage(ws, 1_000);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        const closed = await closedEvent;
+        assert.equal(closed.type, 'session.closed');
+        assert.equal(closed.reason, 'client_close');
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard cancels pending approved synthesis on correction and drops its late audio', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const clock = createFakeClock();
+    const synthesized: string[] = [];
+    let transcriptionCount = 0;
+    let workflowCount = 0;
+    let firstSignal: AbortSignal | undefined;
+    let resolveFirstSynthesis!: (result: { audio: Buffer }) => void;
+    let resolveSecondWorkflow!: (result: RealtimeWorkflowResult) => void;
+    let markFirstSynthesisStarted!: () => void;
+    let markSecondWorkflowStarted!: () => void;
+    const firstSynthesisStarted = new Promise<void>(
+        (resolve) => (markFirstSynthesisStarted = resolve)
+    );
+    const secondWorkflowStarted = new Promise<void>(
+        (resolve) => (markSecondWorkflowStarted = resolve)
+    );
+    const secondWorkflowResult = new Promise<RealtimeWorkflowResult>(
+        (resolve) => (resolveSecondWorkflow = resolve)
+    );
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'standard',
+        setTimer: clock.setTimer,
+        clearTimer: clock.clearTimer,
+        openRouterVoiceService: {
+            async transcribe() {
+                transcriptionCount += 1;
+                return {
+                    text:
+                        transcriptionCount === 1
+                            ? 'First question?'
+                            : 'Correction: second question?',
+                };
+            },
+            synthesize(text, _options, signal) {
+                synthesized.push(text);
+                if (synthesized.length === 1) {
+                    firstSignal = signal;
+                    markFirstSynthesisStarted();
+                    return new Promise((resolve) => {
+                        resolveFirstSynthesis = resolve;
+                    });
+                }
+                return Promise.resolve({ audio: Buffer.from([4, 0]) });
+            },
+        },
+        workflowRunner: {
+            async runRealtimeConversation(_snapshot, context) {
+                workflowCount += 1;
+                context.onRunStarted(`workflow-${workflowCount}`);
+                if (workflowCount === 1) {
+                    return {
+                        responseId: 'first-response',
+                        runId: 'workflow-1',
+                        status: 'completed',
+                        finalResponse: {
+                            disposition: 'approved',
+                            responseId: 'first-response',
+                            runId: 'workflow-1',
+                            candidateId: 'first-candidate',
+                            generationStepId: 'first-answer',
+                            assessmentStepId: 'first-review',
+                            text: 'First approved answer.',
+                        },
+                    };
+                }
+                markSecondWorkflowStarted();
+                return secondWorkflowResult;
+            },
+        },
+    });
+
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'standard', inputAudio);
+        await firstSynthesisStarted;
+
+        ws.send(
+            JSON.stringify({
+                type: 'input_audio.append',
+                audioBase64: inputAudio.toString('base64'),
+                speakerLabel: 'Alice',
+                speakerId: 'user-1',
+            })
+        );
+        ws.send(JSON.stringify({ type: 'input_audio.commit' }));
+        await secondWorkflowStarted;
+        assert.equal(firstSignal?.aborted, true);
+
+        resolveFirstSynthesis({ audio: Buffer.from([9, 0]) });
+        await new Promise((resolve) => setImmediate(resolve));
+        await assert.rejects(
+            waitForJsonMessage(ws, 50),
+            /Timed out waiting for a voice event/u
+        );
+
+        const secondAudioEvent = waitForJsonMessage(ws, 1_000);
+        resolveSecondWorkflow({
+            responseId: 'second-response',
+            runId: 'workflow-2',
+            status: 'completed',
+            finalResponse: {
+                disposition: 'approved',
+                responseId: 'second-response',
+                runId: 'workflow-2',
+                candidateId: 'second-candidate',
+                generationStepId: 'second-answer',
+                assessmentStepId: 'second-review',
+                text: 'Second approved answer.',
+            },
+        });
+        const secondAudio = await secondAudioEvent;
+        assert.equal(secondAudio.type, 'output_audio.delta');
+        assert.equal(
+            secondAudio.audioBase64,
+            Buffer.from([4, 0]).toString('base64')
+        );
+        assert.deepEqual(synthesized, [
+            'First approved answer.',
+            'Second approved answer.',
+        ]);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
 test('Standard emits one persona-aware progress cue after the delay before the approved answer', async () => {
     const inputAudio = Buffer.from([0, 0, 1, 0]);
     const clock = createFakeClock();
@@ -900,7 +1441,10 @@ test('Standard emits one persona-aware progress cue after the delay before the a
             async transcribe() {
                 return { text: 'What is the answer?' };
             },
-            async synthesize(text) {
+            async synthesize(text, options) {
+                assert.equal(options.zdr, true);
+                assert.equal(options.responseFormat, 'pcm');
+                assert.equal(options.instructions, undefined);
                 synthesized.push(text);
                 return {
                     audio: Buffer.from(

@@ -231,7 +231,11 @@ export const createOpenRouterVoiceService = ({
             chunks.push(Buffer.from(value));
         }
 
-        if (totalBytes === 0) {
+        if (
+            totalBytes === 0 ||
+            ((options.responseFormat ?? 'pcm') === 'pcm' &&
+                totalBytes % 2 !== 0)
+        ) {
             throw new Error(
                 'OpenRouter speech response is empty or out of bounds.'
             );
