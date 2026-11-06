@@ -370,6 +370,9 @@ listening; do not add samples or raw provider responses to the repository.
   must be null, and its remaining balance must cover the planned requests. The
   current environment did not expose that key; do not use the uncapped
   inherited process key.
+- For Discord, verify the cap on the backend process that will make the MAI
+  request. A Windows user-scoped key does not automatically cap a remote bot's
+  backend; do not use an uncapped backend key.
 - Use an existing Discord bot instance confirmed to run the code merged in
   #989 in a private voice channel with one consenting participant. A separate
   deployment is not required, and no production configuration change is
