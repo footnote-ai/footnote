@@ -585,12 +585,14 @@ const waitForJsonMessage = async (
 const startRealtimeVoiceSession = async (
     ws: WebSocket,
     mode: 'standard' | 'live',
-    initialAudio?: Buffer
+    initialAudio?: Buffer,
+    options?: { model?: string; voice?: string; delivery?: string }
 ): Promise<Record<string, unknown>> => {
     ws.send(
         JSON.stringify({
             type: 'session.start',
             mode,
+            ...(options ? { options } : {}),
             initiatorId: 'user-1',
             context: {
                 participants: [
@@ -1165,11 +1167,14 @@ test('Standard Voice applies the invoking Discord bot speech selection', async (
     }
 });
 
-test('Standard Voice keeps a MAI persona voice paired with the default model', async () => {
+test('Standard Voice keeps the selected MAI voice when falling back from a custom model', async () => {
     const harness = await createRealtimeHandlerHarness({
         profile: {
             ...testProfile,
-            speechPresentation: { ttsModel: 'operator/model' },
+            speechPresentation: {
+                ttsModel: 'operator/model',
+                ttsVoice: 'en-US-Grant:MAI-Voice-2.1-Flash',
+            },
         },
         defaultMode: 'standard',
         openRouterVoiceService: {
@@ -1184,15 +1189,22 @@ test('Standard Voice keeps a MAI persona voice paired with the default model', a
     let ws: WebSocket | undefined;
     try {
         ws = await harness.connect();
-        const ready = await startRealtimeVoiceSession(ws, 'standard');
+        const ready = await startRealtimeVoiceSession(
+            ws,
+            'standard',
+            undefined,
+            {
+                delivery: 'session delivery',
+            }
+        );
         const selection = ready['speechSelection'] as SpeechSelectionMetadata;
         assert.equal(selection.model, 'microsoft/mai-voice-2.1-flash');
-        assert.equal(selection.voice, 'en-US-Olivia:MAI-Voice-2.1-Flash');
+        assert.equal(selection.voice, 'en-US-Grant:MAI-Voice-2.1-Flash');
         assert.equal(selection.selectionSource.model, 'deployment_fallback');
-        assert.match(
-            selection.fallbackReason ?? '',
-            /matching configured voice/u
-        );
+        assert.equal(selection.selectionSource.voice, 'operator_profile');
+        assert.equal(selection.delivery, 'session delivery');
+        assert.equal(selection.selectionSource.delivery, 'request_or_session');
+        assert.match(selection.fallbackReason ?? '', /selected MAI voice/u);
         ws.send(JSON.stringify({ type: 'session.close' }));
         await closeWebSocket(ws);
     } finally {
@@ -1498,10 +1510,108 @@ test('Standard cancels pending approved synthesis on correction and drops its la
     }
 });
 
-test('Standard emits one persona-aware progress cue after the delay before the approved answer', async () => {
+test('Standard rejects an explicit custom model when only a MAI voice is selected', async () => {
+    let synthesized = false;
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'standard',
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'unused' };
+            },
+            async synthesize() {
+                synthesized = true;
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+    });
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        ws.send(
+            JSON.stringify({
+                type: 'session.start',
+                mode: 'standard',
+                options: { model: 'operator/custom-model' },
+                initiatorId: 'user-1',
+                context: {
+                    participants: [
+                        { id: 'user-1', displayName: 'Alice', isBot: false },
+                    ],
+                },
+            })
+        );
+
+        const error = await waitForJsonMessage(ws, 1_000);
+        assert.equal(error.type, 'error');
+        assert.equal(error.code, 'unsupported_speech_selection');
+        assert.equal(synthesized, false);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard applies explicit session-start model, voice, and delivery overrides', async () => {
+    const harness = await createRealtimeHandlerHarness({
+        profile: {
+            ...testProfile,
+            speechPresentation: {
+                ttsModel: 'operator/profile-model',
+                ttsVoice: 'operator-profile-voice',
+                ttsDelivery: 'profile delivery',
+            },
+        },
+        defaultMode: 'standard',
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'unused' };
+            },
+            async synthesize() {
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+    });
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        const ready = await startRealtimeVoiceSession(
+            ws,
+            'standard',
+            undefined,
+            {
+                model: 'operator/session-model',
+                voice: 'operator-session-voice',
+                delivery: 'session delivery',
+            }
+        );
+        const selection = ready['speechSelection'] as SpeechSelectionMetadata;
+        assert.equal(selection.model, 'operator/session-model');
+        assert.equal(selection.voice, 'operator-session-voice');
+        assert.equal(selection.delivery, 'session delivery');
+        assert.deepEqual(selection.selectionSource, {
+            model: 'request_or_session',
+            voice: 'request_or_session',
+            delivery: 'request_or_session',
+        });
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
+test('Standard preserves a configured custom model and voice for cues and approved answers', async () => {
     const inputAudio = Buffer.from([0, 0, 1, 0]);
     const clock = createFakeClock();
     const synthesized: string[] = [];
+    const synthesisOptions: Array<{
+        model: string;
+        voice: string;
+        instructions?: string | null;
+        responseFormat?: string;
+        zdr?: boolean;
+    }> = [];
     let startWorkflow!: () => void;
     let resolveWorkflow!: (result: RealtimeWorkflowResult) => void;
     const workflowStarted = new Promise<void>((resolve) => {
@@ -1511,6 +1621,14 @@ test('Standard emits one persona-aware progress cue after the delay before the a
         resolveWorkflow = resolve;
     });
     const harness = await createRealtimeHandlerHarness({
+        profile: {
+            ...testProfile,
+            speechPresentation: {
+                ttsModel: 'operator/custom-model',
+                ttsVoice: 'operator-custom-voice',
+                ttsDelivery: 'steady and clear',
+            },
+        },
         defaultMode: 'standard',
         setTimer: clock.setTimer,
         clearTimer: clock.clearTimer,
@@ -1519,10 +1637,8 @@ test('Standard emits one persona-aware progress cue after the delay before the a
                 return { text: 'What is the answer?' };
             },
             async synthesize(text, options) {
-                assert.equal(options.zdr, true);
-                assert.equal(options.responseFormat, 'pcm');
-                assert.equal(options.instructions, undefined);
                 synthesized.push(text);
+                synthesisOptions.push(options);
                 return {
                     audio: Buffer.from(
                         text === 'The reviewed answer.' ? [3, 3] : [1, 1]
@@ -1553,6 +1669,13 @@ test('Standard emits one persona-aware progress cue after the delay before the a
         assert.equal(cue.deliveryId, undefined);
         assert.equal(cue.audioBase64, Buffer.from([1, 1]).toString('base64'));
         assert.equal(synthesized.length, 1);
+        assert.deepEqual(synthesisOptions[0], {
+            model: 'operator/custom-model',
+            voice: 'operator-custom-voice',
+            instructions: 'steady and clear',
+            responseFormat: 'pcm',
+            zdr: true,
+        });
         assert.notEqual(synthesized[0], 'The reviewed answer.');
         assert.doesNotMatch(
             synthesized[0] ?? '',
@@ -1584,6 +1707,7 @@ test('Standard emits one persona-aware progress cue after the delay before the a
             Buffer.from([3, 3]).toString('base64')
         );
         assert.deepEqual(synthesized, [synthesized[0], 'The reviewed answer.']);
+        assert.deepEqual(synthesisOptions[1], synthesisOptions[0]);
         ws.send(JSON.stringify({ type: 'session.close' }));
         await closeWebSocket(ws);
     } finally {

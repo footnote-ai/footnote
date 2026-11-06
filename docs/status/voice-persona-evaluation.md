@@ -224,6 +224,21 @@ name does not establish that OpenRouter can serve it or that its audio
 will work with Discord. Model and voice combinations need to be checked
 against the actual provider route and its output format.
 
+Standard Voice uses the bot profile's `ttsModel`, `ttsVoice`, and `ttsDelivery`;
+session-start options take precedence. Explicit MAI/custom model and voice
+mismatches fail during setup. A configured custom model paired with the
+bundled or another MAI voice falls back to MAI and records the reason. Other
+custom model and non-MAI voice values pass to OpenRouter unchanged for cues and
+approved answers, but their route and compatibility are not verified here.
+The adapter validates response type, size, and PCM byte boundaries; it cannot
+verify sample rate or channel count. Provider failures surface as
+`speech_synthesis_failed` for approved answers; progress cues remain optional
+and fail open.
+
+The separate internal TTS endpoint accepts request-level model and voice
+overrides ahead of the bot profile and rejects unsupported explicit values.
+Unsupported configured OpenAI TTS defaults fall back with selection metadata.
+
 Keep MAI as the baseline for the first Discord canary. Under #975, the
 next comparisons should include Gemini Flash-Lite TTS and Gemini Flash
 TTS using the same reference passages. Kokoro remains worth revisiting
