@@ -1336,7 +1336,7 @@ test('Standard does not send a progress cue to MAI with a generic voice ID', asy
         await workflowStarted;
 
         clock.tick(2_000);
-        const cueWasSynthesized = synthesized.length > 0;
+        assert.deepEqual(synthesized, []);
 
         resolveWorkflow({
             responseId: 'response',
@@ -1359,7 +1359,6 @@ test('Standard does not send a progress cue to MAI with a generic voice ID', asy
                 : await waitForJsonMessage(ws, 1_000);
         assert.equal(error.type, 'error');
         assert.equal(error.code, 'speech_synthesis_failed');
-        assert.equal(cueWasSynthesized, false);
         assert.deepEqual(synthesized, []);
         ws.send(JSON.stringify({ type: 'session.close' }));
         await closeWebSocket(ws);

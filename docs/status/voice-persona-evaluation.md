@@ -1,6 +1,6 @@
 # Voice persona evaluation
 
-Updated: 2026-11-05 · [Issue #974](https://github.com/footnote-ai/footnote/issues/974) · [Issue #534](https://github.com/footnote-ai/footnote/issues/534) · [Issue #975](https://github.com/footnote-ai/footnote/issues/975)
+Updated: 2026-11-06 · [Issue #974](https://github.com/footnote-ai/footnote/issues/974) · [Issue #534](https://github.com/footnote-ai/footnote/issues/534) · [Issue #975](https://github.com/footnote-ai/footnote/issues/975)
 
 ## Where we are
 
@@ -29,9 +29,9 @@ The next Live and Discord listening pass should cover four things:
 
 The delivery ceilings are 400 estimated tokens for Live and 1,600 estimated tokens plus 3,686 code points for Standard. We'll need to check whether the resulting answers sound natural and fit within the call.
 
-## Start with a pilot
+## Broader Live evaluation
 
-Try Footnote and Winter first. Use ordinary text as the reference, then run the same short conversation in Standard and Live at balanced expression. One consenting listener and a private Discord channel are enough for this pass.
+This broader persona and behavior evaluation is separate from the four-persona Standard Voice canary below. Start with Footnote and Winter. Use ordinary text as the reference, then run the same short conversation in Standard and Live at balanced expression. One consenting listener and a private Discord channel are enough for this pass.
 
 Keep the questions simple enough to compare fairly:
 
@@ -84,23 +84,24 @@ models.
 
 ### Models and audio formats
 
-| Candidate                 | Historical Footnote / Winter audition voices                           | Listening format   | Delivery guidance      | Published price                         |
+| Candidate                 | Audition voices (Footnote / Winter)                                    | Listening format   | Delivery guidance      | Published price                         |
 | ------------------------- | ---------------------------------------------------------------------- | ------------------ | ---------------------- | --------------------------------------- |
 | Gemini 3.8 Flash Lite TTS | `Kore` / `Charon`                                                      | PCM wrapped as WAV | Supported; included    | $0.50/M text tokens + $6/M audio tokens |
 | MAI-Voice-2.1-Flash       | `en-US-Harper:MAI-Voice-2.1-Flash` / `en-US-Grant:MAI-Voice-2.1-Flash` | MP3                | Not supported; omitted | $15/M characters                        |
 | Grok Voice TTS 1.0        | `eve` / `rex`                                                          | MP3                | Not supported; omitted | $15/M characters                        |
 | Kokoro 82M                | `af_heart` / `am_onyx`                                                 | MP3                | Not supported; omitted | $0.62/M characters                      |
 
-The table shows the historical audition pairings, not the new four-persona
-mapping in #988. The operator actually listened to Harper as Footnote and
-Grant as Winter. The provisional defaults and listening coverage are:
+PR #988's Standard Voice assignments are provisional. The offline fixed-text
+audition heard Harper as Footnote and Grant as Winter. Iris and Olivia have
+not been heard; only Harper's current pairing has been auditioned, and no
+Discord results are available.
 
-| Persona  | PR #988 provisional MAI voice      | Listening evidence                                             |
-| -------- | ---------------------------------- | -------------------------------------------------------------- |
-| Footnote | `en-US-Harper:MAI-Voice-2.1-Flash` | Heard as Footnote                                              |
-| Danny    | `en-US-Grant:MAI-Voice-2.1-Flash`  | Not heard as Danny; Grant was auditioned as Winter             |
-| Myuri    | `en-US-Iris:MAI-Voice-2.1-Flash`   | Not auditioned                                                 |
-| Winter   | `en-US-Olivia:MAI-Voice-2.1-Flash` | Not heard as Winter; the historical Winter audition used Grant |
+| Persona  | Provisional MAI voice              | First-round delivery target                      |
+| -------- | ---------------------------------- | ------------------------------------------------ |
+| Footnote | `en-US-Harper:MAI-Voice-2.1-Flash` | Clarity, naturalness, conversational delivery    |
+| Danny    | `en-US-Grant:MAI-Voice-2.1-Flash`  | Steady, measured, warm delivery                  |
+| Myuri    | `en-US-Iris:MAI-Voice-2.1-Flash`   | Lively, expressive, intelligible delivery        |
+| Winter   | `en-US-Olivia:MAI-Voice-2.1-Flash` | Expressive female voice; controlled, understated |
 
 OpenRouter's current speech catalog lists all four provisional voice IDs for
 MAI-Voice-2.1-Flash. Catalog availability does not establish successful
@@ -184,16 +185,20 @@ no per-sample written notes, and its repeat-consistency score is blank for all
 20 samples, so that qualitative observation cannot be attributed to a
 particular voice or summarized as a consistency score.
 
-**Provisional decision:** MAI-Voice-2.1-Flash is the Standard TTS choice for
-the first private Discord test. Only Harper/Footnote has received listening
-evaluation in its current pairing. Grant/Danny, Iris/Myuri, and Olivia/Winter
-remain untested; the historical Grant/Winter audition does not validate either
-of the new Grant or Olivia pairings. MAI ignores natural-language delivery
-instructions through OpenRouter, so those settings remain metadata rather than
-audible presentation controls. The real PCM path and persona fit still need
-testing.
+### First-round Standard Voice listening plan
 
-All audio samples, the randomized rating sheet, manifest, and generation
+For each persona, use the same short factual exchange and one
+persona-characteristic exchange. Compare the approved Workflow text with the
+spoken answer; assess any progress cue separately because it is not the
+approved answer. Then confirm playback and interrupt once during synthesis
+and once during playback. Check that stale audio stops and the call remains
+usable. Check that Discord's playback report matches what the listener heard.
+Record the effective model and voice, text match, time from approval to first
+audible speech, playback result, and cost when available; mark anything
+unobserved. Make adjustments only after hearing all four assignments in
+Discord.
+
+All audition samples, the randomized rating sheet, manifest, and generation
 metadata remain local and uncommitted.
 
 Every synthesis request includes `provider.zdr: true`. OpenRouter applies
@@ -277,23 +282,19 @@ synthesizes new audio nor saves prompts or completions. Review this file and
 the manifest after blind scoring. Keep audio local and uncommitted for
 listening; do not add samples or raw provider responses to the repository.
 
-### What remains unresolved
+### Remaining canary gates
 
-PR #988 sets MAI as Standard Voice's code default and adds provisional
-persona voices and operator overrides. The adapter expects raw 24 kHz mono
-PCM16, checks the response type and size, and passes valid audio through
-Discord's existing 24-to-48 kHz resampler. Synthetic tests cover those
-boundaries, but no live MAI PCM response or Discord playback has been
-tested. Nothing has been deployed.
-
-The audition only assessed Harper with Footnote and Grant with Winter. The
-new Danny, Myuri, and Winter voice assignments still need a listening
-check. We also need to measure approval-to-audible latency, verify spoken
-text against approved answers, check playback reporting, and exercise
-interruption and failure recovery. The backend logs OpenRouter generation
-IDs, but doesn't retrieve TTS usage or cost automatically. Sending
-`provider.zdr: true` does not verify the deployment's retention settings.
-These checks belong to the #534 private canary.
+- Verify a live MAI response is 24 kHz mono PCM16 and plays through Discord's
+  existing resampler. The earlier MAI audition requested MP3, so it did not
+  verify this path.
+- Use process-scoped OpenRouter credentials with a verified, non-resetting
+  spending cap of $1 or less. The November 5 preflight could not verify a cap,
+  so it made no MAI request.
+- Configure a private, non-production Discord test environment. This checkout
+  identified only the production Fly app; no Discord call or deployment was
+  attempted. Use one consenting human in the test voice channel.
+- Verify account-side ZDR and retention settings before the canary. Requests
+  set `provider.zdr: true`, but account settings remain operator-attested.
 
 Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multimodal/tts),
 [live speech catalog](https://openrouter.ai/api/v1/models?output_modalities=speech),
@@ -308,48 +309,3 @@ Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multi
 [OpenRouter Guardrails API](https://openrouter.ai/docs/api/api-reference/guardrails/update-a-guardrail),
 [OpenRouter generation metadata API](https://openrouter.ai/docs/api/api-reference/generations/get-request-%26-usage-metadata-for-a-generation),
 [pnpm argument forwarding](https://pnpm.io/cli/run).
-
-### Latest preflight (2026-11-05)
-
-Live MAI PCM verification was skipped because the available process key did not
-provide a verifiable, non-resetting provider cap of $1 or less. No MAI
-synthesis request was made, so this pass recorded no PCM response, generation
-ID, cost, or audio properties. No provider audio was created. The Standard TTS
-request still asks for `provider.zdr: true`; account-side ZDR settings remain
-operator-attested rather than independently verified here, and no privacy
-settings were changed.
-
-The checked-in Fly configuration identifies the production `footnote` app; no
-separate private test deployment was identified in this checkout. No Discord
-session or deployment was attempted. The Discord canary still requires a
-private test target with one consenting human in the voice channel.
-
-## What comes next
-
-The next step under #534 is a small canary in a private Discord server,
-with one consenting human in the voice channel. The caller may also be the
-listener; keep exactly one human in the channel. Make one Standard Voice call
-for each provisional persona and voice: Footnote/Harper, Danny/Grant,
-Myuri/Iris, and Winter/Olivia. Check that the caller reaches Workflow. For
-the approved answer, verify that TTS receives only the approved Workflow text.
-If a supported progress cue is emitted while Workflow is pending, record it
-separately; compare approved text only with the answer synthesis. Confirm that
-Discord plays the audio. Compare what was heard with the approved text. Record
-the effective
-provider, model and voice, time from approval to first audible speech,
-playback outcome, listener notes, and cost where generation metadata is
-available. Keep audio and transcripts out of the evaluation record.
-
-Then try a follow-up, a correction, interruptions during synthesis and
-playback, cancellation, a controlled synthesis failure, and recovery. Check
-that stale audio stays suppressed and a failed synthesis does not leave the
-call unusable. Mark anything unobserved rather than assuming it worked.
-Stop if the audio format or voice is unexpected, the spoken text differs,
-delivery provenance is missing, or privacy settings remain unverified.
-Keep the canary isolated and spending-limited. Paid calls and deployment
-still require separate authorization.
-
-Live continues on GPT-Live. #975 can use this audition as a baseline for
-later provider comparisons or speech transformation; neither another
-provider nor a new Live audio path was tested here. #987 covered only
-the audition harness and its findings.
