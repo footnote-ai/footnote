@@ -76,6 +76,10 @@ const STANDARD_TTS_PERSONA_VOICES: Readonly<Record<string, string>> = {
 };
 const isMaiVoice = (voice: string): boolean =>
     voice.endsWith(':MAI-Voice-2.1-Flash');
+const hasCompatibleVoiceForModel = (
+    selection: SpeechSelectionMetadata
+): boolean =>
+    selection.model !== STANDARD_TTS_MODEL || isMaiVoice(selection.voice);
 const speechSynthesisOptions = (selection: SpeechSelectionMetadata) => ({
     model: selection.model,
     voice: selection.voice,
@@ -269,7 +273,8 @@ export const createInternalVoiceRealtimeHandler = ({
                 mode !== 'standard' ||
                 !cueSpeechSelection ||
                 !cuePersona ||
-                !openRouterVoiceService
+                !openRouterVoiceService ||
+                !hasCompatibleVoiceForModel(cueSpeechSelection)
             )
                 return;
             progressCueTimer = setTimer(() => {
@@ -505,10 +510,7 @@ export const createInternalVoiceRealtimeHandler = ({
             currentDeliveryText = delivery.text;
             const synthesisStartedAt = Date.now();
             try {
-                if (
-                    speechSelection.model === STANDARD_TTS_MODEL &&
-                    !isMaiVoice(speechSelection.voice)
-                )
+                if (!hasCompatibleVoiceForModel(speechSelection))
                     throw new Error('MAI requires a MAI-specific voice ID.');
                 const result = await openRouterVoiceService.synthesize(
                     delivery.text,

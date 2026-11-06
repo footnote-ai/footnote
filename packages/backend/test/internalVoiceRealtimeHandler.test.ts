@@ -1291,6 +1291,84 @@ test('Standard rejects an inherited generic voice before sending it to MAI', asy
     }
 });
 
+test('Standard does not send a progress cue to MAI with a generic voice ID', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const clock = createFakeClock();
+    const synthesized: string[] = [];
+    let markWorkflowStarted!: () => void;
+    let resolveWorkflow!: (result: RealtimeWorkflowResult) => void;
+    const workflowStarted = new Promise<void>(
+        (resolve) => (markWorkflowStarted = resolve)
+    );
+    const workflowResult = new Promise<RealtimeWorkflowResult>(
+        (resolve) => (resolveWorkflow = resolve)
+    );
+    const harness = await createRealtimeHandlerHarness({
+        profile: {
+            ...testProfile,
+            speechPresentation: { ttsVoice: 'alloy' },
+        },
+        defaultMode: 'standard',
+        setTimer: clock.setTimer,
+        clearTimer: clock.clearTimer,
+        openRouterVoiceService: {
+            async transcribe() {
+                return { text: 'Ask the Workflow.' };
+            },
+            async synthesize(text) {
+                synthesized.push(text);
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+        workflowRunner: {
+            async runRealtimeConversation(_snapshot, context) {
+                context.onRunStarted('workflow-run');
+                markWorkflowStarted();
+                return workflowResult;
+            },
+        },
+    });
+
+    let ws: WebSocket | undefined;
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'standard', inputAudio);
+        await workflowStarted;
+
+        clock.tick(2_000);
+        const cueWasSynthesized = synthesized.length > 0;
+
+        resolveWorkflow({
+            responseId: 'response',
+            runId: 'workflow-run',
+            status: 'completed',
+            finalResponse: {
+                disposition: 'approved',
+                responseId: 'response',
+                runId: 'workflow-run',
+                candidateId: 'candidate',
+                generationStepId: 'answer',
+                assessmentStepId: 'review',
+                text: 'The reviewed answer.',
+            },
+        });
+        const firstEvent = await waitForJsonMessage(ws, 1_000);
+        const error =
+            firstEvent.type === 'error'
+                ? firstEvent
+                : await waitForJsonMessage(ws, 1_000);
+        assert.equal(error.type, 'error');
+        assert.equal(error.code, 'speech_synthesis_failed');
+        assert.equal(cueWasSynthesized, false);
+        assert.deepEqual(synthesized, []);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
 test('Standard cancels pending approved synthesis on correction and drops its late audio', async () => {
     const inputAudio = Buffer.from([0, 0, 1, 0]);
     const clock = createFakeClock();

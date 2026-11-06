@@ -84,16 +84,29 @@ models.
 
 ### Models and audio formats
 
-| Candidate                 | Footnote / Winter voice                                                | Listening format   | Delivery guidance      | Published price                         |
+| Candidate                 | Historical Footnote / Winter audition voices                           | Listening format   | Delivery guidance      | Published price                         |
 | ------------------------- | ---------------------------------------------------------------------- | ------------------ | ---------------------- | --------------------------------------- |
 | Gemini 3.8 Flash Lite TTS | `Kore` / `Charon`                                                      | PCM wrapped as WAV | Supported; included    | $0.50/M text tokens + $6/M audio tokens |
 | MAI-Voice-2.1-Flash       | `en-US-Harper:MAI-Voice-2.1-Flash` / `en-US-Grant:MAI-Voice-2.1-Flash` | MP3                | Not supported; omitted | $15/M characters                        |
 | Grok Voice TTS 1.0        | `eve` / `rex`                                                          | MP3                | Not supported; omitted | $15/M characters                        |
 | Kokoro 82M                | `af_heart` / `am_onyx`                                                 | MP3                | Not supported; omitted | $0.62/M characters                      |
 
-The table shows the voices selected for the audition, not the new four-persona
-mapping in #988. Harper was tested as Footnote and Grant as Winter. Gemini
-was configured with the proposed short delivery guidance for Footnote
+The table shows the historical audition pairings, not the new four-persona
+mapping in #988. The operator actually listened to Harper as Footnote and
+Grant as Winter. The provisional defaults and listening coverage are:
+
+| Persona  | PR #988 provisional MAI voice      | Listening evidence                                             |
+| -------- | ---------------------------------- | -------------------------------------------------------------- |
+| Footnote | `en-US-Harper:MAI-Voice-2.1-Flash` | Heard as Footnote                                              |
+| Danny    | `en-US-Grant:MAI-Voice-2.1-Flash`  | Not heard as Danny; Grant was auditioned as Winter             |
+| Myuri    | `en-US-Iris:MAI-Voice-2.1-Flash`   | Not auditioned                                                 |
+| Winter   | `en-US-Olivia:MAI-Voice-2.1-Flash` | Not heard as Winter; the historical Winter audition used Grant |
+
+OpenRouter's current speech catalog lists all four provisional voice IDs for
+MAI-Voice-2.1-Flash. Catalog availability does not establish successful
+synthesis or persona fit. See the [live speech catalog](https://openrouter.ai/api/v1/models?output_modalities=speech).
+
+Gemini was configured with the proposed short delivery guidance for Footnote
 ("Clear, calm, grounded, conversational") and Winter ("Dry, direct,
 controlled, understated"). The other models do not support that
 natural-language `instructions` field through OpenRouter, so the helper
@@ -172,12 +185,13 @@ no per-sample written notes, and its repeat-consistency score is blank for all
 particular voice or summarized as a consistency score.
 
 **Provisional decision:** MAI-Voice-2.1-Flash is the Standard TTS choice for
-the first private Discord test. PR #988 assigns Harper to Footnote, Grant to
-Danny, Iris to Myuri, and Olivia to Winter. The audition covered Harper as
-Footnote and Grant as Winter; the other persona pairings have not been heard.
-MAI ignores natural-language delivery instructions through OpenRouter, so
-those settings remain metadata rather than audible presentation controls.
-The real PCM path and persona fit still need testing.
+the first private Discord test. Only Harper/Footnote has received listening
+evaluation in its current pairing. Grant/Danny, Iris/Myuri, and Olivia/Winter
+remain untested; the historical Grant/Winter audition does not validate either
+of the new Grant or Olivia pairings. MAI ignores natural-language delivery
+instructions through OpenRouter, so those settings remain metadata rather than
+audible presentation controls. The real PCM path and persona fit still need
+testing.
 
 All audio samples, the randomized rating sheet, manifest, and generation
 metadata remain local and uncommitted.
@@ -294,6 +308,21 @@ Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multi
 [OpenRouter Guardrails API](https://openrouter.ai/docs/api/api-reference/guardrails/update-a-guardrail),
 [OpenRouter generation metadata API](https://openrouter.ai/docs/api/api-reference/generations/get-request-%26-usage-metadata-for-a-generation),
 [pnpm argument forwarding](https://pnpm.io/cli/run).
+
+### Latest preflight (2026-11-05)
+
+Live MAI PCM verification was skipped because the available process key did not
+provide a verifiable, non-resetting provider cap of $1 or less. No MAI
+synthesis request was made, so this pass recorded no PCM response, generation
+ID, cost, or audio properties. No provider audio was created. The Standard TTS
+request still asks for `provider.zdr: true`; account-side ZDR settings remain
+operator-attested rather than independently verified here, and no privacy
+settings were changed.
+
+The checked-in Fly configuration identifies the production `footnote` app; no
+separate private test deployment was identified in this checkout. No Discord
+session or deployment was attempted. The Discord canary still requires a
+private test target with one consenting human in the voice channel.
 
 ## What comes next
 
