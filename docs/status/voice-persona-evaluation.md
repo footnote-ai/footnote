@@ -202,8 +202,9 @@ check with a short sample of the intended delivery:
 
 For each call, compare the spoken answer with the approved Workflow text.
 Track progress cues separately; they aren't part of the approved answer.
-After checking ordinary playback, interrupt once during synthesis and once
-during playback. Make sure old audio stops, the call remains usable, and
+After checking ordinary playback, ask one follow-up while playback is active,
+correct one request while synthesis is pending, and interrupt one response
+during playback. Make sure stale audio stops, the call remains usable, and
 Discord's playback report agrees with what the caller heard.
 
 Record the model and voice used, whether the answer matched, time to first
@@ -211,12 +212,12 @@ audible speech, playback outcome, available cost, and short listening notes.
 Mark anything you couldn't observe. Hear all four personas before deciding
 whether to change their voices.
 
-Start with four persona answers and two interruption checks. Progress cues and
-replacement answers also incur synthesis requests. The earlier six-request
-ceiling is no longer a hard stop: the operator will monitor OpenRouter costs
-manually during the live Discord test. Keep the first pass short, avoid
-unnecessary retries, and stop to investigate unexpected charges or repeated
-synthesis failures.
+Start with one initial answer per persona, then exercise the follow-up,
+correction, and interruption checks above. Aim for about six MAI synthesis
+requests including progress cues, as guidance rather than a hard limit. The
+operator will monitor OpenRouter spending manually. Keep the first pass short;
+stop to investigate unexpected charges or repeated synthesis failures. Do not
+run automated high-volume calls or retry loops.
 
 ### Choosing other models later
 
@@ -345,19 +346,33 @@ listening; do not add samples or raw provider responses to the repository.
   transcription, synthesis, cancellation, PCM-boundary, and Discord playback
   behavior; it does not confirm a real MAI response or audible Discord output.
   The backend request path uses `response_format: pcm` and `provider.zdr: true`.
-- No paid request was made. The Windows user-scoped OpenRouter key was absent
-  in this run, and the inherited process key reported no explicit cap. The
-  account balance was checked privately and is not recorded in this public
-  guide.
+- **Operator decision on 2026-11-06:** The prior $1 key-cap requirement is
+  withdrawn for this user-led canary. The operator will monitor OpenRouter
+  spending manually. This does not authorize automated high-volume calls or
+  retry loops.
 - Account-side ZDR and Safety Retention settings were not rechecked because
   the OpenRouter settings page required sign-in. The request-level ZDR option
   is present, but does not establish the account's Safety Retention policy.
-- No Discord session or credentials were available in this checkout. Only the
-  production Fly app was visible; no production configuration change or
-  deployment was made. The canary can use the existing Discord infrastructure
-  in a private channel with one consenting participant; verify that the
-  running bot includes #989 before treating playback as validation. A separate
-  deployment is not required by this plan.
+- **Fly deployment on 2026-11-06:** The repository's `deploy.ps1` workflow
+  deployed revision `c78c13584d270b670e19497dec45ad89c8cd1efc` to the
+  canonical `footnote` app (release `v585`, image
+  `deployment-01M6SG295Z5XCBFCD6YAPRVYPJ`). The embedded revision matches the
+  deployed commit. The existing `/data/config/footnote.yaml` SHA-256 was
+  preserved at `1666684fc22bf9121b3923d9345dd909878e960482e5eb0540d2b10fc0a57d52`;
+  authentication stayed in preserve mode, and no secret values were changed.
+- Fly reported one started machine, passing machine checks, and DNS
+  verification. `/healthz` returned 200. Startup diagnostics included four
+  `discord_client` ready records and no Discord startup errors. These checks
+  confirm bot startup, not audible Discord playback.
+- The Fly backend has `OPENROUTER_API_KEY` present in its running process; the
+  read-only `GET /api/v1/key` check returned HTTP 200 with key metadata. The
+  credential value was not read or printed. All four persona bot credentials,
+  guild lists, and authorized-user environment variables are configured and
+  present in running processes. The existing per-guild and developer-only
+  Voice restrictions were not changed.
+- No Discord call or TTS synthesis was made during deployment. The operator
+  will run the canary in a private voice channel with one consenting
+  participant, using the existing bots. No separate deployment is required.
 - No live transcription, Workflow approval, MAI PCM synthesis, persona
   listening, end-to-end latency, playback, interruption, cancellation,
   recovery, or cost result has been observed yet.
@@ -382,8 +397,36 @@ listening; do not add samples or raw provider responses to the repository.
   with one consenting human (the caller can also be the listener). The
   November 6 preflight had no authenticated Discord session and did not run
   a call. The operator will provide listening results after deployment.
+- **Deployment completed (2026-11-06):** The repository's `deploy.ps1`
+  workflow deployed revision `c78c13584d270b670e19497dec45ad89c8cd1efc` to
+  the canonical `footnote` app (release `v585`, image
+  `deployment-01M6SG295Z5XCBFCD6YAPRVYPJ`). The embedded revision matches the
+  deployed commit. The existing `/data/config/footnote.yaml` SHA-256 was
+  preserved at `1666684fc22bf9121b3923d9345dd909878e960482e5eb0540d2b10fc0a57d52`;
+  authentication stayed in preserve mode, and no secret values were changed.
+- Fly reported one started machine, passing machine checks, and DNS
+  verification. `/healthz` returned 200. Startup diagnostics included four
+  `discord_client` ready records and no Discord startup errors. These checks
+  confirm bot startup, not audible Discord playback.
+- The Fly backend has `OPENROUTER_API_KEY` present in its running process; the
+  read-only `GET /api/v1/key` check returned HTTP 200 with key metadata. The
+  credential value was not read or printed. All four persona bot credentials,
+  guild lists, and authorized-user environment variables are configured and
+  present in running processes. The existing per-guild and developer-only
+  Voice restrictions were not changed.
+- No Discord call or TTS synthesis was made during deployment. The operator
+  will run the canary in a private voice channel with one consenting
+  participant, using the existing bots. No separate deployment is required.
 - Verify account-side ZDR and retention settings. Speech requests set
   `provider.zdr: true`, but the account settings remain operator-attested.
+
+Rollback target before this deployment was release `v584`, image
+`registry.fly.io/footnote:deployment-01M6SBQJ1HZ0JQV6DXV52WC2XJ`. If needed,
+redeploy that image with:
+
+```powershell
+fly deploy --app footnote --image registry.fly.io/footnote:deployment-01M6SBQJ1HZ0JQV6DXV52WC2XJ
+```
 
 Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multimodal/tts),
 [live speech catalog](https://openrouter.ai/api/v1/models?output_modalities=speech),
