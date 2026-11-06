@@ -376,49 +376,11 @@ listening; do not add samples or raw provider responses to the repository.
 - No live transcription, Workflow approval, MAI PCM synthesis, persona
   listening, end-to-end latency, playback, interruption, cancellation,
   recovery, or cost result has been observed yet.
-
 - Confirm that MAI returns `audio/pcm` with nonempty, even-length 24 kHz
   mono PCM16 within the 10 MiB limit. Discord resamples the audio to 48 kHz.
   Synthetic tests check response type, size, and even-byte boundaries;
   they cannot confirm the actual provider's sample rate or channel count.
   The audition requested MP3, so real PCM output remains untested.
-- **Updated operator decision (2026-11-06):** A $1 key cap is no longer
-  required for this manual Discord test. The operator will monitor OpenRouter
-  spending directly. Confirm that the Fly backend has the intended
-  OpenRouter credential without exposing its value; check available credit,
-  request volume, and actual charges where visible. No automated unlimited
-  load, retry loop, or provider stress testing is authorized.
-- Deploy the #989-merged Standard Voice runtime to the existing Fly app using
-  the repository's deployment workflow. Verify the target revision, backend
-  health, Discord bot readiness, and a rollback path. Avoid changing unrelated
-  production settings. The draft #990 can remain open while the operator
-  tests and records findings.
-- The operator will call an existing bot in a private Discord voice channel
-  with one consenting human (the caller can also be the listener). The
-  November 6 preflight had no authenticated Discord session and did not run
-  a call. The operator will provide listening results after deployment.
-- **Deployment completed (2026-11-06):** The repository's `deploy.ps1`
-  workflow deployed revision `c78c13584d270b670e19497dec45ad89c8cd1efc` to
-  the canonical `footnote` app (release `v585`, image
-  `deployment-01M6SG295Z5XCBFCD6YAPRVYPJ`). The embedded revision matches the
-  deployed commit. The existing `/data/config/footnote.yaml` SHA-256 was
-  preserved at `1666684fc22bf9121b3923d9345dd909878e960482e5eb0540d2b10fc0a57d52`;
-  authentication stayed in preserve mode, and no secret values were changed.
-- Fly reported one started machine, passing machine checks, and DNS
-  verification. `/healthz` returned 200. Startup diagnostics included four
-  `discord_client` ready records and no Discord startup errors. These checks
-  confirm bot startup, not audible Discord playback.
-- The Fly backend has `OPENROUTER_API_KEY` present in its running process; the
-  read-only `GET /api/v1/key` check returned HTTP 200 with key metadata. The
-  credential value was not read or printed. All four persona bot credentials,
-  guild lists, and authorized-user environment variables are configured and
-  present in running processes. The existing per-guild and developer-only
-  Voice restrictions were not changed.
-- No Discord call or TTS synthesis was made during deployment. The operator
-  will run the canary in a private voice channel with one consenting
-  participant, using the existing bots. No separate deployment is required.
-- Verify account-side ZDR and retention settings. Speech requests set
-  `provider.zdr: true`, but the account settings remain operator-attested.
 
 Rollback target before this deployment was release `v584`, image
 `registry.fly.io/footnote:deployment-01M6SBQJ1HZ0JQV6DXV52WC2XJ`. If needed,
