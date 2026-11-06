@@ -381,6 +381,15 @@ listening; do not add samples or raw provider responses to the repository.
   cause is still unknown. No speech content was added to this record.
 - The handler now records only an upstream HTTP status on future
   transcription failures; it does not log the provider error body or speech.
+- **Diagnostic follow-up deployment (2026-11-06):** Release `v586` runs image
+  `registry.fly.io/footnote:deployment-01M6SJSSY5HS7QDKEBFMEJ14EX`, embedding
+  revision `353ad23af253f78b73c71612bb07cef5ac237930`. The machine started,
+  its health check passed, and `/healthz` returned 200. Startup logs again
+  showed four Discord clients ready and no Discord startup errors. The
+  production YAML hash remains
+  `1666684fc22bf9121b3923d9345dd909878e960482e5eb0540d2b10fc0a57d52`; auth
+  stayed in preserve mode and no secret values changed. No call was made after
+  this diagnostic release.
 - Real MAI PCM synthesis, audible playback, persona listening, end-to-end
   latency, interruption, cancellation, recovery, and cost remain unverified.
 - Confirm that MAI returns `audio/pcm` with nonempty, even-length 24 kHz
@@ -389,12 +398,12 @@ listening; do not add samples or raw provider responses to the repository.
   they cannot confirm the actual provider's sample rate or channel count.
   The audition requested MP3, so real PCM output remains untested.
 
-Rollback target before this deployment was release `v584`, image
-`registry.fly.io/footnote:deployment-01M6SBQJ1HZ0JQV6DXV52WC2XJ`. If needed,
+Rollback target before the diagnostic deployment was release `v585`, image
+`registry.fly.io/footnote:deployment-01M6SG295Z5XCBFCD6YAPRVYPJ`. If needed,
 redeploy that image with:
 
 ```powershell
-fly deploy --app footnote --image registry.fly.io/footnote:deployment-01M6SBQJ1HZ0JQV6DXV52WC2XJ
+fly deploy --app footnote --image registry.fly.io/footnote:deployment-01M6SG295Z5XCBFCD6YAPRVYPJ
 ```
 
 Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multimodal/tts),
