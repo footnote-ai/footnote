@@ -216,6 +216,27 @@ answers and up to two replacement answers for the interruption checks.
 Progress cues count toward the same limit, so skip a later check if a cue
 uses up the remaining allowance. Do not retry requests or exceed six.
 
+### Choosing other models later
+
+Operators can already set a TTS model and voice per Discord bot. That
+configuration is the starting point for user choice, but entering a model
+name does not establish that OpenRouter can serve it or that its audio
+will work with Discord. Model and voice combinations need to be checked
+against the actual provider route and its output format.
+
+Keep MAI as the baseline for the first Discord canary. Under #975, the
+next comparisons should include Gemini Flash-Lite TTS and Gemini Flash
+TTS using the same reference passages. Kokoro remains worth revisiting
+if a different route offers acceptable response times. The earlier
+Gemini attempt returned a 404 with ZDR requested; that was a routing
+result, not a listening assessment. Check privacy settings, audio
+format, response time, cost, and text fidelity before declaring
+another model usable.
+
+A later dropdown or advanced text-entry setting should use the same
+backend configuration and show which model/voice pairs are supported.
+There is no new user-facing UI in this PR.
+
 The original audition audio, randomized rating sheet, manifest, and
 generation metadata remain local and uncommitted.
 
@@ -304,8 +325,9 @@ listening; do not add samples or raw provider responses to the repository.
 
 - Confirm that MAI returns `audio/pcm` with nonempty, even-length 24 kHz
   mono PCM16 within the 10 MiB limit. Discord resamples the audio to 48 kHz.
-  Synthetic tests cover these checks, but the audition requested MP3; the
-  real PCM response remains untested.
+  Synthetic tests check response type, size, and even-byte boundaries;
+  they cannot confirm the actual provider's sample rate or channel count.
+  The audition requested MP3, so real PCM output remains untested.
 - Use a process-scoped OpenRouter key with a verified, non-resetting cap of
   $1 or less and enough balance for six short requests. The November 5
   preflight made no paid requests because it couldn't verify the active
