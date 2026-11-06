@@ -338,19 +338,43 @@ listening; do not add samples or raw provider responses to the repository.
 
 ### Remaining canary gates
 
+- **Preflight on 2026-11-06:** The focused voice suite passed 53/53 tests with
+  dummy test-only Discord settings. This confirms synthetic Workflow,
+  transcription, synthesis, cancellation, PCM-boundary, and Discord playback
+  behavior; it does not confirm a real MAI response or audible Discord output.
+  The backend request path uses `response_format: pcm` and `provider.zdr: true`.
+- No paid request was made. The Windows user-scoped OpenRouter key was absent
+  in this run, and the inherited process key reported no explicit cap. The
+  account balance was checked privately and is not recorded in this public
+  guide.
+- Account-side ZDR and Safety Retention settings were not rechecked because
+  the OpenRouter settings page required sign-in. The request-level ZDR option
+  is present, but does not establish the account's Safety Retention policy.
+- No Discord session or credentials were available in this checkout. Only the
+  production Fly app was visible; no production configuration change or
+  deployment was made. The canary can use the existing Discord infrastructure
+  in a private channel with one consenting participant; verify that the
+  running bot includes #989 before treating playback as validation. A separate
+  deployment is not required by this plan.
+- No live transcription, Workflow approval, MAI PCM synthesis, persona
+  listening, end-to-end latency, playback, interruption, cancellation,
+  recovery, or cost result has been observed yet.
+
 - Confirm that MAI returns `audio/pcm` with nonempty, even-length 24 kHz
   mono PCM16 within the 10 MiB limit. Discord resamples the audio to 48 kHz.
   Synthetic tests check response type, size, and even-byte boundaries;
   they cannot confirm the actual provider's sample rate or channel count.
   The audition requested MP3, so real PCM output remains untested.
-- Use a process-scoped OpenRouter key with a verified, non-resetting cap of
-  $1 or less and enough balance for six short requests. The November 5
-  preflight made no paid requests because it couldn't verify the active
-  key's cap.
-- Prepare a private, non-production Discord environment. The available
-  checkout identified only the production Fly app, so no test deployment
-  or call was attempted. Keep one consenting human in the voice channel;
-  the caller can also be the listener.
+- Before a paid request, restore and recheck the previously verified Windows
+  user-scoped key with `GET /api/v1/key`: its cap must be $1 or less, its reset
+  must be null, and its remaining balance must cover the planned requests. The
+  current environment did not expose that key; do not use the uncapped
+  inherited process key.
+- Use an existing Discord bot instance confirmed to run the code merged in
+  #989 in a private voice channel with one consenting participant. A separate
+  deployment is not required, and no production configuration change is
+  authorized by this plan. This checkout had no Discord session or credentials
+  for the call.
 - Verify account-side ZDR and retention settings. Speech requests set
   `provider.zdr: true`, but the account settings remain operator-attested.
 
