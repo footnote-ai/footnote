@@ -81,17 +81,40 @@ test('TTS applies the shared profile/request precedence and returns effective me
         task: 'synthesize',
         text: 'Short test.',
         outputFormat: 'mp3',
-        options: { voice: 'echo' },
+        options: { model: 'tts-1', voice: 'echo' },
     });
 
-    assert.equal(captured?.options.model, 'gpt-4o-mini-tts');
+    assert.equal(captured?.options.model, 'tts-1');
     assert.equal(captured?.options.voice, 'echo');
     assert.equal(captured?.options.styleNote, 'dry and direct');
     assert.deepEqual(response.result.speechSelection?.selectionSource, {
-        model: 'operator_profile',
+        model: 'request_or_session',
         voice: 'request_or_session',
         delivery: 'operator_profile',
     });
+});
+
+test('unsupported explicit TTS model fails instead of falling back to the profile', async () => {
+    let synthesized = false;
+    const service = createInternalVoiceTtsService({
+        ttsRuntime: createRuntime(
+            (model) => model === 'gpt-4o-mini-tts',
+            () => (synthesized = true)
+        ),
+        profile,
+        recordUsage: () => undefined,
+    });
+
+    await assert.rejects(
+        service.runTtsTask({
+            task: 'synthesize',
+            text: 'Short test.',
+            outputFormat: 'mp3',
+            options: { model: 'unsupported-model' },
+        }),
+        /Requested tts model or voice is not supported/u
+    );
+    assert.equal(synthesized, false);
 });
 
 test('TTS synthesizes the submitted text and records backend usage and cost', async () => {

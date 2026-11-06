@@ -76,6 +76,10 @@ const STANDARD_TTS_PERSONA_VOICES: Readonly<Record<string, string>> = {
 };
 const isMaiVoice = (voice: string): boolean =>
     voice.endsWith(':MAI-Voice-2.1-Flash');
+const hasCompatibleVoiceForModel = (
+    selection: SpeechSelectionMetadata
+): boolean =>
+    selection.model !== STANDARD_TTS_MODEL || isMaiVoice(selection.voice);
 const speechSynthesisOptions = (selection: SpeechSelectionMetadata) => ({
     model: selection.model,
     voice: selection.voice,
@@ -269,7 +273,8 @@ export const createInternalVoiceRealtimeHandler = ({
                 mode !== 'standard' ||
                 !cueSpeechSelection ||
                 !cuePersona ||
-                !openRouterVoiceService
+                !openRouterVoiceService ||
+                !hasCompatibleVoiceForModel(cueSpeechSelection)
             )
                 return;
             progressCueTimer = setTimer(() => {
@@ -505,10 +510,7 @@ export const createInternalVoiceRealtimeHandler = ({
             currentDeliveryText = delivery.text;
             const synthesisStartedAt = Date.now();
             try {
-                if (
-                    speechSelection.model === STANDARD_TTS_MODEL &&
-                    !isMaiVoice(speechSelection.voice)
-                )
+                if (!hasCompatibleVoiceForModel(speechSelection))
                     throw new Error('MAI requires a MAI-specific voice ID.');
                 const result = await openRouterVoiceService.synthesize(
                     delivery.text,
@@ -1664,6 +1666,7 @@ export const createInternalVoiceRealtimeHandler = ({
                         profile: persona.profile,
                         provider: 'openrouter',
                         modality: 'tts',
+                        request: event.options,
                         fallback: {
                             model: STANDARD_TTS_MODEL,
                             voice: bundledVoice ?? STANDARD_TTS_VOICE,
@@ -1672,6 +1675,23 @@ export const createInternalVoiceRealtimeHandler = ({
                             }),
                         },
                     });
+                    if (
+                        (event.options?.model !== undefined ||
+                            event.options?.voice !== undefined) &&
+                        ((speechSelection.model === STANDARD_TTS_MODEL &&
+                            !isMaiVoice(speechSelection.voice)) ||
+                            (speechSelection.model !== STANDARD_TTS_MODEL &&
+                                isMaiVoice(speechSelection.voice)))
+                    ) {
+                        sendServerEvent(ws, {
+                            type: 'error',
+                            message:
+                                'The selected model and voice are not a supported Standard Voice combination.',
+                            code: 'unsupported_speech_selection',
+                        });
+                        finishCall('setup_failed', false, true);
+                        return;
+                    }
                     if (
                         speechSelection.model !== STANDARD_TTS_MODEL &&
                         (speechSelection.selectionSource.voice ===
@@ -1682,9 +1702,10 @@ export const createInternalVoiceRealtimeHandler = ({
                             profile: persona.profile,
                             provider: 'openrouter',
                             modality: 'tts',
+                            request: event.options,
                             ignoreOperatorModel: true,
                             fallbackReason:
-                                'A custom Standard TTS model needs a matching configured voice; using the MAI model and persona voice.',
+                                'A custom Standard TTS model needs a matching configured voice; using the MAI model with the selected MAI voice.',
                             fallback: {
                                 model: STANDARD_TTS_MODEL,
                                 voice: bundledVoice ?? STANDARD_TTS_VOICE,
