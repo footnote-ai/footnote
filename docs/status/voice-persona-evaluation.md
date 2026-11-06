@@ -187,16 +187,30 @@ particular voice or summarized as a consistency score.
 
 ### First-round Standard Voice listening plan
 
-For each persona, use the same short factual exchange and one
-persona-characteristic exchange. Compare the approved Workflow text with the
-spoken answer; assess any progress cue separately because it is not the
-approved answer. Then confirm playback and interrupt once during synthesis
-and once during playback. Check that stale audio stops and the call remains
-usable. Check that Discord's playback report matches what the listener heard.
-Record the effective model and voice, text match, time from approval to first
-audible speech, playback result, and cost when available; mark anything
-unobserved. Make adjustments only after hearing all four assignments in
-Discord.
+Use one caller turn per persona, combining a short fact with a persona-
+characteristic request so each produces one approved answer:
+
+- **Footnote:** “How many days are in a week? Then give me a calm,
+  conversational welcome.”
+- **Danny:** “How many days are in a week? Then suggest one steady, warm first
+  step for a busy morning.”
+- **Myuri:** “How many days are in a week? Then describe rain in one lively,
+  clear sentence.”
+- **Winter:** “How many days are in a week? Then give me a dry, direct,
+  understated reminder to take a break.”
+
+Compare the approved Workflow text with the spoken answer. Assess any progress
+cue separately; it is not the approved answer. Confirm playback, then
+interrupt once during synthesis and once during playback. Check that stale
+audio stops, the call stays usable, and Discord's playback report matches
+what the listener heard. Record the effective model and voice, text match,
+time to first audible speech, playback result, cost when available, and brief
+listener notes. Mark anything unobserved. Adjust these assignments only
+after hearing all four in Discord.
+
+Plan for at most six MAI synthesis requests: four approved answers and one
+replacement answer per interruption check. Progress-cue synthesis also counts
+toward six. Do not retry; stop when six requests have been dispatched.
 
 All audition samples, the randomized rating sheet, manifest, and generation
 metadata remain local and uncommitted.
@@ -284,12 +298,13 @@ listening; do not add samples or raw provider responses to the repository.
 
 ### Remaining canary gates
 
-- Verify a live MAI response is 24 kHz mono PCM16 and plays through Discord's
-  existing resampler. The earlier MAI audition requested MP3, so it did not
-  verify this path.
+- Verify live MAI returns `audio/pcm` containing nonempty, even-length 24 kHz
+  mono PCM16 within the 10 MiB limit; Discord resamples valid audio to 48 kHz.
+  Synthetic tests cover those boundaries, but the earlier MAI audition
+  requested MP3, so the live PCM path remains unverified.
 - Use process-scoped OpenRouter credentials with a verified, non-resetting
-  spending cap of $1 or less. The November 5 preflight could not verify a cap,
-  so it made no MAI request.
+  cap of $1 or less and enough remaining balance for six short requests. The
+  November 5 preflight could not verify a cap, so it made no MAI request.
 - Configure a private, non-production Discord test environment. This checkout
   identified only the production Fly app; no Discord call or deployment was
   attempted. Use one consenting human in the test voice channel.
