@@ -620,14 +620,14 @@ export const createInternalVoiceRealtimeHandler = ({
                                 'The voice utterance could not be transcribed.',
                             code: 'transcription_failed',
                         });
+                        const providerStatus =
+                            error instanceof Error
+                                ? /\bHTTP \d{3}\b/u.exec(error.message)?.[0]
+                                : undefined;
                         realtimeLogger.warn(
-                            'OpenRouter voice transcription failed.',
-                            {
-                                error:
-                                    error instanceof Error
-                                        ? error.message
-                                        : String(error),
-                            }
+                            'OpenRouter voice transcription failed' +
+                                (providerStatus ? ` (${providerStatus})` : '') +
+                                '.'
                         );
                     }
                 })

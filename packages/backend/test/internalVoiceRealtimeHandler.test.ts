@@ -760,6 +760,65 @@ test('Standard can start when GPT-Live is not configured', async () => {
     }
 });
 
+test('Standard transcription failures log provider HTTP status without error text', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const logOutput: string[] = [];
+    const logTransport = new transports.Stream({
+        stream: new Writable({
+            write(chunk, _encoding, done) {
+                logOutput.push(String(chunk));
+                done();
+            },
+        }),
+        format: format.printf((info) => String(info.message)),
+    });
+    let workflowCalls = 0;
+    let ttsCalls = 0;
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'standard',
+        openRouterVoiceService: {
+            async transcribe() {
+                throw new Error(
+                    'OpenRouter transcription failed (HTTP 401). private spoken phrase'
+                );
+            },
+            async synthesize() {
+                ttsCalls += 1;
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+        workflowRunner: {
+            async runRealtimeConversation() {
+                workflowCalls += 1;
+                return { status: 'failed' };
+            },
+        },
+    });
+    logger.add(logTransport);
+    let ws: WebSocket | undefined;
+
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'standard', inputAudio);
+        assert.deepEqual(await waitForJsonMessage(ws), {
+            type: 'error',
+            message: 'The voice utterance could not be transcribed.',
+            code: 'transcription_failed',
+        });
+
+        assert.match(logOutput.join(''), /HTTP 401/u);
+        assert.doesNotMatch(logOutput.join(''), /private spoken phrase/u);
+        assert.equal(workflowCalls, 0);
+        assert.equal(ttsCalls, 0);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        logger.remove(logTransport);
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
 test('internal realtime handler rejects invalid realtime payloads after websocket upgrade', async () => {
     const harness = await createRealtimeHandlerHarness();
 

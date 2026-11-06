@@ -373,9 +373,16 @@ listening; do not add samples or raw provider responses to the repository.
 - No Discord call or TTS synthesis was made during deployment. The operator
   will run the canary in a private voice channel with one consenting
   participant, using the existing bots. No separate deployment is required.
-- No live transcription, Workflow approval, MAI PCM synthesis, persona
-  listening, end-to-end latency, playback, interruption, cancellation,
-  recovery, or cost result has been observed yet.
+- **First live Discord attempt (2026-11-06):** The operator reported joining
+  the call and speaking without hearing a response. Logs show the backend
+  realtime connection succeeded, then Standard transcription failed twice at
+  `22:59:11Z` and `22:59:29Z`. No Workflow, MAI TTS, or playback event followed.
+  The buffered logs omit the provider HTTP status, so the upstream failure
+  cause is still unknown. No speech content was added to this record.
+- The handler now records only an upstream HTTP status on future
+  transcription failures; it does not log the provider error body or speech.
+- Real MAI PCM synthesis, audible playback, persona listening, end-to-end
+  latency, interruption, cancellation, recovery, and cost remain unverified.
 - Confirm that MAI returns `audio/pcm` with nonempty, even-length 24 kHz
   mono PCM16 within the 10 MiB limit. Discord resamples the audio to 48 kHz.
   Synthetic tests check response type, size, and even-byte boundaries;
