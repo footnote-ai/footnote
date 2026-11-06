@@ -31,7 +31,7 @@ The delivery ceilings are 400 estimated tokens for Live and 1,600 estimated toke
 
 ## Broader Live evaluation
 
-This broader persona and behavior evaluation is separate from the four-persona Standard Voice canary below. Start with Footnote and Winter. Use ordinary text as the reference, then run the same short conversation in Standard and Live at balanced expression. One consenting listener and a private Discord channel are enough for this pass.
+The Live comparison is separate from the four-persona Standard Voice canary below. Start with Footnote and Winter: use their text responses as a reference, then try the same short conversation in Standard and Live at balanced expression. Keep the test in a private Discord channel with one consenting human, who can be both caller and listener.
 
 Keep the questions simple enough to compare fairly:
 
@@ -91,10 +91,10 @@ models.
 | Grok Voice TTS 1.0        | `eve` / `rex`                                                          | MP3                | Not supported; omitted | $15/M characters                        |
 | Kokoro 82M                | `af_heart` / `am_onyx`                                                 | MP3                | Not supported; omitted | $0.62/M characters                      |
 
-PR #988's Standard Voice assignments are provisional. The offline fixed-text
-audition heard Harper as Footnote and Grant as Winter. Iris and Olivia have
-not been heard; only Harper's current pairing has been auditioned, and no
-Discord results are available.
+The table above shows the voices used for the offline audition: Harper
+as Footnote and Grant as Winter. #988 assigns voices to all four personas
+for the first Discord test. Only Harper has been heard in its current
+persona role:
 
 | Persona  | Provisional MAI voice              | First-round delivery target                      |
 | -------- | ---------------------------------- | ------------------------------------------------ |
@@ -103,9 +103,10 @@ Discord results are available.
 | Myuri    | `en-US-Iris:MAI-Voice-2.1-Flash`   | Lively, expressive, intelligible delivery        |
 | Winter   | `en-US-Olivia:MAI-Voice-2.1-Flash` | Expressive female voice; controlled, understated |
 
-OpenRouter's current speech catalog lists all four provisional voice IDs for
-MAI-Voice-2.1-Flash. Catalog availability does not establish successful
-synthesis or persona fit. See the [live speech catalog](https://openrouter.ai/api/v1/models?output_modalities=speech).
+All four voice IDs appear in [OpenRouter's speech catalog](https://openrouter.ai/api/v1/models?output_modalities=speech),
+but a catalog listing doesn't confirm that a voice will synthesize
+successfully or suit its persona. None of these pairings has been tested in
+Discord.
 
 Gemini was configured with the proposed short delivery guidance for Footnote
 ("Clear, calm, grounded, conversational") and Winter ("Dry, direct,
@@ -187,8 +188,8 @@ particular voice or summarized as a consistency score.
 
 ### First-round Standard Voice listening plan
 
-Use one caller turn per persona, combining a short fact with a persona-
-characteristic request so each produces one approved answer:
+Start with one turn per persona. Each question combines the same factual
+check with a short sample of the intended delivery:
 
 - **Footnote:** “How many days are in a week? Then give me a calm,
   conversational welcome.”
@@ -199,28 +200,31 @@ characteristic request so each produces one approved answer:
 - **Winter:** “How many days are in a week? Then give me a dry, direct,
   understated reminder to take a break.”
 
-Compare the approved Workflow text with the spoken answer. Assess any progress
-cue separately; it is not the approved answer. Confirm playback, then
-interrupt once during synthesis and once during playback. Check that stale
-audio stops, the call stays usable, and Discord's playback report matches
-what the listener heard. Record the effective model and voice, text match,
-time to first audible speech, playback result, cost when available, and brief
-listener notes. Mark anything unobserved. Adjust these assignments only
-after hearing all four in Discord.
+For each call, compare the spoken answer with the approved Workflow text.
+Track progress cues separately; they aren't part of the approved answer.
+After checking ordinary playback, interrupt once during synthesis and once
+during playback. Make sure old audio stops, the call remains usable, and
+Discord's playback report agrees with what the caller heard.
 
-Plan for at most six MAI synthesis requests: four approved answers and one
-replacement answer per interruption check. Progress-cue synthesis also counts
-toward six. Do not retry; stop when six requests have been dispatched.
+Record the model and voice used, whether the answer matched, time to first
+audible speech, playback outcome, available cost, and short listening notes.
+Mark anything you couldn't observe. Hear all four personas before deciding
+whether to change their voices.
 
-All audition samples, the randomized rating sheet, manifest, and generation
-metadata remain local and uncommitted.
+Limit this first test to six MAI synthesis requests in total: four initial
+answers and up to two replacement answers for the interruption checks.
+Progress cues count toward the same limit, so skip a later check if a cue
+uses up the remaining allowance. Do not retry requests or exceed six.
 
-Every synthesis request includes `provider.zdr: true`. OpenRouter applies
-that setting alongside the account or guardrail configuration; it does not
-exclude Safety Retention endpoints when those settings permit them. This
-audition requires ZDR-only routing for **Google, SpaceXAI, and All other
-models**. Disable Safety Retention for Google and All other models. There is no
-separate SpaceXAI Safety Retention switch.
+The original audition audio, randomized rating sheet, manifest, and
+generation metadata remain local and uncommitted.
+
+The fixed-text audition sent `provider.zdr: true` with every synthesis
+request. OpenRouter applies that flag alongside the account's guardrails;
+the flag alone does not exclude Safety Retention endpoints if the account
+allows them. The audition required ZDR-only routing for **Google, SpaceXAI,
+and All other models**, with Safety Retention disabled for Google and All
+other models. SpaceXAI has no separate Safety Retention switch.
 
 The documented guardrail fields are `enforce_zdr_google: true`,
 `enforce_zdr_other: true`, `allow_safety_retention_google: false`, and
@@ -298,18 +302,20 @@ listening; do not add samples or raw provider responses to the repository.
 
 ### Remaining canary gates
 
-- Verify live MAI returns `audio/pcm` containing nonempty, even-length 24 kHz
-  mono PCM16 within the 10 MiB limit; Discord resamples valid audio to 48 kHz.
-  Synthetic tests cover those boundaries, but the earlier MAI audition
-  requested MP3, so the live PCM path remains unverified.
-- Use process-scoped OpenRouter credentials with a verified, non-resetting
-  cap of $1 or less and enough remaining balance for six short requests. The
-  November 5 preflight could not verify a cap, so it made no MAI request.
-- Configure a private, non-production Discord test environment. This checkout
-  identified only the production Fly app; no Discord call or deployment was
-  attempted. Use one consenting human in the test voice channel.
-- Verify account-side ZDR and retention settings before the canary. Requests
-  set `provider.zdr: true`, but account settings remain operator-attested.
+- Confirm that MAI returns `audio/pcm` with nonempty, even-length 24 kHz
+  mono PCM16 within the 10 MiB limit. Discord resamples the audio to 48 kHz.
+  Synthetic tests cover these checks, but the audition requested MP3; the
+  real PCM response remains untested.
+- Use a process-scoped OpenRouter key with a verified, non-resetting cap of
+  $1 or less and enough balance for six short requests. The November 5
+  preflight made no paid requests because it couldn't verify the active
+  key's cap.
+- Prepare a private, non-production Discord environment. The available
+  checkout identified only the production Fly app, so no test deployment
+  or call was attempted. Keep one consenting human in the voice channel;
+  the caller can also be the listener.
+- Verify account-side ZDR and retention settings. Speech requests set
+  `provider.zdr: true`, but the account settings remain operator-attested.
 
 Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multimodal/tts),
 [live speech catalog](https://openrouter.ai/api/v1/models?output_modalities=speech),
