@@ -65,9 +65,13 @@ export class AudioPlaybackHandler {
         ) => void
     ): Promise<void> {
         const guildId = connection.joinConfig.guildId;
+        const playbackQueuedAt = Date.now();
         this.stopPlayback(guildId);
         const pcm = upsampleToDiscord(audioData);
         if (!pcm.length) {
+            logger.info(
+                `[AudioPlayback] Approved audio status=failed pcmBytes=${audioData.byteLength} playbackMs=${Date.now() - playbackQueuedAt} reason=empty_pcm`
+            );
             report('failed');
             return;
         }
@@ -88,6 +92,9 @@ export class AudioPlaybackHandler {
         const reportStatus = (
             event: 'started' | 'completed' | 'interrupted' | 'failed'
         ): void => {
+            logger.info(
+                `[AudioPlayback] Approved audio status=${event} pcmBytes=${audioData.byteLength} playbackMs=${Date.now() - playbackQueuedAt}`
+            );
             try {
                 report(event);
             } catch (error) {

@@ -379,6 +379,10 @@ export class VoiceSubsystem extends Event {
                     const session = this.sessionManager.getSession(guildId);
                     if (!session) return;
 
+                    if (deliveryId)
+                        logger.info(
+                            `Standard Voice Discord output received pcmBytes=${audioData.byteLength}`
+                        );
                     const playback = deliveryId
                         ? this.audioPlaybackHandler.playApprovedAudioToChannel(
                               session.connection,

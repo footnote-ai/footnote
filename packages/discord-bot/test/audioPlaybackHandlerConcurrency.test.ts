@@ -8,10 +8,12 @@
 import test from 'node:test';
 import { strict as assert } from 'node:assert';
 import { EventEmitter } from 'node:events';
-import { PassThrough } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 import { AudioPlayerStatus, VoiceConnection } from '@discordjs/voice';
+import { format, transports } from 'winston';
 
 import { AudioPlaybackHandler } from '../src/voice/AudioPlaybackHandler.js';
+import { logger } from '../src/utils/logger.js';
 
 test('approved playback reports empty audio as failed without claiming it started', async () => {
     const handler = new AudioPlaybackHandler();
@@ -28,6 +30,38 @@ test('approved playback reports empty audio as failed without claiming it starte
     );
 
     assert.deepEqual(events, ['failed']);
+});
+
+test('approved playback logs a content-free status and PCM byte count', async () => {
+    const handler = new AudioPlaybackHandler();
+    const logs: string[] = [];
+    const logTransport = new transports.Stream({
+        stream: new Writable({
+            write(chunk, _encoding, done) {
+                logs.push(String(chunk));
+                done();
+            },
+        }),
+        format: format.printf((info) => String(info.message)),
+    });
+    const connection = {
+        joinConfig: { guildId: 'guild-id' },
+        state: { status: 'ready' },
+    } as unknown as VoiceConnection;
+
+    logger.add(logTransport);
+    try {
+        await handler.playApprovedAudioToChannel(
+            connection,
+            Buffer.alloc(0),
+            () => {}
+        );
+
+        assert.match(logs.join(''), /Approved audio status=failed pcmBytes=0/u);
+        assert.doesNotMatch(logs.join(''), /guild-id|Buffer|audioBase64/u);
+    } finally {
+        logger.remove(logTransport);
+    }
 });
 
 class MockAudioPlayer extends EventEmitter {

@@ -168,7 +168,9 @@ export class AudioCaptureHandler extends EventEmitter {
                 return;
             }
 
-            audioCaptureLogger.debug(`[${captureKey}] Speaking started`);
+            audioCaptureLogger.info(
+                'Discord voice speaker detected; starting PCM capture.'
+            );
             this.emitSpeakerStart(guildId, userId);
             this.startReceiverStream(guildId, userId, receiver, {
                 reason: 'speaking_start',
@@ -306,12 +308,9 @@ export class AudioCaptureHandler extends EventEmitter {
             }
             cleanedUp = true;
             const durationMs = Date.now() - captureStartedAt;
-            audioCaptureLogger.debug(`[${captureKey}] PCM capture summary`, {
-                durationMs,
-                chunkCount,
-                totalBytes,
-                reason,
-            });
+            audioCaptureLogger.info(
+                `Discord PCM capture complete durationMs=${durationMs} chunkCount=${chunkCount} totalBytes=${totalBytes} reason=${reason}`
+            );
             this.emitSpeakerSilence({
                 guildId,
                 userId,
@@ -543,8 +542,7 @@ export class AudioCaptureHandler extends EventEmitter {
     } {
         if ('networking' in state) {
             const networkingState = state.networking?.state as
-                | { status?: string }
-                | undefined;
+                { status?: string } | undefined;
             return {
                 status: state.status,
                 networkingStatus: networkingState?.status,
