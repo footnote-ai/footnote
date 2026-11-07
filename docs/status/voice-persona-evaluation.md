@@ -403,11 +403,13 @@ listening; do not add samples or raw provider responses to the repository.
   transcription status/timing, Workflow disposition/timing, MAI response
   status/PCM byte count/timing, Discord handoff, and playback status/timing.
   They omit speech, transcripts, provider error bodies, and user/guild IDs.
-  No global debug level was enabled. The retained Fly log buffer had no
-  recognizable session, input, transcription, Workflow, synthesis, or playback
-  events for the earlier unanswered call, so that attempt cannot be diagnosed
-  from the retained logs. No Standard Voice attempt has been observed after
-  v587 yet; playback remains unverified pending the operator retest.
+  No global debug level was enabled. The latest unanswered call preceded
+  v587; its per-release log trace was not available in the current retained
+  buffer, so it remains unexplained. A separately documented v585 attempt had
+  two transcription failures and no following Workflow, MAI, or playback
+  event; its upstream status was absent. No Standard Voice attempt has been
+  observed after v587 yet; playback remains unverified pending the operator
+  retest.
 - Real MAI PCM synthesis, audible playback, persona listening, end-to-end
   latency, interruption, cancellation, recovery, and cost remain unverified.
 - Confirm that MAI returns `audio/pcm` with nonempty, even-length 24 kHz
