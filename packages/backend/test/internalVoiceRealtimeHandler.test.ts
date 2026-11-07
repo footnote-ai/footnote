@@ -760,6 +760,68 @@ test('Standard can start when GPT-Live is not configured', async () => {
     }
 });
 
+test('Standard transcription failures log provider HTTP status without error text', async () => {
+    const inputAudio = Buffer.from([0, 0, 1, 0]);
+    const logOutput: string[] = [];
+    const logTransport = new transports.Stream({
+        stream: new Writable({
+            write(chunk, _encoding, done) {
+                logOutput.push(String(chunk));
+                done();
+            },
+        }),
+        format: format.printf((info) => String(info.message)),
+    });
+    let workflowCalls = 0;
+    let ttsCalls = 0;
+    const harness = await createRealtimeHandlerHarness({
+        defaultMode: 'standard',
+        openRouterVoiceService: {
+            async transcribe() {
+                throw new Error(
+                    'OpenRouter transcription failed (HTTP 401). private spoken phrase'
+                );
+            },
+            async synthesize() {
+                ttsCalls += 1;
+                return { audio: Buffer.from([0, 0]) };
+            },
+        },
+        workflowRunner: {
+            async runRealtimeConversation() {
+                workflowCalls += 1;
+                return { status: 'failed' };
+            },
+        },
+    });
+    logger.add(logTransport);
+    let ws: WebSocket | undefined;
+
+    try {
+        ws = await harness.connect();
+        await startRealtimeVoiceSession(ws, 'standard', inputAudio);
+        assert.deepEqual(await waitForJsonMessage(ws), {
+            type: 'error',
+            message: 'The voice utterance could not be transcribed.',
+            code: 'transcription_failed',
+        });
+
+        assert.match(logOutput.join(''), /HTTP 401/u);
+        assert.match(logOutput.join(''), /input audio started/u);
+        assert.match(logOutput.join(''), /input committed audioBytes=4/u);
+        assert.match(logOutput.join(''), /transcription started audioBytes=4/u);
+        assert.doesNotMatch(logOutput.join(''), /private spoken phrase/u);
+        assert.equal(workflowCalls, 0);
+        assert.equal(ttsCalls, 0);
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
+    } finally {
+        logger.remove(logTransport);
+        if (ws) await closeWebSocket(ws);
+        await harness.close();
+    }
+});
+
 test('internal realtime handler rejects invalid realtime payloads after websocket upgrade', async () => {
     const harness = await createRealtimeHandlerHarness();
 
@@ -786,6 +848,16 @@ test('internal realtime handler rejects invalid realtime payloads after websocke
 test('Standard transcribes one attributed utterance and synthesizes only the approved Workflow answer', async () => {
     const inputAudio = Buffer.from([0, 0, 1, 0]);
     const clock = createFakeClock();
+    const logOutput: string[] = [];
+    const logTransport = new transports.Stream({
+        stream: new Writable({
+            write(chunk, _encoding, done) {
+                logOutput.push(String(chunk));
+                done();
+            },
+        }),
+        format: format.printf((info) => String(info.message)),
+    });
     const synthesized: string[] = [];
     const snapshots: string[] = [];
     const profile: BotProfileConfig = {
@@ -854,6 +926,7 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
         },
     });
 
+    logger.add(logTransport);
     let ws: WebSocket | undefined;
     try {
         ws = await harness.connect();
@@ -892,14 +965,49 @@ test('Standard transcribes one attributed utterance and synthesizes only the app
         );
         assert.equal(typeof audio.deliveryId, 'string');
         assert.equal(synthesized[0], 'The reviewed answer.');
+        ws.send(
+            JSON.stringify({
+                type: 'delivery.playback',
+                deliveryId: audio.deliveryId,
+                event: 'started',
+            })
+        );
+        ws.send(
+            JSON.stringify({
+                type: 'delivery.playback',
+                deliveryId: audio.deliveryId,
+                event: 'completed',
+            })
+        );
+        ws.send(JSON.stringify({ type: 'session.close' }));
+        await closeWebSocket(ws);
         clock.tick(2_000);
         await new Promise((resolve) => setImmediate(resolve));
         assert.deepEqual(synthesized, ['The reviewed answer.']);
         assert.equal(snapshots.length, 1);
         assert.match(snapshots[0], /What is the answer\?/);
-        ws.send(JSON.stringify({ type: 'session.close' }));
-        await closeWebSocket(ws);
+        const logs = logOutput.join('');
+        assert.match(logs, /Voice session ready mode=standard/u);
+        assert.match(logs, /input committed audioBytes=4/u);
+        assert.match(
+            logs,
+            /transcription completed elapsedMs=\d+ nonEmpty=true/u
+        );
+        assert.match(logs, /Workflow started/u);
+        assert.match(logs, /Workflow completed disposition=approved/u);
+        assert.match(
+            logs,
+            /TTS synthesis complete .* voiceSource=deployment_fallback/u
+        );
+        assert.match(logs, /audio sent to Discord boundary audioBytes=4/u);
+        assert.match(logs, /playback status=started accepted=true/u);
+        assert.match(logs, /playback status=completed accepted=true/u);
+        assert.doesNotMatch(
+            logs,
+            /PRIVATE_OVERLAY|What is the answer\?|The reviewed answer\./u
+        );
     } finally {
+        logger.remove(logTransport);
         if (ws) await closeWebSocket(ws);
         await harness.close();
     }

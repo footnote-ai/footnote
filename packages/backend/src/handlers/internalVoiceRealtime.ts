@@ -378,6 +378,11 @@ export const createInternalVoiceRealtimeHandler = ({
                 ? null
                 : {
                       runRealtimeConversation: async (snapshot, context) => {
+                          const workflowStartedAt = Date.now();
+                          if (mode === 'standard')
+                              realtimeLogger.info(
+                                  'Standard Voice Workflow started.'
+                              );
                           try {
                               if (!mode || !persona)
                                   throw new Error('Voice mode is unavailable.');
@@ -391,6 +396,10 @@ export const createInternalVoiceRealtimeHandler = ({
                                               deliveryTokenLimits[mode],
                                           persona,
                                       }
+                                  );
+                              if (mode === 'standard')
+                                  realtimeLogger.info(
+                                      `Standard Voice Workflow completed disposition=${result.finalResponse?.disposition ?? 'missing'} workflowMs=${Date.now() - workflowStartedAt}`
                                   );
                               const answer = result.finalResponse;
                               if (
@@ -420,6 +429,12 @@ export const createInternalVoiceRealtimeHandler = ({
                                       disposition: 'answer_too_long',
                                   },
                               };
+                          } catch (error) {
+                              if (mode === 'standard')
+                                  realtimeLogger.warn(
+                                      `Standard Voice Workflow failed workflowMs=${Date.now() - workflowStartedAt}`
+                                  );
+                              throw error;
                           } finally {
                               if (mode === 'standard') cancelProgressCue();
                           }
@@ -459,15 +474,13 @@ export const createInternalVoiceRealtimeHandler = ({
                 message: 'Approved answer speech could not be generated.',
                 code: 'speech_synthesis_failed',
             });
-            realtimeLogger.warn('OpenRouter voice synthesis failed.', {
-                provider: selection.provider,
-                model: selection.model,
-                voice: selection.voice,
-                selectionSource: selection.selectionSource,
-                responseFormat: 'pcm',
-                synthesisMs: Date.now() - synthesisStartedAt,
-                error: error instanceof Error ? error.message : String(error),
-            });
+            const providerStatus =
+                error instanceof Error
+                    ? /\bHTTP (\d{3})\b/u.exec(error.message)?.[1]
+                    : undefined;
+            realtimeLogger.warn(
+                `Standard Voice TTS synthesis failed provider=${selection.provider} httpStatus=${providerStatus ?? 'unknown'} synthesisMs=${Date.now() - synthesisStartedAt}`
+            );
         };
 
         const synthesizeApprovedDelivery = async (
@@ -525,21 +538,17 @@ export const createInternalVoiceRealtimeHandler = ({
                     state.deliveryStatus()?.status !== 'handed_off'
                 )
                     return;
-                realtimeLogger.info('Standard Voice TTS synthesis complete.', {
-                    provider: speechSelection.provider,
-                    model: speechSelection.model,
-                    voice: speechSelection.voice,
-                    selectionSource: speechSelection.selectionSource,
-                    generationId: result.generationId,
-                    responseFormat: 'pcm',
-                    audioBytes: result.audio.byteLength,
-                    synthesisMs: Date.now() - synthesisStartedAt,
-                });
+                realtimeLogger.info(
+                    `Standard Voice TTS synthesis complete provider=${speechSelection.provider} voiceSource=${speechSelection.selectionSource.voice} audioBytes=${result.audio.byteLength} synthesisMs=${Date.now() - synthesisStartedAt}`
+                );
                 sendServerEvent(ws, {
                     type: 'output_audio.delta',
                     audioBase64: result.audio.toString('base64'),
                     deliveryId: delivery.deliveryId,
                 });
+                realtimeLogger.info(
+                    `Standard Voice audio sent to Discord boundary audioBytes=${result.audio.byteLength}`
+                );
             } catch (error) {
                 reportSynthesisFailure(
                     state,
@@ -570,9 +579,16 @@ export const createInternalVoiceRealtimeHandler = ({
             if (!attributedSpeakerId) return;
             transcriptionController?.abort('superseded');
             transcriptionController = controller;
+            const transcriptionStartedAt = Date.now();
+            realtimeLogger.info(
+                `Standard Voice transcription started audioBytes=${audio.byteLength}`
+            );
             void openRouterVoiceService
                 .transcribe(audio, controller.signal)
                 .then(({ text, usage }) => {
+                    realtimeLogger.info(
+                        `Standard Voice transcription completed elapsedMs=${Date.now() - transcriptionStartedAt} nonEmpty=${Boolean(text.trim())}`
+                    );
                     if (
                         closed ||
                         controller.signal.aborted ||
@@ -620,14 +636,12 @@ export const createInternalVoiceRealtimeHandler = ({
                                 'The voice utterance could not be transcribed.',
                             code: 'transcription_failed',
                         });
+                        const providerStatus =
+                            error instanceof Error
+                                ? /\bHTTP \d{3}\b/u.exec(error.message)?.[0]
+                                : undefined;
                         realtimeLogger.warn(
-                            'OpenRouter voice transcription failed.',
-                            {
-                                error:
-                                    error instanceof Error
-                                        ? error.message
-                                        : String(error),
-                            }
+                            `Standard Voice transcription failed httpStatus=${providerStatus ?? 'unknown'} elapsedMs=${Date.now() - transcriptionStartedAt}`
                         );
                     }
                 })
@@ -1247,6 +1261,9 @@ export const createInternalVoiceRealtimeHandler = ({
             if (event.type === 'session.ready') {
                 if (sessionReady) return;
                 sessionReady = true;
+                realtimeLogger.info(
+                    `Voice session ready mode=${event.mode ?? mode ?? defaultMode}`
+                );
                 clearTimer(setupTimeout);
                 setupTimeout = undefined;
                 callTimeout = setTimer(
@@ -1322,6 +1339,9 @@ export const createInternalVoiceRealtimeHandler = ({
                         event.deliveryId,
                         event.event
                     );
+                    realtimeLogger.info(
+                        `Standard Voice playback status=${event.event} accepted=${Boolean(accepted)}`
+                    );
                     if (
                         accepted &&
                         currentDeliveryId === event.deliveryId &&
@@ -1362,6 +1382,9 @@ export const createInternalVoiceRealtimeHandler = ({
                     }
                     const audio = Buffer.from(event.audioBase64, 'base64');
                     if (audioBytes === 0) {
+                        realtimeLogger.info(
+                            'Standard Voice input audio started.'
+                        );
                         cancelProgressCue();
                         transcriptionController?.abort('new_utterance');
                         transcriptionController = undefined;
@@ -1395,6 +1418,9 @@ export const createInternalVoiceRealtimeHandler = ({
                     audioChunks = [];
                     audioBytes = 0;
                     if (audio.length === 0) {
+                        realtimeLogger.warn(
+                            'Standard Voice input commit rejected reason=empty_audio'
+                        );
                         sendServerEvent(ws, {
                             type: 'error',
                             message:
@@ -1403,6 +1429,9 @@ export const createInternalVoiceRealtimeHandler = ({
                         });
                         return;
                     }
+                    realtimeLogger.info(
+                        `Standard Voice input committed audioBytes=${audio.byteLength}`
+                    );
                     transcribeStandardUtterance(audio);
                     return;
                 }
@@ -1648,15 +1677,19 @@ export const createInternalVoiceRealtimeHandler = ({
                     SESSION_SETUP_TIMEOUT_MS
                 );
                 setupTimeout.unref?.();
-                realtimeLogger.info('Internal voice session starting.', {
-                    mode,
-                    profileId: persona.profile.id,
-                    personaSelectionSource: persona.selectionSource,
-                    personaOverlaySelection: persona.overlaySelection,
-                    personaOverlaySource: persona.profile.promptOverlay.source,
-                    personaExpressionStrength: persona.expression.strength,
-                    personaExpressionSource: persona.expression.source,
-                });
+                realtimeLogger.info(
+                    `Internal voice session starting. mode=${mode} persona=${persona.profile.id} personaSource=${persona.selectionSource}`,
+                    {
+                        mode,
+                        profileId: persona.profile.id,
+                        personaSelectionSource: persona.selectionSource,
+                        personaOverlaySelection: persona.overlaySelection,
+                        personaOverlaySource:
+                            persona.profile.promptOverlay.source,
+                        personaExpressionStrength: persona.expression.strength,
+                        personaExpressionSource: persona.expression.source,
+                    }
+                );
                 if (mode === 'standard') {
                     const bundledVoice =
                         STANDARD_TTS_PERSONA_VOICES[
