@@ -390,6 +390,24 @@ listening; do not add samples or raw provider responses to the repository.
   `1666684fc22bf9121b3923d9345dd909878e960482e5eb0540d2b10fc0a57d52`; auth
   stayed in preserve mode and no secret values changed. No call was made after
   this diagnostic release.
+- **Stage-log deployment (2026-11-07):** Release `v587` runs image
+  `registry.fly.io/footnote:deployment-01M6VTYX9QSRGJ8JFHJBY6KVRV`; the
+  repository deploy process prepared its build context from revision
+  `62d6d6abe7bf2ef53e8d6fbf7a07894645d44947`. Fly image metadata does not
+  expose a source-revision label. The machine started with passing checks,
+  `/healthz` returned 200, and four Discord clients logged ready with no
+  startup errors. The production YAML hash remains
+  `1666684fc22bf9121b3923d9345dd909878e960482e5eb0540d2b10fc0a57d52`; auth
+  remained in preserve mode and no secret values were changed.
+- The new scoped `info`/`warn` records trace Standard Voice input capture,
+  transcription status/timing, Workflow disposition/timing, MAI response
+  status/PCM byte count/timing, Discord handoff, and playback status/timing.
+  They omit speech, transcripts, provider error bodies, and user/guild IDs.
+  No global debug level was enabled. The retained Fly log buffer had no
+  recognizable session, input, transcription, Workflow, synthesis, or playback
+  events for the earlier unanswered call, so that attempt cannot be diagnosed
+  from the retained logs. No Standard Voice attempt has been observed after
+  v587 yet; playback remains unverified pending the operator retest.
 - Real MAI PCM synthesis, audible playback, persona listening, end-to-end
   latency, interruption, cancellation, recovery, and cost remain unverified.
 - Confirm that MAI returns `audio/pcm` with nonempty, even-length 24 kHz
@@ -398,8 +416,8 @@ listening; do not add samples or raw provider responses to the repository.
   they cannot confirm the actual provider's sample rate or channel count.
   The audition requested MP3, so real PCM output remains untested.
 
-Rollback target before the diagnostic deployment was release `v585`, image
-`registry.fly.io/footnote:deployment-01M6SG295Z5XCBFCD6YAPRVYPJ`. If needed,
+Rollback target before the stage-log deployment is release `v586`, image
+`registry.fly.io/footnote:deployment-01M6SJSSY5HS7QDKEBFMEJ14EX`. If needed,
 redeploy that image with:
 
 ```powershell
